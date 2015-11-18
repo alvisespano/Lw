@@ -1,4 +1,8 @@
 ﻿
+18/11/2015:
+* first GitHub publish
+
+
 9/11/2015: [v0.8.0]
 * all code migrated to F# 4.0 and .NET 4.6
 

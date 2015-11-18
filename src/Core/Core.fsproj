@@ -130,7 +130,7 @@
     <Reference Include="System.Numerics" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\FSharpCommon\FSharp.Common.fsproj">
+    <ProjectReference Include="..\..\..\FSharp.Common\FSharp.Common.fsproj">
       <Name>FSharp.Common</Name>
       <Project>{7c493012-2911-43fe-8ad3-f052c3084e3c}</Project>
       <Private>True</Private>
