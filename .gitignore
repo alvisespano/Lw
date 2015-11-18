@@ -6,6 +6,7 @@
 *.user
 *.userosscache
 *.sln.docstates
+Settings.FSharpLint
 
 # Build results
 [Dd]ebug/
