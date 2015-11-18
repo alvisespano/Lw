@@ -1,0 +1,205 @@
+﻿(*
+ * Lw test program
+ * (c) 2014, 2015 Alvise Spano'
+ *)
+
+namespace Test 
+
+
+// test datatypes
+
+datatype option :: * -> * with  // se si possono definire anche dentro uno scope tramite let datatype, perché non usare "=" al posto di "with"?
+    | None : option 'a
+    | Some : 'a -> option 'a
+
+datatype list :: * -> * with
+    | Nil : list 'a
+    | Cons : 'a -> list 'a -> list 'a
+
+    
+let test_option () =
+    let map f = function None -> None | Some x -> Some (f x)
+    // let data Might : option 'a -> option 'a
+    let rec fold f z = function
+        | None          -> z
+        | Some x        -> f x z
+        // | Might o       -> fold f z o
+    in
+        fold map
+   	
+let test_lists () =
+    let init f n =
+        let rec re i =
+            if i = n then []
+            else f i :: re (i + 1)
+         in
+            re 0
+    let rec map f = function
+        | []      -> []
+        | x :: xs -> f x :: map f xs
+    let rec fold f z = function
+        | [] -> z
+        | x :: xs -> f (fold f z xs) x
+    let f i = i + 1
+    let len = 20
+    let l1 = init f len
+    let l2 = map (fun n -> n % 2 = 0) l1
+    let l3 = init (fun i -> f i % 2 = 0) len
+    in
+        if l2 = l3 then 0 else 1
+
+
+// test type-level programming
+
+// kind K = * -> * -> 'a
+	
+type weird (a (*:: K*)) (b, c) = a * { l1 : b; l2 : 'x | c }, 'x
+
+type hswap (a, b) = b, a
+
+type arrow a b = let y, z = hswap (a, b) in swap (y -> swap z)
+
+and swap = function {	// alternate syntax for pattern matching
+	| x -> y => y -> x
+	| x * y  => y * x
+    | x      => x
+	}
+
+and custom = arrow int bool
+
+
+// test overloading
+
+
+let test_constrained_instances () =
+    let f r s = if r.a = s.b then r else s
+    let overload plus : 'a -> 'a -> 'a
+    let over plus a b = plus a.p b.q
+    let x = plus { p = 1; s = "caz" } { v = 2; w = true }
+    in
+        x
+
+
+let test_loosen () =
+    let overload plus : 'a -> 'a -> 'a
+    let over plus x y = x   // poly instance
+    let twice x = plus x x
+    let over plus x y = x + y
+    in
+        if twice 3 = 6 && (twice true)# then 0 else 1
+
+
+let test_unsolvability () =
+    let overload parse : string -> 'a
+    let overload pretty : 'a -> string
+    let over parse (_ : string) = 1
+    and over pretty (_ : int) = ""
+	let parse_and_pretty x = pretty (parse x)
+    and over parse = function "true" -> true | _ -> false
+    and over pretty b = if b then "true" else "false"
+    let parse_and_pretty2 (x, y) = parse_and_pretty x, parse_and_pretty y
+    in
+        parse_and_pretty2 ("pippo", "baudo") where { parse : _ -> int; pretty : bool -> _ }
+
+let test_overload_symbol_escape () =
+    let overload f : 'a -> 'a
+    in
+        f
+
+let test_overloading () =
+    let overload plus : 'a -> 'a -> 'a
+    let overload cmp : 'a -> 'b -> bool
+    let over plus x y = x + y
+    let over cmp x y = x = y
+    let over cmp x y = y - x > 0
+    let retwice n =
+        let twice x = plus x x
+        in
+            twice (twice n)
+    in
+        val cmp 8 (retwice 4)
+		
+let test_freevars () =
+    let f x = x + 'b 3
+    let b x = x + (f 2)		// resolution of b must not loop even if predicate inheritance seems to 
+    in
+        f 1
+
+
+
+// test records
+
+let test_record_ext r =
+    let x = r.a
+    let y = { b = 3; c = true | r }
+    in
+        y = { b = 3; c = true; a = x }
+
+let test_record_passing () =
+    let f x = let a = x.a and b = x.b in u { d = "zigzag"; c = a + b | x } \ d
+    let y = f { a = 3; b = 4 }
+    in
+        y = { a = 3; b = 4; c = 7 }
+
+let test_unpack r =
+    let f r = r.a + r.b
+    let x = f r
+    let r = { f | r }
+    let open r
+    in
+        x = a + b
+
+
+
+// test patterns
+
+let test_pattern_matching () =
+	let type solver a = { a : a }
+	let color_to_rgb x =
+		match x where solver with
+		| Red     -> 1., 0., 0.
+		| Green   -> 0., 1., 0.
+		| Blue    -> 0., 0., 1.
+		| RGB rgb -> rgb
+	let f def = function {	// alternate syntax for pattern matching
+		| A x 
+		| B x => x
+		| C _ => def
+		}
+	let r = color_to_rgb (RGB (f 0.5 (C 3), 0.5, 0.5))
+    in
+        r = 0.5, 0.5, 0.5
+
+let test_curried_pattern_matching () =
+    let f g = function
+        | A B c -> g c, 0
+        | A b c -> g c, b + 1
+    in
+        f (function C -> D) A B C
+
+        
+// test basic features
+
+let test_rec () =
+    let rec fib n =
+        let f = fib in if n < 2 then 1 else fib (n - 1) + fib (n - 2)
+    in
+        fib 8 = 34
+
+
+
+;;
+
+let t f = if f () then 0 else 1
+in
+    do {					// alternate syntax for imperative blocks
+        t test_loosen;
+        t test_rec;
+        t test_record_ext;
+        t test_record_passing;
+        t test_unpack;
+        t test_patten_matching;
+    }
+
+
+

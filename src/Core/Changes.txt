@@ -1,0 +1,592 @@
+﻿
+9/11/2015: [v0.8.0]
+* all code migrated to F# 4.0 and .NET 4.6
+
+
+4/11/2015:
+* FIX: usage of substitution composition was sometimes wrong: arguments were inverted in some cases, now should be fixed
+* UP: substitution composition implementation was quite optimized but might have led to unexpected results: now it's been implemented using second
+      operand domain restriction, as in https://en.wikipedia.org/wiki/Substitution_(logic)
+
+
+3/11/2015:
+* FIX: eval cancellation and ctrl-c handling has finally been fixed
+* REFACT: V_Redux values now take an Eval.context as extra argument in the closure part of the pair: this makes cancellation possible by passing the
+          context at the time when the beta redux occurs
+* NEW: dynamic configuration sub-system for run-time flags: basically it consists of a singleton class with getter/setter properties
+* UP: support for Unicode symbols and greek letters for type variables based on actual .NET console capabilities
+* NEW: Unicode and greek support can be enabled/disabled via command line arguments
+* REFACT: FreeCons and P_FreeCons have been renamed to PolyCons and P_PolyCons respectively. This makes more sense and is more consistent.
+* REFACT: ticked identifiers, upper as well as lower cased, have been subject to redesign due to inconsistencies. Now this is the current scenario:
+                  X | x     = Var      =>  typing must discriminate between variable names and data constructor names
+                  'X | 'x   = FreeVar  =>  typing must discriminate between constrained variable names and constrained data constructor names
+                  `X        = PolyCons =>  polymorphic variant
+                  `x        = ?        =>  does it make sense? can it be used for something?
+
+
+26/10/2015:
+* FIX: major changes in the ctrl-c signal handling
+* REFACT: Eval module functions support a context; currently hosting a cancellation token for making evaluation legally cancellable according to the F# async paradigm
+* UP: FSharpCommon.Log.console_logger class now supports a lock-and-apply helper method (used also by the main prompter itself as low-level internal API)
+* FIX: in interactive mode now all overlapping console output have been fixed: non-logger printf calls are now encapsulated within lock-and-apply sections
+
+
+22/10/2015:
+* UP: program components are now all optional: namespace at the top of source file can be omitted, as well as main expression at the bottom
+* NEW: interactive mode can now interpret a source file before prompting the user; declarations are bound to the global environment and user expressions can use them
+* NEW: new typing_state_builder superclass that allows no translation
+* NEW: node_typing_state_builder is now a subclass of typing_state_builder which simply adds a translated setter-only property
+* REFACT: old node_typing_state_builder.translate method has now become a non-monadic setter-only property: all call sites updated accordingly
+* NEW: module Intrisic now defines a shortcut record for all environments
+
+
+20/10/2015:
+* NEW: interactive mode supports cancelling of current evaluation
+* RAFACT: CTRL-C handler reworked but still a little bugged 
+
+
+19/10/2015;
+* FIX: minor fixes multiple mgu algorithms printing
+* REFACT: new printing closures and rec-closures in evaluator
+
+
+15/10/2015:
+* FIX: mgu comparison has been fixed: algorithms seem to behave uniformly
+* REFACT: solution configuration manager redesigned
+
+
+14/10/2015: [v0.7.0]
+* REFACT: new solution and projects created: Core is the parsing and typing engine and behaves like a library; Interpreter is just the command line
+          evaluator application (including interactive mode)
+
+
+04/10/2015:
+* REFACT: mgu has been implemented in 3 ways: computation expression, state monad and pure
+* REFACT: mgu function comparison has been implemented but does not work as intended yet
+
+
+16/9/2015: [v0.6.1]
+* UP: FSharpCommon computation expression module has been redesigned greatly
+* REFACT: MGU algorithms refactored according to new computation expression system. As of now, 3 versions exist: pure CPS, state-monading, function-based computation expression.
+          Subtle issue: a non-function-based computation expression could not do the work, because the MGU algorithm needs to know the current substitution at each recursion
+          step; and no "get_current_state"-like method can be written unless closures are employed.
+
+
+3/9/2015:
+* FIX: computation expression builder base class was bugged (again!). Refactoring is on the work...
+* REFACT: constraint resolution is temporarely not working because type scheme instantiation function uses 'constr' builder, which is bugged as said above
+
+
+27/8/2015:
+* REFACT: type env now binds records rather than tuples
+
+
+25/8/2015:
+* FIX: is_principal_type_of and is_instance_of have been subject to redesign; still not working as intented though
+
+
+28/7/2015: [v0.6.0]
+* REFACT: F# PowerPack is not referenced anymore. Argument parser is now embedded into FSharp Common library
+* REFACT: multiple attempts to rewrite the MGU code by means of computation expression have been stabilized: now both pure and computational versions of the MGU algorithm are implemented
+
+
+5/2/2015:
+* FIX: MGU computation expressions fixed
+
+
+3/2/2015:
+* REFACT: computation expression builder reworked for KMGU and MGU algorithms
+
+
+29/1/2015:
+* REFACT: mgu algorithsm rewritten as computation expressions: this leads to better error messages thanks to CPS
+
+
+26/1/2015:
+* REFACT: constraint and constraints types redesigned: now the latter is a special class with a set of the former within
+* FIX: the refactoring above should fix some issues in the constraint resolution system dued to wrong associativity and identity
+
+
+22/1/2015:
+* FIX: loosen construct fixed and tested
+
+
+21/1/2015:
+* REFACT: new inst method in state monad: instantiate scheme and inherits constriaints. All lookups must use this
+
+
+20/1/2015:
+* REFACT: Env module in FSharpCommon has been polished: old non-objective API has been deprecated, as well as the monadic wrapper.
+          Moreover, pretty printing has been redesigned.
+
+
+14/1/2015:
+* FIX: predicate pretty printing has been rewritten; still not very elegant though
+
+
+13/1/2015:
+* UP: flex construct has been renamed to loosen and syntax is with a post-fix HASH
+* FIX: is_istance_of rewritten again
+
+
+12/1/2015:
+* NEW: post-fix question mark construct loosens all constraints gathered while typing the given sub-expression, making them non-strict
+* REFACT: variable qualifiers do not exist anymore; AST for vars, freevars, cons and freecons is now simpler
+
+
+8/1/2015:
+* FIX: fixed some problems with the reworked jenv bindings sub-system
+* BUG: GADTs are still not working
+
+
+7/1/2015:
+* back to work on Lw after a several week break
+* REFACT: M.search_by_name renamed to search_binding_by_name_Γ, because it returns the whole binding
+* REFACT: sub-system for looking up bindings in Γ has been reworked
+
+
+17/11/2014:
+* REFACT: jenv reworked: JId_Overload does not exist anymore; jenv_mode encodes that on the value-part of the environment
+* REFACT: Jb-prefixed active patterns and M.search_by_name_Γ reworked
+* NEW: free constructor identifiers for poly variants are introduced by back-tick
+* NEW: @ID stands for first-class select function for records
+* NEW: identifiers in expressions can be lowercase or uppercase alike; in patterns the same happens
+
+
+15/11/2014:
+* TAG: v0.4.0: GADTs supported but type inference works well for ordinary variant usage only as of now
+* NEW: definitions of basic types for GADT implementation
+
+
+13/11/2014:
+* NEW: T_ConsApps constructor and active pattern for dealing with curried datacons applications
+
+
+12/11/2014:
+* REFACT: location management has changed: now context does not keep track of it anymore, and location is forwarded where needed as an extra argument
+* FIX: value type was not equatable, now fixed
+* UP: list management seems to work, and so simple GADTs
+
+
+11/11/2014:
+* FIX: many minor fixes for Apps patterns
+* NEW: list literals and patterns are desugared to predefined data constructors
+* UP: datatype declaration improved, but still not working
+
+
+10/11/2014:
+* NEW: new syntax for do-blocks: do { statements.. }
+* NEW: new alternate syntax for pattern-matching cases: (match e with | function) { [|] p [when e] => e.. }. This syntax lets the user specify patterns or type patterns with
+       the infix arrow operator withouth using brackets; moreover, it makes the match..with construct self-contained when used as a statement
+* REFACT: App3 active patterns no longer exist: now Apps exist for each family of terms, like Arrows
+* NEW: GADTs definition construct initiated: basic well-formedness checks implemented; type inference not yet
+* REFACT: value-level patterns no longer have a P_Cons term holding parameters; P_App defined but not yet supported in run-time pattern matching
+
+
+7/11/2014:
+* FIX: substitution composition was bugged AGAIN: arguments was inverted; now it works as it should: first argument is the old substitution, and the second is the new one
+* FIX: fixed many minor and major bugs in kind inference and type evaluation of declarations
+* REFACT: prompting of type-language bindings uses now a cache for outputting inferred kind and evaluated type on the same log line even if the two are computed separately
+* FIX: parsing of type patterns have been upgraded: arrows can now be patterns, but they do not belong to the grammar non-terminal used by cases of the match-with construct
+* FIX: infix operators are now supported both at parse and at pretty-printing levels for every language layer
+
+
+6/11/2014:
+* FIX: type inference of typed paramers have been fixed to include kind annotation of type expression, if present
+* UP: variable normalization subsystem implemented with side-effects on global printer state
+* FIX: many other minor improvements and fixes
+
+
+5/11/2014:
+* UP: syntactic sugar for let and let rec within type expressions supporting a redundant 'type' qualifier 
+* REFACT: declaration log system has been cleaned up
+* REFACT: param and binding pretty printing subsystem changed again and again, but still not as beatiful as it could be
+
+
+4/11/2014:
+* UP: type bindings are now recursive, but kinding is not working properly yet
+
+
+3/11/2014:
+* UP: freevar syntax is ticked again; freevars can be followed by BANG as well as ordinary vars for forcing lousy resolution
+* UP: manual resolution can specify any type expressions at right side of WITH: it must unify with a record and its bindigs are treated as the old constraints
+* FIX: match..with construct now does not conflicts anymore with the manual resolve with-clause
+
+
+2/11/2014:
+* FIX: kind htuples are now separated by commas; constructor arguments are analogous to htuple application, even though htuple is not really an AST term
+
+
+31/10/2014:
+* FIX: resolved several reduce/reduce conflicts due to type expressions and type patterns
+* UP: kind syntax redesigned and improved
+* REFACT: HTuples are not rows anymore, but native terms in the type language; tuples are still row though.
+          Kinds have HTuples as native terms as well, but do not have tuples: only tupled arguments non-first-class citizen for constructor applications
+
+
+30/10/2014:
+* REFACT: variable substitutions have been introduced and type or kind substitutions have been rewritten in function of variable substitutions
+* REFACT: variable normalization subsystem totally rewritten: now its simpler and based on variable substitutions
+* FIX: several minor bugs fixed in dealing with type closures, bindings etc.
+* FIX: kind substitutions and the relation with type substitutions have been fixed
+* FIX: HTuples must be kinded before Rows otherwise the default behaviour of rows will be inferred: HTuples can have types of any kind within
+
+
+29/10/2014:
+* REFACT: type and kind normalization subsystem in reworking
+
+
+28/10/2014:
+* FIX: free vars, identifiers and constructors are now 3 separate identifiers in the type language
+* REFACT: intrinsic type and kind constructor naming have been cleaned up
+* NEW: type pattern-matching support started
+
+
+27/10/2014:
+* NEW: kind bindings introduced at value-level; still missing at type-level though
+* NEW: new environment for kind constructors 
+
+
+25/10/2014:
+* FIX: tuples and tupleds fixed and row creator updated
+* NEW: testing fibonacci infinite lists in F# for experimenting with lazy computations: ideally, where-bindings in Lw should be automatically recursive and lazy
+
+
+24/10/2014:
+* REFACT: kinding subsystem refactored and cleaned up furtherly
+* REFACT: all row types are now generated by an utility function which creates record, variant and tuple constructors and active  patterns given the definitions of Rowed and (|Rowed|_|)
+* REFACT: many minor and major refactorings dealing with rows, tuples and tupled
+
+
+23/10/2014:
+* REFACT: visitor active-patterns have been deprecated
+* NEW: record pattern can now be { x; y ..}: each label is bound to an identifier with the same name (i.e. the result is opening the record for the set of mentioned identifiers)
+* REFACT: rec-bindings and type-expr-bindings now have a (typed and kinded, respectively) on the left side instead of a pattern; parser have been updated accordingly
+* REFACT: grammar and parse rules for declarations are now clearer
+* NEW: type declarations implemented
+* REFACT: monads designed have been cleaned up: now a builder superclass exists which does not deal with nodes and defines no Yield; a first subclass deals with nodes in general and defines a Yield for typing,
+          plus it provides the translate method; a second subclass deals with ty_expr nodes specifically, supports Yield for kinds and for annotating kinds on ty_expr nodes
+
+
+22/10/2014:
+* REFACT: substitutions now handle either kinds or both types and kinds, as well as unification etc.
+* NEW: all type expressions now are typed by means of an annotation on the node; each type-value term contains a kind
+
+
+21/10/2014:
+* NEW: nodes have a side-effected field for annotating types
+* NEW: state monad builder has now a new subclass defining a Yield that annotates inferred kinds on each ty_expr node
+
+
+20/10/2014:
+* FIX: eject and inject changed again, but not tested yet
+* REFACT: kind inference adn type evaluation have been split again; a commodity for performing both has been defined
+
+
+17/10/2014:
+* NEW: eject and inject renamed and redesigned:
+                Γ ⊢ e : π. { x1 : t1 .. xn : tn } -> t    
+                Γ ⊢ let x = { x1 = x1 .. xn = xn } in e x : π'. t' ~~> e*
+    (EJECT-PAR) --------------------------------------------------------------
+                Γ ⊢ fun x <= e : π'. t' ~~> e*
+
+                Γ ⊢ e : { x1:t1 .. xn:tn }. t  
+   (INJECT-PAR) --------------------------------------------------------------------------------------------------
+                Γ ⊢ fun x => e : {}. { x1:t1 .. xn:tn } -> t ~~> fun x -> let x1 = x.x1 and .. xn = x.xn in e
+
+* BUG: the two rules above are still broken
+* UP: kind inference and type evaluation are now merged into one single operation
+
+
+16/10/2014:
+
+* NEW: tuples have been encoded by using record rows { #1 : t1 .. #n : tn }: this takes place in types as well as in patterns and expressions
+* NEW: kind inference and type evaluation subsystems initiated
+* REFACT: subst have beeen rendered polymorphic and application to types etc. are now global functions
+* TODO: a new environment for binding free type variables is neeeded: χ is just for type constructors/identifiers, which have different scopes than ticked variables
+
+
+15/10/2014:
+* REFACT: IfThenElse term has been modified to always support the Else expression; when missing Unit literal is sugared by the parser
+* FIX: many minor and major fixes and improvements to the parser
+* NEW: pattern parameters for lambda terms support now cases and are desugared to match with tuples; let-time functions do not support that for now.
+       Difference between fun and function is that fun supports multiple patterns syntactically atomic app-wise, while function supports any single pattern
+                 Γ ⊢ fun x1 .. xn -> match (x1, .., xn) with p11 .. p1n -> e1 | pm1 .. pmn -> em : t ~~> e'
+         (ABS-P) -------------------------------------------------------------------------------------------
+                 Γ ⊢ fun p11 .. p1n -> e1 | pm1 .. pmn -> em : t ~~> e'
+
+
+14/10/2014:
+* NEW: parse-type sugar for making record labels first class functions:
+                Γ ⊢ fun r -> r.l : { l : α } -> α ~~> e
+         (#LAB) ----------------------------------------
+                Γ ⊢ #l : { l : α } -> α ~~> e
+
+* UP: syntax for inner bindings prefixes the LET token everytime, even for open, type, ecc.
+* NEW: system for type expressions and patterns has been developed but not finished yet
+* REFACT: grammar of type annotations in expressions and patterns have been refactored to reduce conflicts
+
+
+13/10/2014:
+* NEW: system for type expressions and patterns introduced: still very confused though
+
+
+10/10/2014:
+* FIX: manual resolution works better now: multiple suggestions over the same symbol are applied to constraints in order of appearence; unification takes place increasingly and can truly help
+       resolving other constraints indirectly.
+* UP: warning for manually resolved symbols referring to multiple constraints is now unused
+* FIX: final automatic resolve rule is this:
+                ∃ (x#n : t) ∈ π. (x$k : σ) ∈ Γ
+                ¬∃ (x'#m' : σ') ∈ Γ. mgu(inst(σ'), t) < mgu(inst(σ), t)
+         (AUTO) ---------------------------------------------------------
+                Γ ⊢ e : π - (x#n : t). t' ~~> let x#m = x$k in e
+
+
+9/10/2014:
+* FIX: manual resolution finally fixed: desugaring to a let was not the right way. Now it behaves differently: for each user-specified constraint type, if it exists within the
+       current constraints set, then the types are unified. This simply will help automatic resolution to find instances in case of ambiguity, because those type variabels causing such
+       ambiguity may be substituted. Moreover, in case the constraint refers to an overloaded symbol, unification against the declared principal type.
+                Γ ⊢ e : π. t ~~> e'
+                ∀ xi : ti ∈ [1,n]. ∃ (x#j : tj) ∈ π => unify(ti, tj)
+          (MAN) -------------------------------------------------------
+                Γ ⊢ e with x1 : t1 .. xn : tn : π. t ~~> e'
+
+* FIX: typing declarations now triggers automatic resolution whenever unification occurs. This makes generalization perform one last attempt in case let-bindings are explicitly typed.
+* FIX: looking up overloaded symbol automatically refreshes type variables (which are not quantified, hence the need to refresh explicitly)
+* FIX: instantiate function now applies the renaming substitution AFTER having created the new constraints (probably its the same as before, but it makes more sense)
+
+
+7/10/2014:
+* NEW: 'do' keyword must be prefixed in combine constructs
+* UP: letrec bindings are now checked separately for simple pattern usage and for value restruction over arrow types
+* FIX: some bugs of the solve constructrs
+* TODO: manual resolution still does not work
+
+
+6/10/2014:
+* REFACT: desugaring has now been redesigned with a helper function for every case
+* REFACT: monad does not support yield-and-translate anymore; translate must be called explicitly
+* REFACT: M.search_by_name result is not a variant anymore, but there is a set of closed active patterns in place of it
+* FIX: checks for unexpected empty declaration lists have been added
+* TODO: manual resolution produces an empty declaration list
+
+
+5/10/2014:
+* FIX: solve construct has now become a de-sugar according to the following rule:
+                Γ ⊢ let x1 : t1 = x1 and .. xn : tn = xn in e : π. t ~~> e'
+          (MAN) -------------------------------------------------------------
+                Γ ⊢ e with x1 : t1 .. xn : tn : π. t ~~> e'
+
+
+4/10/2014:
+* NEW: hint system now implemented
+* FIX: warning and hint system nw have set of disabled entries rather than enabled
+* FIX: no way to enabled warnings or hints exists anymore via command line arguments
+* UP: unsolvable_constraint used to be a warning, but it has become now a hint notifyng the need to use the with-construct
+* FIX: resolution now performs unification with selected candidate, both in automatic and manual mode
+* UP: wildcards and unit constats in lambda parameter do not de-sugar to a match..with anymore; this lead to simpler and shorter code
+* TODO: manual resolution still does not work
+
+
+3/4/2014:
+* UP: forcing of flexible resolution of an identifier is now done by suffixing '!' rather that '#'
+* UP: resolution algorithm now pick a custom predicate as argument for applying non-automatic policies
+* NEW: solve construct lets user manually resolve constraints by specifying explicit types for ambiguous symbols
+* FIX: a few minor fixes and improvements
+* TODO: new manual resolution does not work as intended yet
+
+
+2/10/2014:
+* FIX: instance type distance should now be fixed
+* NEW: support for infix operators in parser
+* NEW: support for partial application of binary operators
+* UP: freevars are not prefixed by '?' rather than by a tick
+* NEW: constraints can now be strict (:) or flexible (:>) meaning their resolution either must be an instance with the exact type or and instance having a principal type
+* NEW: variable identifiers support now a suffixed hash '#' meaning resolution can be flexible for that identifier
+* REFACT: cid mode can now be FreeVar and Overload only 
+* NEW: automatic resolution is now strict for both type of constraints; VAL construct enforces flexible resolution
+* TODO: does cid mode make any sense? That's not used by the resolution algorithm at all. Only pretty printing uses it
+
+
+1/10/2014:
+* NEW: two kinds of resolution implemented: when strict-only flag is true then only matching instances are solved, else also distant instances are. Now automatic resolution is strict-only while VAL construct
+       is not.
+* NEW: constraints now track whether a symbol is in overload or was a freevar
+* NEW: overloaded symbols can be ticked and the resulting constraint is treated as a freevar
+* TODO: this new system is not clear: must be designed more carefully
+
+
+29/9/2014:
+* OPT: let-rec evaluation has been tested for performance among the following techniques: (1) using a reference to Δ; (2) using a lazy Δ; (3) defining Δ as a recursive value. Fastest was (3)
+* FIX: type mismatch error Report.Error.ng has been reformulated as "expected a type T1 but got a type T2"; calls to unification algorithm have been fixed in order to output the correct expected and actual types
+* FIX: main expression of a program is now forced to be a value, i.e. not having unresolved constraints
+* FIX: indefinite recursion in constraint resolution now checks that a given solved constraint does not appear in the set of constraints inherited by the candidate (name and type are involved in the check)
+* BUG: constraint resolution could happen only when something has changed on the context: a hash check has been implemented but it does not work -- disabled temporarely
+* FIX: resolution now behaves as follows: try to solve each constraint, when one is solved simply inherit the candidate's constraints and keep going; when the whole iteration has finished, then check
+       if the resulting constraint set is the same as the input one then stop, else resolve again.
+
+
+26/9/2014:
+* NEW: predicate ejection implemented:
+                Γ ⊢ e : π. { r } -> t    r = x1 : t1 .. xn : tn    y fresh id
+                Γ ⊢ let y = { x1 = x1 .. xn = xn } in e y : π'. t' ~~> e'
+        (EJECT) --------------------------------------------------------------
+                Γ ⊢ (< e >) : π'. t' ~~> e'
+
+* FIX: inject and open typing has been rewritten by calling pt_expr on the traslated code, rather than typing natively
+* FIX: let-rec bindings produced an infinite recursion, now that's been fixed using some magic
+
+
+25/9/2014:
+* REFACT: typing modules have been gathered under the Typing namespace; source file names now reflect module name nesting 
+* NEW: pattern matching evaluation implemented
+* NEW: support for all expressions added to evaluator
+* FIX: overloading resolution indefinite recursion issue resolved (was already solved before the resolution system introduced it again)
+
+
+24/9/2014:
+* REFACT: state_builder monad now handles translation via a yield overload as well as a specific translate method; also the class is now parametric on the type of AST node that method translate supports and
+          needs an AST for being constructed
+* REFACT: unify and check_kind_star are now a monad members, because the previous design based on contexts was making things harder
+* REFACT: resolve_constraints cannot be a monad method (unfortunately) but is a function picking the monad
+* FIX: typing of open was bugged: translation now works and evaluation too
+
+
+23/9/2014:
+* NEW: recursive lambda implemented: fun rec x p1 .. pn -> e desugars to let rec x = fun p1 .. pn -> e in x
+* REFACT: Intrinsic module redesigned and basic environments Δ0 and Γ0 have been merged into triples (name, type, value)
+* REFACT: evaluator now have generalized reducible values, which closures are just a special case of and by means of which primitive functions are expressible easily
+* REFACT: main reflects the new intrisic design
+* NEW: namespace of compilation unit is now optional
+* NEW: interactive mode implemented
+
+
+22/9/2014:
+* NEW: evaluator draft implemented
+
+
+21/9/2014:
+* NEW: val is now a first-class expression checking that 
+                Γ ⊢ e : {}. t
+          (VAL) -------------------------
+                Γ ⊢ val e : {}. t ~~> e
+
+* NEW: let val x = e1 in e2 is a sugar for let x = val e1 in e2
+* NEW: predicate injection implemented:
+                Γ ⊢ e : { r }. t    x fresh id
+                Γ ⊢ fun (x : r) -> open x in e : π'. t' ~~> e''
+       (INJECT) -----------------------------------------------------------------
+                Γ ⊢ (> e <) : π'. t' ~~> e'
+
+* NEW: let fun f = e1 in e2 is a sugar for let f = (> e1 <) in e2
+* REFACT: most Absyn.Aux parser commodities have now been lifted up to Absyn and are constructor-like functions
+* UP: let-over instance names have now form "x$n" (was "x#n"): this makes debugging translated code a little easier as they look different than constraint names
+* FIX: open declaration are now translated correctly
+                Γ ⊢ e1 : π1. { x1 : t1 .. xn : tn }    y fresh id
+                Γ ⊢ let y = e1 in let x1 = y.x1 and .. xn = y.xn in e2 : π'. t' ~~> e'
+         (OPEN) ------------------------------------------------------------------------
+                Γ ⊢ open e1 in e2 : π'. t' ~~> e'
+
+
+20/9/2014:
+* FIX: let-over bindings and inherited constraint renaming sub-system now working as intented
+* BUG: printing of App puts brackets on right hand when identifier - that should not happen
+* REFACT: decl type wrapped into located<udecl>
+* FIX: decl translation now fixed: multiple and-bindings are supported and translated correctly
+
+
+19/9/2014:
+* NEW: compilation symbol DEBUG_VERBOSE_CONSTRAINTS and DEBUG_VERBOSE_TYVARS (in place of DEBUG_VERBOSE_TYVAR_NAMES)
+* REFACT: resolution sub-system now brought outside of pt_expr as a this-contained function resolve
+* FIX: resolution now occurs automatically at every inference step: resolution attempts occur in a greedy way
+                Γ ⊢ e : π. t'
+                ∃ (x#n : t) ∈ π. (x$k : σ) ∈ Γ
+                ¬∃ (x'#m' : σ') ∈ Γ. mgu(inst(σ'), t) < mgu(inst(σ), t)
+         (AUTO) ---------------------------------------------------------
+                Γ ⊢ e : π - (x#n : t). t' ~~> let x#m = x$k in e
+
+* NEW: warning numbering and filtering sub-system implemented, including cmdline args
+* NEW: translation sub-system implemented and partly tested
+
+
+18/9/2014:
+* NEW: performance measure tools implemented in Globals for measuring cpu time
+* OPT: substitution composition is 
+* OPT: custom state monad redesigned: now Bind is not overridden: no more overhead given by constantly composing substitutions and constant applying to Γ and π.
+       Now composition of θ and update of Γ and π is done specifically when unification occurs (x3 speed increase)
+* FIX: named type variables led to bad substitutions: now the numeric unique identifier is computed as the hash code of the name and refresh is sound
+* FIX: refreshing of ungeneralized schemes bound by overload-bindings
+* NEW: ambiguous overloading resolution check implemented
+* BUG: overloading resolution is bugged: type information at resolution point is not enough for resolving
+
+
+17/9/2014:
+* OPT: state-monad default For method (FSharpCommon) has been reimplemented without foldback on list: it now uses recursion over an enumerator of the sequence
+* OPT: substitution, composition, environment and monadic optimizations (x2 speed increase)
+* NEW: compilation symbol WAIT_FOR_KEY_AT_EXIT
+
+
+16/9/2014
+* REFACT: kind infererence algorithm is not monadic anymore
+* REFACT: mgu rewritten again: now it is not monadic anymore; function unify still is, as it updates the substitution within the state of the monad
+* REFACT: each relevant algorithm now has its own context: a record with information that is not kept into the monad
+* REFACT: let-binding AST redesigned again: now rec, val and over are qualifiers showing up as bools in a record
+* NEW: support for overload (principal type annotation) and let over (instance binding) declarations
+* NEW: predicate resolution has been extended to support overloading; best instance match has been introduced
+* NEW: check for resolution recurring indefinitely: predicate is suspended in that case (produces a warning)
+* NEW: let-over instances are checked against their declared principal type
+* NEW: various new error and warning messages
+* FIX: state-monad For was evaluating sequence in wrong order, a foldBack was needed; conversion to list has been necessary though
+
+
+15/9/2014:
+* REFACT: unify monadic function has been split into mgu (monadic) and unify (still monadic): the former computers a substitution, the latter uses the former and lifts the state
+* REFACT: mgu internal recursive function has become monadic; the ration behind this choice is that it uses KindInfer.pk_ty which is monadic
+* NEW: parser and grammar has been redesigned to support VAL as a binding-qualifier forcing predicate resolution; let syntax has turned to be more ML-like now
+* BUG: where-bindings have been disabled, as the new let grammar does not support them easily
+* NEW: predicate resolution has been implemented in a simple form: no best match yet
+* BUG: predicate resolution does not yet resolve inherited predicate when possibile
+
+
+12/9/2014:
+* NEW: added where-binding constructs as a sugar for let
+* UP: Monad builder in FSharpCommon has been rewritten in such a way that all non-atomic constructs are expressed by means of atomic ones. Bind, Return and Zero and atomics
+* FIX: substitution composition has been FIX; no more substitution normalization required
+* REFACT: auxiliary functions in CustomStateMonad simplified: no more A (embeeded in Bind now)
+* FIX: predicate scope is now working as intended
+
+
+11/9/2014:
+* NEW: freevars added to syntax and constraints added to type predicate
+* TODO: error detection of row types must be redesigned: as of now, a technical error message is used for row rewriting failures
+* FIX: free type variables are not subject to renaming when printing schemes
+* FIX: let-and bindings are now typed and printed in the original order
+* TODO: check val-bindings and type predicate handling
+
+
+10/9/2014:
+* FIX: normalization of type variables in printing of schemes is now working
+* FIX: when missing a label in a row type, a special error is shown
+* TEST_FEATURES_FEATURESED: unification of record type have been tested quite widely: open records passed as arguments to functions with open records parameters, viceversa and other combinations
+
+
+9/9/2014:
+* BUG: pretty printing of schemes with normalized type variables is still troublesome
+* NEW: variants are printed à la ML with the "of"
+
+
+8/9/2014:
+* NEW: pretty printing of zerary data constructors avoids printing unit
+
+
+5/9/2014:
+* NEW: variant types support implemented but not completed nor tested; zerary data constructors are unit-typed within the row type
+* FIX: shadowing is now working as intented
+
+
+25/8/2014:
+* FIX: row types with scoped labels implemented and tested
+
+
+15/8/2014:
+* NEW: row types implemented roughly 

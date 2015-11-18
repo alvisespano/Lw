@@ -1,0 +1,68 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.23107.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FSharp.Common", "..\..\FSharpCommon\FSharp.Common.fsproj", "{7C493012-2911-43FE-8AD3-F052C3084E3C}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Core", "Core\Core.fsproj", "{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}"
+	ProjectSection(ProjectDependencies) = postProject
+		{7C493012-2911-43FE-8AD3-F052C3084E3C} = {7C493012-2911-43FE-8AD3-F052C3084E3C}
+	EndProjectSection
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Interpreter", "Interpreter\Interpreter.fsproj", "{6890CE86-3856-467A-B3B5-EF307B7695F8}"
+EndProject
+Global
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
+	EndGlobalSection
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Interactive|Any CPU = Interactive|Any CPU
+		Release|Any CPU = Release|Any CPU
+		Test Features|Any CPU = Test Features|Any CPU
+		Test Performance|Any CPU = Test Performance|Any CPU
+		UnitTest|Any CPU = UnitTest|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7C493012-2911-43FE-8AD3-F052C3084E3C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7C493012-2911-43FE-8AD3-F052C3084E3C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7C493012-2911-43FE-8AD3-F052C3084E3C}.Interactive|Any CPU.ActiveCfg = Debug|Any CPU
+		{7C493012-2911-43FE-8AD3-F052C3084E3C}.Interactive|Any CPU.Build.0 = Debug|Any CPU
+		{7C493012-2911-43FE-8AD3-F052C3084E3C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7C493012-2911-43FE-8AD3-F052C3084E3C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7C493012-2911-43FE-8AD3-F052C3084E3C}.Test Features|Any CPU.ActiveCfg = Release|Any CPU
+		{7C493012-2911-43FE-8AD3-F052C3084E3C}.Test Features|Any CPU.Build.0 = Release|Any CPU
+		{7C493012-2911-43FE-8AD3-F052C3084E3C}.Test Performance|Any CPU.ActiveCfg = Release|Any CPU
+		{7C493012-2911-43FE-8AD3-F052C3084E3C}.Test Performance|Any CPU.Build.0 = Release|Any CPU
+		{7C493012-2911-43FE-8AD3-F052C3084E3C}.UnitTest|Any CPU.ActiveCfg = Debug|Any CPU
+		{7C493012-2911-43FE-8AD3-F052C3084E3C}.UnitTest|Any CPU.Build.0 = Debug|Any CPU
+		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Interactive|Any CPU.ActiveCfg = Debug|Any CPU
+		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Interactive|Any CPU.Build.0 = Debug|Any CPU
+		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Test Features|Any CPU.ActiveCfg = Test Features|Any CPU
+		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Test Features|Any CPU.Build.0 = Test Features|Any CPU
+		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Test Performance|Any CPU.ActiveCfg = Test Performance|Any CPU
+		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Test Performance|Any CPU.Build.0 = Test Performance|Any CPU
+		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.UnitTest|Any CPU.ActiveCfg = Debug|Any CPU
+		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.UnitTest|Any CPU.Build.0 = Debug|Any CPU
+		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Interactive|Any CPU.ActiveCfg = Interactive|Any CPU
+		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Interactive|Any CPU.Build.0 = Interactive|Any CPU
+		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Test Features|Any CPU.ActiveCfg = Test Features|Any CPU
+		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Test Features|Any CPU.Build.0 = Test Features|Any CPU
+		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Test Performance|Any CPU.ActiveCfg = Test Performance|Any CPU
+		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Test Performance|Any CPU.Build.0 = Test Performance|Any CPU
+		{6890CE86-3856-467A-B3B5-EF307B7695F8}.UnitTest|Any CPU.ActiveCfg = UnitTest|Any CPU
+		{6890CE86-3856-467A-B3B5-EF307B7695F8}.UnitTest|Any CPU.Build.0 = UnitTest|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

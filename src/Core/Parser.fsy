@@ -1,0 +1,674 @@
+﻿%{
+
+open FSharp.Common.Prelude
+open FSharp.Common.Parsing.LexYacc
+open Lw.Core
+open Lw.Core.Absyn
+open Lw.Core.Absyn.Aux
+
+let parse_error_rich = Some (fun ctx -> raise (ParseErrorContextException ctx))
+
+%}
+ 
+
+%token <System.Int32> INT32 AT_INT32
+%token <System.Double> FLOAT
+%token <System.Char> CHAR
+%token <System.String> STRING UID LID INFIX TICK_ID BACKTICK_ID AT_ID
+%token TYPE EQ STAR ARROW VAL OVER BRAGT LTKET BRALT GTKET HASH DO INJECT EJECT IMPLIES DATATYPE
+       LET REC IN IF THEN ELSE FUN MATCH WHEN WITH FUNCTION TRUE FALSE AS OF NAMESPACE OPEN WHERE OVERLOAD
+	   DOUBLEAMP DOUBLEPIPE UNDERSCORE BACKSLASH KIND QUESTION
+	   BRA KET CURBRA CURKET SQBRA SQKET 
+       PLUS MINUS SLASH PLUSDOT MINUSDOT MOD NEQ LT GT LEQ GEQ AND NOT PIPE AMP BANG	   
+       COLON COLON2 SEMICOLON SEMICOLON2 DOT COMMA ASSIGN 
+%token EOF
+
+%right SEMICOLON
+%right THEN ELSE
+%left ASSIGN
+%left AS
+%left COMMA
+%right ARROW
+%left PIPE DOUBLEPIPE
+%left AMP DOUBLEAMP
+%right COLON2
+%left EQ LT GT LEQ GEQ NEQ 
+%left PLUS MINUS
+%left INFIX
+%left STAR SLASH MOD 
+%left BACKSLASH
+%nonassoc QUESTION
+%nonassoc VAL
+%left APP
+%nonassoc NOT
+%nonassoc UMINUS
+%nonassoc BANG
+
+%type < Lw.Core.Absyn.ty_patt > ty_patt
+%type < Lw.Core.Absyn.ty_expr > ty_expr
+%type < Lw.Core.Absyn.decl > top_decl
+%type < Lw.Core.Absyn.program > program
+%type < Lw.Core.Absyn.interactive_line > interactive_line
+
+%start ty_expr
+%start top_decl
+%start program
+%start interactive_line
+
+%%
+
+/*
+ * top level
+ */
+
+interactive_line:
+	expr SEMICOLON2 				    { Line_Expr $1 }
+  |	top_decl SEMICOLON2  	            { Line_Decl $1 }
+
+/*program__:
+  | namespacee
+    top_decls SEMICOLON2
+	expr EOF                            { { namespacee = Some $1; decls = $2; main = $4 } }
+  | namespacee SEMICOLON2
+    expr EOF                            { { namespacee = Some $1; decls = []; main = $3 } }
+  | top_decls SEMICOLON2                { { namespacee = None; decls = $1; main = Lit Unit } }
+  | top_decls EOF                       { { namespacee = None; decls = $1; main = Lit Unit } }
+  | top_decls SEMICOLON2 expr EOF       { { namespacee = None; decls = $1; main = Lit Unit } }*/
+
+program:
+    program_1                           { let nso, (ds, eo) = $1 in { namespacee = nso; decls = ds; main = eo } }
+
+program_1:
+    namespacee program_2                { Some $1, $2 }
+  | program_2                           { None, $1 }
+
+program_2:
+    top_decls                           { $1, None }
+  | top_decls program_3                 { $1, $2 }
+
+program_3:
+    SEMICOLON2                          { None }
+  | SEMICOLON2 expr                     { Some $2 }
+
+namespacee:
+	NAMESPACE id 	                    { $2 }
+
+top_decls:
+    top_decl                            { [$1] }
+  | top_decl top_decls                  { $1 :: $2 }
+
+top_decl:								
+  | LET let_or_letrec_decl              { $2 }
+  | value_level_decl                    { $1 }
+
+
+
+/*
+ * declarations
+ */
+
+let_quals:
+    VAL                                 { { over = false }, fun (e : expr) -> Lo e.loc (Val e) }
+  | OVER                                { { over = true }, identity }
+  | OVER VAL                            { { over = true }, fun (e : expr) -> Lo e.loc (Val e) }
+
+value_level_decl:
+    value_level_decl_                   { pos parseState 1 $1 }
+
+value_level_decl_:
+  | OPEN expr                           { D_Open (decl_qual.none, $2) }
+  | OPEN let_quals expr                 { D_Open (let q, f = $2 in q, f $3) }
+  | OVERLOAD over_and_bindings          { D_Overload $2 }
+  | TYPE ty_expr_rec_and_bindings       { D_Type $2 }
+  | KIND kind_and_bindings              { D_Kind $2 }
+  | DATATYPE datatype                   { D_Datatype $2 }
+
+datatype:
+    id COLON2 kind WITH datatype_bindings       { { id = $1; kind = $3; datacons = $5 } }
+
+datatype_bindings:
+    datatype_bindings_                          { $1 }
+  | PIPE datatype_bindings_                     { $2 }
+
+datatype_bindings_:
+  | datatype_binding                            { [$1] }
+  | datatype_binding PIPE datatype_bindings_    { $1 :: $3 }
+
+datatype_binding:
+    UID COLON ty_expr                           { { id = $1; signature = $3 } }
+
+let_or_letrec_decl:
+    let_or_letrec_decl_                         { pos parseState 1 $1 }
+
+let_or_letrec_decl_: 
+  | let_and_bindings                            { D_Bind (List.map (fun ((q, f), (p, e)) -> { qual = q; patt = p; expr = f e }) $1) }
+  | REC letrec_and_bindings                     { D_Rec (List.map (fun ((q, f), (p, e)) -> { qual = q; par = p; expr = f e }) $2) }
+
+/* multiple and-bindings */
+
+let_and_bindings:
+    let_qbinding                                { [$1] }
+  |	let_qbinding AND let_and_bindings	        { $1 :: $3 }
+
+letrec_and_bindings:
+    letrec_qbinding						        { [$1] }
+  |	letrec_qbinding AND letrec_and_bindings	    { $1 :: $3 }
+
+over_and_bindings: 
+    over_binding						        { [$1] }
+  |	over_binding AND over_and_bindings	        { $1 :: $3 }
+
+ty_expr_and_bindings:
+    ty_expr_binding                             { [$1] }
+  |	ty_expr_binding AND ty_expr_and_bindings    { $1 :: $3 }
+
+ty_expr_rec_and_bindings:
+    ty_expr_rec_binding                                 { [$1] }
+  |	ty_expr_rec_binding AND ty_expr_rec_and_bindings    { $1 :: $3 }
+
+kind_and_bindings: 
+    kind_binding						        { [$1] }
+  |	kind_binding AND kind_and_bindings	        { $1 :: $3 }
+
+/* single bindings */
+
+let_qbinding:
+    let_binding                                 { (decl_qual.none, identity), $1 }
+  | let_quals let_binding                       { $1, $2 }
+
+letrec_qbinding:
+    letrec_binding                              { (decl_qual.none, identity), $1 }
+  | let_quals letrec_binding                    { $1, $2 }
+
+let_binding:
+  | patt EQ expr					            { $1, $3 }
+  | patt_app_atom fun_patt_params EQ expr       { $1, LambdaFun ($2, $4) }
+
+letrec_binding:
+  | typed_param EQ expr					        { $1, $3 }
+  | typed_param fun_patt_params EQ expr         { $1, LambdaFun ($2, $4) }
+
+over_binding:
+    LID COLON ty_expr_annotation                { { id = $1; signature = $3 } }
+
+ty_expr_binding:
+  | ty_patt EQ ty_expr                              { { qual = ty_decl_qual.none; patt = $1; expr = $3 } }
+  | ty_patt_app_atom ty_fun_patt_params EQ ty_expr  { { qual = ty_decl_qual.none; patt = $1; expr = Te_LambdaFun ($2, $4) } }
+
+ty_expr_rec_binding:
+  | kinded_param EQ ty_expr                         { { qual = ty_decl_qual.none; par = $1; expr = $3 } }
+  | kinded_param ty_fun_patt_params EQ ty_expr      { { qual = ty_decl_qual.none; par = $1; expr = Te_LambdaFun ($2, $4) } }
+
+kind_binding:
+  | id EQ kind                                      { { id = $1; pars = []; kind = $3 } }
+  | id TICK_ID EQ kind                              { { id = $1; pars = [var.named $2]; kind = $4 } }
+  | id BRA kind_params KET EQ kind                  { { id = $1; pars = $3; kind = $6 } }
+
+kind_params:
+    TICK_ID                                         { [var.named $1] }
+  | TICK_ID COMMA kind_params                       { var.named $1 :: $3 }
+
+
+
+/*
+ * function parameters as patterns
+ */
+
+fun_patt_params:
+    patt_app_atom					                { [$1] }
+  | patt_app_atom fun_patt_params                   { $1 :: $2 }
+
+fun_param_case:
+  |  fun_patt_params ARROW expr_stmt_atom           { $1, None, $3 }
+  |  fun_patt_params WHEN expr ARROW expr_stmt_atom { $1, Some $3, $5 }
+
+fun_param_cases:
+    fun_param_cases_                                { $1 }
+  | PIPE fun_param_cases_                           { $2 }
+  
+fun_param_cases_:
+    fun_param_case                                  { [$1] }
+  | fun_param_case PIPE fun_param_cases_            { $1 :: $3 }
+
+/* in type language */
+
+ty_fun_patt_params:
+    ty_patt_app_atom                                { [$1] }
+  | ty_patt_app_atom ty_fun_patt_params             { $1 :: $2 }
+
+ty_fun_param_case:
+  | ty_fun_patt_params ARROW ty_expr                { $1, None, $3 }
+
+ty_fun_param_cases:
+    ty_fun_param_cases_                             { $1 }
+  | PIPE ty_fun_param_cases_                        { $2 }
+
+ty_fun_param_cases_:
+    ty_fun_param_case                               { [$1] }
+  | ty_fun_param_case PIPE ty_fun_param_cases_      { $1 :: $3 }
+
+
+
+/*
+ * identifiers
+ */ 
+
+id:
+    UID                                 { $1 } 
+  | LID                                 { $1 }
+
+typed_param:
+    LID                                 { ($1, None) }  
+  | LID COLON ty_expr_annotation        { ($1, Some $3) }
+
+kinded_param:
+    id                                 { ($1, None) }
+  | id COLON2 kind_annotation          { ($1, Some $3) }
+
+
+
+/*
+ * kinds
+ */
+
+kind_annotation:
+    kind                                        { $1 }
+
+kind:
+    kind_arrow_atom                             { $1 }
+  | kind_arrow_atom ARROW kind_arrow_atom		{ K_Arrow ($1, $3) }
+
+kind_arrow_atom:
+    kind_tuple_atom                             { $1 }
+  | kind_tuple_atom COMMA kind_tuple     		{ K_HTuple ($1 :: $3) }
+   
+kind_tuple:
+    kind_tuple_atom                             { [$1] }
+  | kind_tuple_atom COMMA kind_tuple            { $1 :: $3 }
+
+kind_tuple_atom:
+  | id                                          { K_Id $1 }
+  | id kind_tuple_atom                          { K_Cons ($1, [$2]) }
+  | id BRA kind_args KET                        { K_Cons ($1, $3) }
+  | TICK_ID                                     { K_Var (var.named $1) }
+  | STAR                                        { K_Star }
+  | BRA kind KET                                { $2 }
+
+kind_arg:
+    kind                                        { $1 }
+
+kind_args:
+    kind_arg                                    { [$1] } 
+  | kind_arg COMMA kind_args                    { $1 :: $3 }
+
+
+
+/*
+ * type expressions
+ */
+
+ty_expr_annotation:
+    ty_expr                                 { $1 }
+
+ty_expr: 
+    ty_expr_                                { pos parseState 1 $1 }
+   
+ty_expr_tuple_atom:
+    ty_expr_tuple_atom_                     { pos parseState 1 $1 }
+
+ty_expr_htuple_atom:
+    ty_expr_htuple_atom_                    { pos parseState 1 $1 }
+
+ty_expr_app_atom:
+    ty_expr_app_atom_                       { pos parseState 1 $1 }
+
+ty_expr_:
+  | FUN ty_fun_param_cases                          { (Te_LambdaCases $2).value }
+  | FUNCTION ty_cases                               { (Te_LambdaFunction $2).value }
+  | MATCH ty_expr WITH ty_cases			            { Te_Match ($2, $4) }
+  | LET let_ty_decls IN ty_expr                     { (Te_Lets ($2, $4)).value }
+  | ty_expr_htuple_atom COMMA ty_expr_htuple        { Te_HTuple ($1 :: $3) }
+  | ty_expr_htuple_atom ARROW ty_expr               { Te_Arrow ($1, $3) }
+  | ty_expr_htuple_atom  		                    { $1.value }
+
+ty_expr_htuple:
+    ty_expr_htuple_atom                             { [$1] }
+  | ty_expr_htuple_atom COMMA ty_expr_htuple	    { $1 :: $3 }
+
+ty_expr_htuple_atom_:
+    ty_expr_tuple_atom                              { $1.value } 
+  | ty_expr_tuple_atom STAR ty_expr_tuple           { Te_Tuple ($1 :: $3) }
+
+ty_expr_tuple:
+    ty_expr_tuple_atom                              { [$1] }
+  | ty_expr_tuple_atom STAR ty_expr_tuple	        { $1 :: $3 }
+
+ty_expr_tuple_atom_:
+    ty_expr_app_atom                                { $1.value }
+  | ty_expr_tuple_atom ty_expr_app_atom %prec APP   { Te_App ($1, $2) }
+  | ty_expr_tuple_atom COLON2 kind_annotation       { Te_Annot ($1, $3) }
+
+ty_expr_app_atom_:
+  | id                                              { Te_Id $1 }
+  | TICK_ID                                         { Te_PolyVar $1 }
+  | UNDERSCORE                                      { Te_PolyVar (wildcard_reserved_id ()) }
+  | BRA ty_expr KET                                 { $2.value }
+  | CURBRA ty_expr_record CURKET                    { Te_Record ($2, None) }
+  | CURBRA ty_expr_record PIPE ty_expr CURKET       { Te_Record ($2, Some $4) }
+  | BRA symbol KET                                  { Te_Id $2 }
+
+ty_expr_record:
+    id COLON ty_expr_annotation                     { [$1, $3] }
+  | id COLON ty_expr_annotation
+    SEMICOLON ty_expr_record                        { ($1, $3) :: $5 }
+
+let_ty_decls:
+    let_ty_decl                                     { [$1] }
+  | let_ty_decl LET let_ty_decls                    { $1 :: $3 }
+
+let_ty_decl:
+    let_ty_decl_                                    { pos parseState 1 $1 }
+
+let_ty_decl_:
+    ty_expr_and_bindings                            { Td_Bind $1 }
+  | REC ty_expr_rec_and_bindings                    { Td_Rec $2 }
+  | TYPE ty_expr_and_bindings                       { Td_Bind $2 }
+  | REC TYPE ty_expr_rec_and_bindings               { Td_Rec $3 }
+
+
+
+
+/*
+ * type patterns
+ */
+
+ty_patt:
+    ty_patt_                                        { pos parseState 1 $1 }
+
+ty_patt_arrow_atom:
+    ty_patt_arrow_atom_                             { pos parseState 1 $1 }
+
+ty_patt_htuple_atom:
+    ty_patt_htuple_atom_                            { pos parseState 1 $1 }
+
+ty_patt_tuple_atom:
+    ty_patt_tuple_atom_                             { pos parseState 1 $1 }
+
+ty_patt_app_atom:
+    ty_patt_app_atom_                               { pos parseState 1 $1 }
+
+ty_patt_:
+    ty_patt_arrow_atom                              { $1.value }
+  | ty_patt_arrow_atom ARROW ty_patt_arrow_atom     { Tp_Arrow ($1, $3) }
+
+ty_patt_arrow_atom_:
+    ty_patt_htuple_atom                             { $1.value }
+  | ty_patt_htuple_atom COMMA ty_patt_htuple        { Tp_HTuple ($1 :: $3) }
+
+ty_patt_htuple:
+    ty_patt_htuple_atom                             { [$1] }
+  | ty_patt_htuple_atom COMMA ty_patt_htuple        { $1 :: $3 }
+
+ty_patt_htuple_atom_:
+    ty_patt_tuple_atom                              { $1.value }
+  | ty_patt_tuple_atom STAR ty_patt_tuple           { Tp_Tuple ($1 :: $3) }
+
+ty_patt_tuple_atom_:
+    ty_patt_app_atom                                { $1.value }
+  | ty_patt_app_atom AS id		                    { Tp_As ($1, $3) }
+  | ty_patt_tuple_atom ty_patt_app_atom %prec APP   { Tp_App ($1, $2) }
+  | ty_patt_tuple_atom COLON2 kind_annotation       { Tp_Annot ($1, $3) }
+    
+ty_patt_tuple:
+    ty_patt_tuple_atom                      { [$1] }
+  | ty_patt_tuple_atom STAR ty_patt_tuple   { $1 :: $3 }
+
+ty_patt_app_atom_:
+  | UID 								    { Tp_Cons $1 }
+  | LID								        { Tp_Var $1 }
+  | UNDERSCORE                              { Tp_Wildcard }
+  | BRA ty_patt KET					        { $2.value }
+  | BRA symbol KET                          { Tp_Cons $2 }
+
+ty_cases:
+    ty_cases_                               { $1 }
+  | PIPE ty_cases_                          { $2 }
+  | CURBRA ty_cases2_ CURKET                { $2 }
+  | CURBRA PIPE ty_cases2_ CURKET           { $3 }
+
+ty_cases_:
+    ty_case								    { [$1] }
+  | ty_case PIPE ty_cases_					{ $1 :: $3 }
+
+ty_case:
+    ty_patt_arrow_atom ARROW ty_expr        { ($1, None, $3) }
+
+ty_cases2_:
+    ty_case2			        	        { [$1] }
+  | ty_case2 PIPE ty_cases2_                { $1 :: $3 }
+
+ty_case2:
+    ty_patt IMPLIES ty_expr                 { ($1, None, $3) }
+
+
+/*
+ * expressions
+ */
+
+expr:
+    expr_                                   { pos parseState 1 $1 }
+
+expr_stmt_atom:
+    expr_stmt_atom_                         { pos parseState 1 $1 }
+
+expr_app_atom:
+    expr_app_atom_                          { pos parseState 1 $1 }
+
+expr_tuple_atom:
+    expr_tuple_atom_                        { pos parseState 1 $1 }
+
+expr_:
+  | FUN fun_param_cases        			        { (LambdaCases $2).value }
+  | FUNCTION cases						        { (LambdaFunction $2).value }
+  | FUN REC typed_param fun_param_cases         { (RecLambda ($3, $4)).value }
+  | expr_stmt_atom                              { $1.value }
+  | DO CURBRA expr_stmts CURKET                 { Combine $3 }
+
+expr_stmts:
+    expr_stmt_atom                              { [$1] }
+  | expr_stmt_atom SEMICOLON                    { [$1] }
+  | expr_stmt_atom SEMICOLON expr_stmts         { $1 :: $3 }
+
+expr_stmt_atom_:
+  | LET let_decls IN expr           		    { (Lets ($2, $4)).value }     
+  | IF expr THEN expr_stmt_atom			        { If ($2, $4, Lo $4.loc (Lit Unit)) }
+  | IF expr THEN expr_stmt_atom
+    ELSE expr_stmt_atom                         { If ($2, $4, $6) }
+/*  | MATCH expr_tuple WITH cases               { Match ((match $2 with [e] -> e | es -> pos parseState 2 <| Tuple es), $4) }*/
+  | MATCH expr_stmt_atom WITH cases             { Match ($2, $4) }
+  |	expr_tuple_atom   			                { $1.value }
+  | expr_tuple_atom COMMA expr_tuple 	        { Tuple ($1 :: $3) }
+  | expr_tuple_atom WHERE ty_expr               { Solve ($1, $3) }
+  | VAL expr_stmt_atom                          { Val $2 }
+
+expr_tuple:
+    expr_tuple_atom                             { [$1] }
+  | expr_tuple_atom COMMA expr_tuple            { $1 :: $3 }
+
+expr_tuple_atom_:
+    expr_app_atom                                           { $1.value }
+  | expr_tuple_atom expr_app_atom %prec APP                 { App ($1, $2) }
+  | expr_tuple_atom COLON ty_expr_annotation                { Annot ($1, $3) }
+  | expr_tuple_atom BACKSLASH id                            { Restrict ($1, $3) }  
+  | INJECT expr_tuple_atom                                  { Inject $2 }
+  | expr_tuple_atom EJECT                                   { Eject $1 }
+  | MINUS expr_tuple_atom %prec UMINUS				        { UnApp (Config.Typing.negate_symbol, $2) }
+  | expr_tuple_atom INFIX expr_tuple_atom					{ BinApp ($1, $2, $3) }
+  | expr_tuple_atom PLUS expr_tuple_atom					{ BinApp ($1, "+", $3) }
+  | expr_tuple_atom MINUS expr_tuple_atom					{ BinApp ($1, "-", $3) }
+  | expr_tuple_atom STAR expr_tuple_atom					{ BinApp ($1, "*", $3) }
+  | expr_tuple_atom SLASH expr_tuple_atom					{ BinApp ($1, "/", $3) }
+  | expr_tuple_atom MOD expr_tuple_atom						{ BinApp ($1, "%", $3) }
+  | NOT expr_tuple_atom							            { UnApp ("not", $2) }
+  | expr_tuple_atom EQ expr_tuple_atom						{ BinApp ($1, "=", $3) }
+  | expr_tuple_atom NEQ expr_tuple_atom						{ BinApp ($1, "<>", $3) }
+  | expr_tuple_atom LT expr_tuple_atom						{ BinApp ($1, "<", $3) }
+  | expr_tuple_atom GT expr_tuple_atom						{ BinApp ($1, ">", $3) }
+  | expr_tuple_atom LEQ expr_tuple_atom						{ BinApp ($1, "<=", $3) }
+  | expr_tuple_atom GEQ expr_tuple_atom						{ BinApp ($1, ">=", $3) }
+  | expr_tuple_atom DOUBLEAMP expr_tuple_atom               { BinApp ($1, "&&", $3) }
+  | expr_tuple_atom DOUBLEPIPE expr_tuple_atom				{ BinApp ($1, "||", $3) }
+  | expr_tuple_atom COLON2 expr_tuple_atom                  { List_Cons ($1, $3) }
+
+expr_app_atom_:
+    id                                  { Id $1 }
+  | TICK_ID                             { FreeVar $1 }
+  | BACKTICK_ID                         { PolyCons $1 }
+  | AT_ID                               { sugar_with_reserved_id parseState <| fun x L -> Lambda ((x, None), L <| Select (L (Id x), $1)) }
+  | AT_INT32                            { sugar_with_reserved_id parseState <| fun x L -> Lambda ((x, None), L <| Select (L (Id x), tuple_index_label $1)) }
+  |	lit									{ Lit $1 }
+  | BRA symbol KET					    { Id $2 }
+  | BRA symbol expr_tuple_atom KET      { sugar_with_reserved_id parseState <| fun x L -> Lambda ((x, None), L <| BinApp (L (Id x), $2, $3)) }
+  | BRA expr_tuple_atom symbol KET      { sugar_with_reserved_id parseState <| fun x L -> Lambda ((x, None), L <| BinApp ($2, $3, L (Id x))) }
+  | BRA expr KET						{ $2.value }
+  | expr_app_atom HASH                  { Loosen $1 }
+  | expr_app_atom DOT id                { Select ($1, $3) }
+  | CURBRA record CURKET                { Record ($2, None) }
+  | CURBRA record PIPE expr CURKET      { Record ($2, Some $4) }
+  | SQBRA SQKET                         { List_Nil }
+  | SQBRA expr_list SQKET               { List_Seq $2 }
+
+let_decls:								
+	inner_decl							{ [$1] }
+  | inner_decl LET let_decls		    { $1 :: $3 }
+
+inner_decl:
+    let_or_letrec_decl                  { $1 }
+  | value_level_decl                    { $1 }
+
+cases:
+    cases_                              { $1 }
+  | PIPE cases_                         { $2 }
+  | CURBRA cases2_ CURKET               { $2 }
+  | CURBRA PIPE cases2_ CURKET          { $3 }
+
+cases_:
+    case								{ [$1] }
+  | case PIPE cases_					{ $1 :: $3 }
+
+case:
+  | patt ARROW expr_stmt_atom                   { ($1, None, $3) }
+  |	patt WHEN expr ARROW expr_stmt_atom		    { ($1, Some $3, $5) }
+
+/* alternative syntax for pattern matching cases */
+cases2_:
+    case2			        	                { [$1] }
+  | case2 PIPE cases2_                          { $1 :: $3 }
+
+case2:
+    patt IMPLIES expr_stmt_atom                 { ($1, None, $3) }
+  |	patt WHEN expr IMPLIES expr_stmt_atom	    { ($1, Some $3, $5) }
+
+symbol:
+    PLUS								{ "+" }
+  | MINUS								{ "-" }
+  | STAR								{ "*" }
+  | SLASH								{ "/" }
+  | MOD									{ "%" }
+  |	EQ									{ "=" }
+  | NEQ									{ "<>" }
+  | LT									{ "<" }
+  | GT									{ ">" }
+  | LEQ									{ "<=" }
+  | GEQ									{ ">=" }
+  | DOUBLEPIPE							{ "||" }
+  | DOUBLEAMP							{ "&&" }
+  | ARROW                               { "->" }
+  | INFIX                               { $1 }
+
+lit:
+    INT32							{ Int $1 }
+  |	FLOAT							{ Float $1 }
+  | TRUE							{ Bool true }
+  |	FALSE							{ Bool false }
+  | STRING							{ String $1 }
+  | CHAR							{ Char $1 }
+  | BRA KET							{ Unit }
+
+expr_list:
+    expr_stmts                  { $1 }
+
+expr_record_atom:
+    expr_stmt_atom              { $1 }
+
+record:
+    id EQ expr_record_atom      { [$1, $3] }
+  | id EQ expr_record_atom
+    SEMICOLON record            { ($1, $3) :: $5 }
+  | id                          { [$1, pos parseState 1 (Id $1)] }
+  | id SEMICOLON record         { ($1, pos parseState 1 (Id $1)) :: $3 }
+
+
+
+/* 
+ * patterns
+ */
+
+patt:
+    patt_                               { pos parseState 1 $1 }
+
+patt_arrow_atom:
+    patt_arrow_atom_                    { pos parseState 1 $1 }
+
+patt_tuple_atom:
+    patt_tuple_atom_                    { pos parseState 1 $1 }
+
+patt_app_atom:
+    patt_app_atom_                      { pos parseState 1 $1 }
+
+patt_:
+    patt_arrow_atom                             { $1.value }
+/*  | patt_arrow_atom ARROW patt_arrow_atom     { P_Apps [ULo (P_Cons "->"); $1; $3] }*/
+  | patt PIPE patt                              { P_Or ($1, $3) }
+  | patt AMP patt                               { P_And ($1, $3) }
+
+patt_arrow_atom_:
+  | patt_tuple_atom                             { $1.value }
+  | patt_tuple_atom COMMA patt_tuple            { P_Tuple ($1 :: $3) }
+  | patt_arrow_atom COLON2 patt_arrow_atom      { P_List_Cons ($1, $3) }
+
+patt_tuple_atom_:
+  | patt_app_atom                               { $1.value }
+  | patt_app_atom AS LID			            { P_As ($1, $3) }
+  | patt_tuple_atom patt_app_atom %prec APP     { P_App ($1, $2) }
+  | patt_tuple_atom COLON ty_expr_annotation    { P_Annot ($1, $3) }
+
+patt_tuple:
+  | patt_tuple_atom                     { [$1] }
+  | patt_tuple_atom COMMA patt_tuple    { $1 :: $3 }
+
+patt_app_atom_:
+  | LID								    { P_Var $1 }
+  | UID								    { P_Cons $1 }
+  | BRA symbol KET                      { P_Var $2 }
+  | BACKTICK_ID						    { P_PolyCons $1 }
+  | UNDERSCORE                          { P_Wildcard }
+  | BRA patt KET					    { $2.value }
+  | lit						            { P_Lit $1 }
+  | CURBRA patt_record CURKET           { P_Record $2 }
+  | SQBRA SQKET                         { P_List_Nil }
+  | SQBRA patt_list SQKET               { P_List_Seq $2 }
+
+patt_record_item:
+  | id EQ patt                          { $1, $3 }
+  | id                                  { $1, ULo (P_Var $1) }
+
+patt_record:
+  | patt_record_item                        { [$1] }
+  | patt_record_item SEMICOLON patt_record  { $1 :: $3 }
+
+patt_list:
+    patt                                    { [$1] }
+  | patt SEMICOLON patt_list                { $1 :: $3 }
+
+
