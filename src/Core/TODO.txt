@@ -1,0 +1,80 @@
+﻿
+SHORT-TERM
+----------
+(+++)   FIX: redesign the behaviour of named tyvars and fix unification problems with them
+
+(++)    FEAT: redesign all the ticked identifiers and make the whole thing consistent:
+                  X | x     = Var      =>  typing must discriminate between variable names and data constructor names
+                  'X | 'x   = FreeVar  =>  typing must discriminate between constrained variable names and constrained data constructor names
+                  `X        = PolyCons =>  polymorphic variant
+                  `x        = ?        =>  does it make sense? can it be used for something?
+
+(++)    UP: deal with imperative block wisely: 'do' (both single and do {..} blocks) must behave like a binding, i.e. could be mixed with lets without the need for the final 'in'
+
+(+)     SYN: change dataype syntax with '=' in place of 'with'; and support 2 syntaxes for the type name: id :: kind | ty_expr.
+             Where the latter infers the kind from the type expression
+
+(-)     FEAT: resolution can be suspended indeterminately until explicit val construct is used; e.g. double-ticked
+              identifiers could do that
+
+(-)     SYN: support ticked infix operators: '+ and similar as well as '`myinfix`
+
+(-)     UP: when printing kind annotations on types, avoid printing obvious kinds. That means not only K_Star, but also arrows when on left-hand of an application, for example.
+            This problem is similar to printing parentheris in applications: integrating (|Application|) active pattern with some special behaviour might be a good idea
+
+(-)     FIX: remove constraint_mode and behave like this: overloaded constraints are loose, dynamically scoped symbols
+             are strict
+
+(--)    IDEA: some operators that might be useful for something: <!>  >=>  >*>  <*. .*>  (| |) 
+              or remember we can use TILDE (~) for some special behaviours, e.g resolver best fit or strict/non-strict mode
+
+(---)   REFACT: try to redesign all the annot_sep thingie cause that's terribly ugly
+
+
+LONG-TERM
+---------
+(+)     FEAT: GADTs. Read http://caml.inria.fr/pub/docs/manual-ocaml/extn.html#sec238 for GADTs in OCaml and reproduce the
+              existentially-qualified type variable behaviour there. Among others: when a tyvar occurs in the type signature of a
+              datacons but does not appear in the codomain (i.e. the gadt type itself) then it becomes existentially qualified.
+
+(+)     SYN: find a better syntax for loosen operator, such as: <_ expr _>; |(expr)|; |> expr <|; <* expr *>; ]> expr <[
+
+(-)     SYN: top-level lets could be 'val x = e' (hence existing 'val' construct would become 'value'); record bindings should
+            also support the val prefix: this would allow users to quickly make a record from a whole set of top-level bindings
+            just by embrancing them
+
+(-)     FEAT: support for kind constraints (introduced by freevars, at least, if not overloading) in the type-level language.
+              Might be useful for advanced type programming; and is also a beautiful simmetry
+
+(-)     FEAT: active patterns and syntactic sugar for pattern-as-argument
+
+(-)     FEAT: #-expressions introduces sum types. e.g: (match e with A -> #3 | B -> #true) : <int | bool>
+              Row types with special labels could be used for implementing this, like tuples are made
+
+(-)     FEAT: Multi-threaded evaluator. Implement an effect system whose goal is marking expressions in such a way that
+              a massive parallel evaluator can be implemented (as in Concurrent ML).
+              https://www.irisa.fr/prive/talpin/papers/jfp92.pdf
+              https://books.google.it/books?id=odbvBwAAQBAJ&pg=PA4&lpg=PA4&dq=effect+system+for+ml&source=bl&ots=KUOedMnQ8I&sig=0lXYne_oAi6jFW5-kY-qICxhJYE&hl=it&sa=X&ved=0CDYQ6AEwAmoVChMIhafpiNL0yAIVw9kaCh0nBQ5M#v=onepage&q=effect%20system%20for%20ml&f=false
+
+(-)     FEAT: References and assignments. Choose the best system for inferring refs and assignment without too much value restriction.
+              http://delivery.acm.org/10.1145/100000/99622/p291-leroy.pdf?ip=157.138.17.165&id=99622&acc=ACTIVE%20SERVICE&key=4DF843340132291B%2E4D4702B0C3E38B35%2E4D4702B0C3E38B35%2E4D4702B0C3E38B35&CFID=727079897&CFTOKEN=72912914&__acm__=1446568920_888a1e8be56e0b4667e524ff65e093a9
+
+(--)    UP: Concurrent type inference. Use async for pt_expr and jenv must bind to joinable values
+
+(--)    REFACT: reimplement type variables by means of pointers and rewrite substitution accordingly
+
+(--)    FEAT: let-over without pt declaration: pt could be inferred as least general principal type among instances
+
+(--)    FEAT: lazyness and where-bindings in place of let-rec for the type language?
+
+(--)    FEAT: support existential types for explicit subsumption of records. Example: let x : 'a <: { x : int } = if b then { x = 1 } else { x = 2; y = "str" }
+
+(--)    REFACT: type error messages coming from MGU are imprecise: when some subterm gets unified successfully and another part
+                of it doesn't, the mismatch message prints completely un-unified types, i.e. the parts of the type that had
+                already been unified appear as they were BEFORE the whole unification process. This should be fixed somehow
+
+(---)   SYN: pattern matching supports 2 synyaxes: the arrow (->) style and the fat arrow (=>) style. Are we sure it's ok?
+
+(---)   IDEA: when typing of letrec..and bindings fails, try to calculate some dependency graph over the rec variables
+              being defined and reshuffle the bindings in that order; then re-iterate type inference and more lucky
+              unifications might occur

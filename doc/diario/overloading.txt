@@ -1,0 +1,338 @@
+
+OVERLOADING vs. ASTRAZIONE ED APPLICAZIONE PARZIALE DI AMBIENTI
+
+
+**************************************************************************
+**************************************************************************
+**************************************************************************
+
+
+REVISIONE 0 del 12/3/2007
+
+
+(ENV-ABS)
+
+fun <x1; ..; xn> => E
+	x1 : T1 .. xn : Tn
+	E : U
+
+: <x1 : T1; ..; xn : Tn> => U
+
+
+
+(ENV-APP)
+
+E < {xi = Ei} >
+	E : <x1 : T1; ..; xn : Tn> => U
+	Ei : Ti
+	{xi : Ei} è sottoinsieme stretto di {x1 : T1 .. xn : Tn}
+
+: < {xj : Tj} > => U
+	dove {xj : Tj} è la differenza {x1 : T1 .. xn : Tn} \ {xi : Ei}
+
+
+------------------
+
+overload plus : 'a -> 'a -> 'a
+
+let f x = plus x x			// f : < plus : 'a -> 'a -> 'a >. 'a -> 'a
+
+let f x = plus x.m x.n		// f : < plus : 'b -> 'b -> 'b >. { m : 'a; n : 'a } as 'b -> 'b
+
+let f <x; y> = plus x y		// f : < plus : 'a -> 'a -> 'a>. < x : 'a; y : 'a > => 'a
+in
+	f < y = 23 >			// : < plus : int -> int -> int>. < x : int > => int
+
+let f = fun w -> fun <x; y> => fun z -> x + y + z + w	// f : int -> < x : int; y : int> => int -> int
+in
+	f 1;					// : < x : int; y : int> => int -> int
+	f 1 2					// : < x : int; y : int> => int
+
+----------------------
+
+Questo meccanismo è sintatticamente ambiguo con l'applicazione normale e la freccia della lambda
+astrazione normale; sembra un'astrazione e sembra che <...> sia un valore del primo ordine quando
+invece è un costrutto di astrazione ed applicazione speciale
+
+
+**************************************************************************
+**************************************************************************
+**************************************************************************
+
+
+REVISIONE 1 del 8/9/2007
+
+
+(ENV-ABS)
+
+<x1; ..; xn>. E
+	x1 : T1 .. xn : Tn
+	E : U
+
+: <x1 : T1; ..; xn : Tn>. U
+
+
+(ENV-APP)
+
+< E | x1 = E1; ..; xn = En>
+	E : <x1 : T1; ..; xm : Tm>. U
+	E1 : T1 .. En : Tn
+	{ x1 : T1 .. xn : Tn } è sottoinsieme di { x1 : T1 .. xm : Tm }
+
+: <x1 : T1 .. xp : Tp>.U
+	dove { x1 : T1 .. xp : Tp } = { x1 : T1 .. xm : Tm } - { x1 : T1 .. xn : Tn }
+
+
+
+----------------------------
+
+
+let f = <x>. x + 1	// f : < x : int >. int
+in
+	< f | x = 1 > 
+
+let f = fun x -> (<y>.<z>. x + y + z) in	// f : int -> <y : int>.<z : int>. int
+let g =	f 1					// g : <y : int>.<z : int>. int
+in
+	< g | z = 2 >;				// type error perché z è astratto dentro
+	< < g | y = 2 > | z = 3 >		// : int
+
+----------------------------
+
+Questa variante elimina le ambiguità sintattiche e rende chiaro che l'astrazione degli ambienti
+e l'applicazione sono costruitti speciali da non confondere con la lambda astrazione e l'applicazione
+normali; tuttavia, pur essendo l'astrazione e l'applicazione degli ambienti espressioni del primo
+ordine e i rispettivi tipi e valori entità del primo ordine, il risultato è piuttosto macchinoso.
+Ma ancora più importante è che non c'è modo di applicazione ambienti parziali ad ambienti astratti
+innestati: l'applicazione va fatta seguento l'ordine di innestamento, come accade con le applicazioni
+normali, e questo sembra un po' togliere i vantaggi del concetto di fondo che sta dietro l'astrazione
+e l'applicazione di ambienti.
+
+
+**************************************************************************
+**************************************************************************
+**************************************************************************
+
+
+REVISIONE 2 del 8/9/2007
+
+Cambiando paradigma si trasforma l'astrazione e l'applicazione parziale di ambienti in un meccanismo
+non di primo ordine ma analogo al meccanismo di propagazione di predicati per gli identificatori
+in overload. Ciò porta il raccoglimento dell'insieme di binding fino al let, rendendo l'intera idea
+una forma di let-polimorfismo operata nei typescheme al momento della generalizzazione, esattamente come 
+i predicati dell'overloading.
+Spingendo il concetto ulteriormente è possibile unificare i due meccanismi e pensarli come
+la stessa feature, la quale può comparire come automatica (nel caso degli idetificatori in overload)
+o manuale (nel caso di identificatori unbound che partecipano all'ambiente).
+
+
+**************************************************************************
+**************************************************************************
+**************************************************************************
+
+
+REVISIONE 3 del 13/1/2008
+
+Confermo l'intuizione di cui alla revisione 2. Ricapitolando:
+
+
+LAMBDA-ASTRAZIONE AUTOMATICA A LET-TIME
+
+L'astrazione automatica di un identificatore in un'espressione è un meccanismo analogo all'uso di operatori in overload in una forma lightweight:
+
+
+	let f x = x + 'y	// f : { y : int }. int -> int
+
+
+è analogo alla versione con overloading esplicito ed heavyweight:
+
+
+	overload y : int	// il pt potrebbe anche essere 'a
+
+	let f x = x + y		// f : { y : iny}. int -> int
+
+
+Nel primo caso l'identificatore y entra nel predicato al momento della generalizzazione operata dal type inference sul let-binding ed è battezzato in-place; nel secondo, è stato predichiarato. Il primo caso è una forma di lambda-astrazione a let-time automatica, implicita e lightweigtht; la seconda è una forma di lambda-astrazione a let-time automatica ma predichiarata esplicitamente, quindi heavyweight
+
+
+APPLICAZIONE AUTOMATICA E MANUALE DELLE ASTRAZIONI A LET-TIME
+
+L'operazione di applicazione relativa agli identificatori introdotti nel predicato del type-scheme creato a let-time, è una forma di applicazione che si applica ai soli indentificatori, perché è solo introdotto dai let-binding; ergo può anche essere formalizzata con una forma sintattica (sia astratta che concreta) più restrittiva:
+
+	ID | { x1 = E1; ..; x2 = E2 }
+
+
+**************************************************************************
+**************************************************************************
+**************************************************************************
+
+
+REVISIONE 4 del 23/8/2008
+
+La sintassi della rev 3 ha due problemi:
+
+1) utilizza le graffe come lessema di parentesizzazione degli ambienti, la qual cosa collide con i record: esiste un'analogia tra record e ambienti, in quanto entrambi insiemi di binding nome/valore, ma l'applicazione di un ambiente sottosta ad una semantica di beta-riduzione parziale, mentre quella del record no. In altre parole, un record può avere PIU' binding di quanto richiesto e grazie al poly-sub-struct l'applicazione tipa, mentre un ambiente può avere MENO binding di quanto richiesto e l'applicazione tipa perché valuta con una beta-riduzione parziale. Sono casi di polimorfismo simmetrici: il primo subtype ed il secondo "supertype". Sarebbe interessante approfondire la dualità e la simmetria di questa relazione e capire se è possibile unificarle o generalizzarle in qualche modo
+
+2) utilizza il pipe come operatore infisso per l'applicazione, la qual cosa non solo spreca il pipe come lessema che potrebbe essere utilizzato ad esempio nelle type expression per specificare predicati per l'assert-checking system, ma rende anche vagamente controintuitiva l'applicazione stessa dell'ambiente all'identificatore
+
+Al momento non mi viene in mente un'alternativa sintattica valida, tuttavia. Utilizzare lo spazio renderebbe la grammatica piena di conflitti reduce/reduce e shift/reduce e sicuramente capiterebbero casi di type inference involontario sbagliato e successivi casini per il programmatore. Teniamo buono il pipe per il momento, dunque, ma cambiamo le graffe con le acute.
+
+
+**************************************************************************
+**************************************************************************
+**************************************************************************
+
+
+REVISIONE 5 del 9/9/2008
+
+Rendere gli ambienti delle entità first-class sembra un'evoluzione naturale di tutto questo, tuttavia ciò introduce la necessità che il tipo degli ambienti sia un tipo first-class a sua volta e che il poly-param lo supporti.
+
+In tal caso inoltre non sarebbe più necessario avere una forma di applicazione apposita per gli ambienti, né, simmetricamente, una forma di astrazione: sarebbero termini come tutti gli altri, col loro literal, i loro costruttori e i loro pattern. Sarebbero sostanzialmente identici ai record, ma la loro valutazione dovrebbe necessariamente avvenire con una regola di beta-riduzione diversa da quella dell'applicazione normale. Ciò potrebbe rendere la subject reduction impossibile: è da capire se è possibile evitare stuck-states a type-checking time anche per questo tipo di applicazione.
+
+Dal punto di vista puramente stilistico quasi quasi mi piace di più che l'astrazione e l'applicazinoe degli ambienti siano cose distinte e non first-class, in modo da mantenere valide le osservazioni di simmetria con l'overloading ed i predicati sui type-scheme.
+
+D'altro canto però avere gli ambienti first-class sarebbe una gran chicca, molto in linea coi principi di LW in cui tutto è light-weight e tutto è first-class.
+
+----------------------
+
+let f = fun < x; y > -> x + y		// f : < x : int; y : int > -> int
+
+f 1					// type error: int non unifica con < x: int; y : int >
+
+let g = f <x = 23>			// g : < y : int > -> int
+
+-----------------------
+
+let plus = 'x + 'y				// plus : < x : int; y : int >. int   !!! E' UNO SCHEMA, NON UNA FRECCIA
+
+plus <x = 1; y = 2>				// type error: l'applicazione vuole un tipo freccia
+
+plus | <x = 1; y = 2>				// : int
+
+------------------------
+
+let f x = x + (fun <y; z> -> y + z)		// f : int -> < y : int; z : int > -> int
+
+let g = f 1 <z = 11>				// g : <y : int> -> int
+
+g <y = 4>					// : int
+
+------------------------
+
+Ricapitolando:
+
+1) gli ambienti sono first-class e sono astraibili e applicabili normalmente; ciò che hanno di particolare è una regola di beta-riduzione diversa da quella dei tipi freccia normali, quindi producono chiusure speciali
+
+2) gli ambienti sono ANCHE entità create automaticamente dal type checker e introdotte nei type-scheme a let-time; in tal caso quindi l'utente non ha una sintassi per poter creare esplicitamente tipi della forma <x1:T1..xn:Tn>.T all'interno di un'espressione. In altre parole i type-scheme non hanno un costruttore first-class, ma sono solo creati dall'algoritmo di type checking e sempre legati ad un identificatore. Ciò rende il costrutto ID | <x1=E1..xn=En> valido per questi casi in cui l'utente vuole fare un'applicazione di ambiente esplicita ad un ambiente creato automaticamente
+
+
+**************************************************************************
+**************************************************************************
+**************************************************************************
+
+
+REVISIONE 6 del 5/10/2008
+
+
+Cosa succede se introduciamo un costruttore first-class per gli ambienti?
+Ciò innanzitutto implica che i tipi della forma <x1:T1..xn:Tn>.T siano entità first-class nelle type-expression ed è da vedere come questo si incastra coi type-scheme della stessa forma: potrebbero o non servire più o duplicare lo stesso concetto per la modalità automatica.
+
+-------------------------
+
+let arr x = x + (fun <y; z> -> y + z)	// arr : int -> < y : int; z : int > -> int  !!! con tipo freccia
+
+let man x = x + (<y; z>.y + z)		// man : int -> < y : int; z : int >. int  !!! con schema first-class manuale
+
+let auto x = x + 'y + 'z		// auto : < y : int; z : int >. int -> int   !!! con schema automatico a let-time
+
+
+let farr = arr 1			// farr : < y : int; z : int > -> int
+
+let fman = arr 1			// fman : < y : int; z : int >. int
+
+let fauto = arr 1			// fauto : < y : int; z : int >. int
+
+---------------------------
+
+A questo punto fman e fauto sono diventate uguali, mentre farr rimane una freccia, ma in realtà uno è uno schema e l'altro no: ciò è chiaramente ambiguo, ma se gli schemi fosse tipi first-class a loro volta? In tal caso non sarebbe più ambiguo, sarebbe solo equivalente. O, viceversa, se il predicato automatico a let-time fosse anziché uno schema solamente una type-expression, sarebbe ancora una volta non ambiguo ma solamente equivalente - ma anziché un'equivalenza tra schemi, un'equivalenza tra tipi.
+
+Siamo arrivati al punto che in una type-expression il punto e la freccia sono type-constructor analoghi. In cosa consiste allora la differenza? La risposta più interessante è: nell'autorizzare il type checker a risolvere l'applicazione automaticamente o meno.
+
+Nel caso dell'overloading, infatti, ciò che vogliamo è che il typechecker introduca lui delle applicazioni d'ambiente (parziali o meno) automaticamente; e l'overloading produce esattamente la stessa forma di tipi - proprio come la versione "auto". Stiamo quindi parlando sempre della stessa cosa! Solo che il punto istruisce il typechecker a TENTARE di risolvere, mentre la freccia no.
+
+----------------------------
+
+overload y : int
+overload z : int
+
+let over x = x + y + z			// over : < y : int; z : int >. int -> int
+
+let fover = over 1			// fover : < y : int; z : int >. int
+
+----------------------------
+
+La versione con l'overloading si riduce alla versione auto in tutto e per tutto.
+Questi meccanismi sono PROFONDAMENTE simmetrici: sono solamente modi diversi di esprimere la stessa cosa.
+Ciò che rende giustificabile che siano offerti tutti nello stesso linguaggio è che le loro diverse "incarnazioni" possono essere più o meno comode in momenti diversi della scrittura di un programma: ad esempio, ci sono casi in cui si desidera avere una forna di dynamic scoping, altri in cui si desidera l'overloading, altri in cui si vuole supportare entrambi indistintamente - ed è proprio qui che tutto ciò torna comodo, perché si possono interscambiare.
+
+Il punto è quindi una forma di lambda-astrazione che funziona solo con gli ambienti e che scatena la risoluzione automatica.
+
+
+**************************************************************************
+**************************************************************************
+**************************************************************************
+
+
+REVISIONE 7 del 19/3/2009
+
+
+C'è un problema: quando uno vuole il dynamic scoping, non vuole probabilmente l'applicazione parziale ma totale.
+In altre parole vuole un type error se nell'ambiente locale non ci sono tutti i binding necessari per soddisfare il predicato.
+
+Viceversa, quando uno usa l'overloading, gli va bene anche la risoluzione automatica con applicazione parziale perché magari vuole propagare il polimorfismo e, di conseguenza, parte del predicato sul type-scheme.
+
+Se il punto rappresenta l'astrazione di ambienti con risoluzione automatica in applicazione parziale, come si esprime invece l'astrazione di ambienti con risoluzione automatica in applicazione TOTALE?
+
+Qui la faccenda si complica a livello di design, più che di formalismo.
+Si può introdurre un terzo type-constructor (ed eventualmente il relativo costruttore sintattico per il linguaggio delle espressioni) che istruisce l'algoritmo di risuluzione a risolvere TOTALMENTE.
+
+Facciamo un tentativo di formalizzazione di un calcolo con le seguenti caratteristiche:
+
+1) i type-scheme hanno la forma standard, cioè NON hanno predicati
+
+2) i predicati compaiono in due termini delle type-expression, l'uno supportato dalla risoluzione automatica parziale, l'altro da quella automatica totale
+
+3) l'astrazione dell'ambiente nel linguaggio delle espressioni ha un suo termine
+
+
+-------------------------------
+
+
+T ::= Ct
+   |  'a
+   |  T -> T
+   |  P. T
+   |  P => T
+
+S ::= 'a1 .. 'an. T
+
+P ::= < x1 : T1; .. xn : Tn>
+
+
+E ::= Ce
+   |  let x = E in E
+   |  fun x -> E	// lambda-astrazione canonica
+   |  fun A -> E	// lambda-astrazione di ambiente
+   |  A. E		// lambda-astrazione 
+   |  E E		// applicazione canonica
+   |  A => E
+   |  E | G
+   |  G
+
+Ce ::= blabla			// soliti literal
+    | { x1 = E1; .. xn = En }	// record
+    | G
+
+A ::= < x1; .. xn >
+
+G ::= < x1 = E1; .. xn = En >
