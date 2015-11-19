@@ -102,12 +102,14 @@ One tiny detail showed up in the last example: **type applications are right-han
 Another bit that makes life easier in Lw - compared to many MLs - is the sugar for multiple let-bindings and the `in` keyword. While the plain syntax is as usual `let pattern = expr1 in expr2` (remember that a variable identifier is actually a special case of pattern), **multiple `let`s do not need an `in` each, but only the last one does**.
 This allows for the following coding style:
 
-`let x = 3
+```ocaml
+let x = 3
 let rec R n = if n < 0 then 0 else g n + 1
 and g n = R (n - 1)
 let swap x y = y, x
 in
-    swap x (R 3)`
+    swap x (R 3)
+```
     
 Each let-binding or series of mutally-recursive let-rec-bbindings can omit its own `in` except the last one.
 This is different, for example, from F# indentantion-aware lightweight syntax: lexing and parsing in Lw discards whitespaces and end-of-line, totally ignoring indentation.
@@ -126,7 +128,7 @@ What type would you expect from f? Well, some might even say that no type should
 2. labels `x` and `y` of the same polymorphic type `'a`, coming from the unification of the `then` and `else` branches;
 3. some missing unknown part `'c` that stands for *the rest of the record*.
 
-`f : forall 'a :: *, 'c :: row. { guard : bool; a : 'a; b : 'a | 'c } -> 'a
+`f : forall 'a :: *, 'c :: row. { guard : bool; a : 'a; b : 'a | 'c } -> 'a`
 
 This rest of the record thing is called a *row* and is reprensented by a type variable `'c` whose kind is not `*` (star is the kind of types that may have values). Look at the kinds inferred for the type variables universally quantified by the `forall`: `'a` has kind star because clearly record labels contain values; `'c' has a different kind though, because
 Why this apparent complicated row thing involing special kinds and stuff? Because row types are a fantastic way for having a form of structural subtying over records without really introducing subtypes, but only by representing the *unknown tail* of a record via parametric polymorphism. Unification rules do all the magic and make programmning with records very lightweight, easy and concise.
