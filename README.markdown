@@ -141,13 +141,13 @@ Consider the following function:
 let f r = if r.guard then r.x else r.y
 ```
 
-What type would you expect from f? Well, some might even say that no type should be inferred since the record label `guard` and `a` are undefined. In Lw the function parameter `r` does have a type indeed: the type of a record consisting in:
+What type would you expect from parameter `r`? Well, some might even say that no type should be inferred at all since record labels `guard`, `x` and `y` are undefined. In Lw the function parameter `r` does have a type indeed: the type of a record consisting in:
 1. a label `guard` of type bool;
 2. labels `x` and `y` of the same polymorphic type `'a`, coming from the unification of the `then` and `else` branches;
 3. some missing unknown part `'c` that stands for *the rest of the record*.
 
 ```ocaml
-f : forall 'a :: *, 'c :: row. { guard : bool; a : 'a; b : 'a | 'c } -> 'a
+f : forall 'a :: *, 'c :: row. { guard : bool; x : 'a; y : 'a | 'c } -> 'a
 ```
 
 This rest of the record thing is called a *row* and is reprensented by a type variable `'c` whose kind is not `*` (star is the kind of types that may have values). Look at the kinds inferred for the type variables universally quantified by the `forall`: `'a` has kind star because clearly record labels contain values; `'c` has a different kind though, because
