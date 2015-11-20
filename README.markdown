@@ -43,7 +43,7 @@ But what makes Lw unique is the way these features are related together, giving 
 
 Lw full name is Lightweight, which stands for one of its core principles: almost every feature has little to no impact on code verbosity and size, while of course retaining robustness and safeness intact. Almost everything is statically inferred, from record types to data constructor types, to overloaded symbols principal types.
 
-The `L` and `w` letters also stand for greek &lambda; and &omega;, resembling its theoretical heritage: &lambda;-calculus and *System-F&omega;*.
+The `L` and `w` letters also stand for greek &lambda; and &omega;, resembling its theoretical heritage: &lambda;-calculus and System-*F*&omega;.
 
 
 ### Comparisons with the **big** languanges
@@ -73,33 +73,49 @@ Moreover, Lw is strict and non purely functional: this means that writing mixed 
 Let's start from the basic constructs that every child of ML has.
 The core of the language is exactly as you would expect, so we won't spend too much time introducing it.
 
-`let f x = x`
+```ocaml
+let f x = x
+```
 
 defines the polymorphic identity function `f : forall 'a. 'a -> 'a`. And of course that's a syntactic sugar for:
 
-`let f = fun x -> x`
+```ocaml
+let f = fun x -> x
+```
 
 where lambdas expressions are actually first-class citizens.
 As usual, function application does not need parentheses, as in `f 23` or `f true` and obviously enables currying as in:
 
-`let g x y = (y, x) in g 11`
+```ocaml
+let g x y = (y, x)
+in
+    g 11
+```
 
 which computes a partially-applied functional value that is *missing* the last argument.
 Recursion works as usual, as well as conditional expressions:
 
-`let rec fib n = if n < 2 then 1 else fib (n - 1) (n -2)`
+```ocaml
+let rec fib n =
+    if n < 2 then 1
+    else fib (n - 1) (n -2)
+```
 
 where the type inferred is `fib : int -> int`. And basic pattern matching over common data feels familiar:
 
-`let rec map f = function [] -> [] | x :: xs -> f x :: map f xs`
+```ocaml
+let rec map f = function
+  | []      -> []
+  | x :: xs -> f x :: map f xs
+```
 
-That's the typical definition of `map : forall 'a 'b. ('a -> 'b) -> list 'a -> list 'b`.
+That's the typical definition of `map : forall 'a :: *, 'b :: *. ('a -> 'b) -> list 'a -> list 'b` where kinds of type variable are annotated when universally quantified.
 
 #### A few notes on the syntax
 
 One tiny detail showed up in the last example: **type applications are right-handed**, unlike ML notation. In Lw type applications look like ordinary applications in the expression language, which makes sense for advanced features: value-to-type promotions are more consistent, for example, and writing complex type manipulation functions more straightforward.
 
-Another bit that makes life easier in Lw - compared to many MLs - is the sugar for multiple let-bindings and the `in` keyword. While the plain syntax is as usual `let pattern = expr1 in expr2` (remember that a variable identifier is actually a special case of pattern), **multiple `let`s do not need an `in` each, but only the last one does**.
+Another bit that makes life easier in Lw - compared to many MLs - is the sugar for multiple let-bindings and the `in` keyword. While the plain syntax is as usual `let patt = expr1 in expr2` (remember that a variable identifier is actually a special case of pattern), **multiple `let`s do not need an `in` each, but only the last one does**.
 This allows for the following coding style:
 
 ```ocaml
@@ -121,31 +137,39 @@ Mind that variable identifiers can both be lower-case and upper-case; heavyweigh
 
 Consider the following function:
 
-`let f r = if r.guard then r.x else r.y`
+```ocaml
+let f r = if r.guard then r.x else r.y
+```
 
 What type would you expect from f? Well, some might even say that no type should be inferred since the record label `guard` and `a` are undefined. In Lw the function parameter `r` does have a type indeed: the type of a record consisting in:
 1. a label `guard` of type bool;
 2. labels `x` and `y` of the same polymorphic type `'a`, coming from the unification of the `then` and `else` branches;
 3. some missing unknown part `'c` that stands for *the rest of the record*.
 
-`f : forall 'a :: *, 'c :: row. { guard : bool; a : 'a; b : 'a | 'c } -> 'a`
+```ocaml
+f : forall 'a :: *, 'c :: row. { guard : bool; a : 'a; b : 'a | 'c } -> 'a
+```
 
-This rest of the record thing is called a *row* and is reprensented by a type variable `'c` whose kind is not `*` (star is the kind of types that may have values). Look at the kinds inferred for the type variables universally quantified by the `forall`: `'a` has kind star because clearly record labels contain values; `'c' has a different kind though, because
-Why this apparent complicated row thing involing special kinds and stuff? Because row types are a fantastic way for having a form of structural subtying over records without really introducing subtypes, but only by representing the *unknown tail* of a record via parametric polymorphism. Unification rules do all the magic and make programmning with records very lightweight, easy and concise.
+This rest of the record thing is called a *row* and is reprensented by a type variable `'c` whose kind is not `*` (star is the kind of types that may have values). Look at the kinds inferred for the type variables universally quantified by the `forall`: `'a` has kind star because clearly record labels contain values; `'c` has a different kind though, because
+Why this apparent complicated row thing involing special kinds and stuff? Because row types are a fantastic way for having a form of structural subtying over records without really introducing subtypes, but only by representing the *unknown tail of a record* via parametric polymorphism. Unification rules do all the magic and make programmning with records very lightweight, easy and concise.
 
 
 #### Overloading and type constraints resolution
 
 This is the main dish. Consider the following:
 
-`overload plus : 'a -> 'a -> 'a`
+```ocaml
+overload plus : 'a -> 'a -> 'a
+```
 
 This declaration can either appear at top level or be let-bound within a nested scope and introduces a principal type for an overloadable symbol. Later on, symbol `plus` can be mentioned as an ordinary variable and won't be unbound:
 
-`let twice x = plus x x`
+```ocaml
+let twice x = plus x x
+```
 
-The type inferred will be `twice : forall 'a. { plus : 'a -> 'a -> a } => 'a -> 'a`, where the actual type of function `twice` is at the right hand of the implication arrow `=>`, and what lies on the left is a type constraint. The overall type scheme means *assuming a symbol plus of type `'a -> 'a -> a` exists in the environment, the type of `twice` is `'a -> 'a` for any type `'a`*. That's actually an implication asserting the need for a given symbol in order to make a type effective.
+The type inferred will be `twice : forall 'a :: *. { plus : 'a -> 'a -> a } => 'a -> 'a`, where the actual type of function `twice` is at the right hand of the implication arrow `=>`, and what lies on the left is a type constraint. The overall type scheme means *assuming a symbol plus of type `'a -> 'a -> a` exists in the environment, the type of `twice` is `'a -> 'a` for any type `'a`*. That's actually an implication asserting the need for a given symbol in order to make a type effective.
 
-
+## to be continued..
 
 
