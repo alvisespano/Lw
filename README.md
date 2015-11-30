@@ -154,22 +154,145 @@ This rest of the record thing is called a *row* and is reprensented by a type va
 Why this apparent complicated row thing involing special kinds and stuff? Because row types are a fantastic way for having a form of structural subtying over records without really introducing subtypes, but only by representing the *unknown tail of a record* via parametric polymorphism. Unification rules do all the magic and make programmning with records very lightweight, easy and concise.
 
 
-#### Overloading and type constraints resolution
+#### Overloading and type constraints 
 
-This is the main dish. Consider the following:
+Overloading and type constraints resolution is one of Lw main courses. The two are faces of the same coin.
+Overloading lets you simply set up multiple definitions under the same name: you can declare a name you are willing to overload and specify its *principal type*:
 
 ```ocaml
 overload plus : 'a -> 'a -> 'a
 ```
 
-This declaration can either appear at top level or be let-bound within a nested scope and introduces a principal type for an overloadable symbol. Later on, symbol `plus` can be mentioned as an ordinary variable and won't be unbound:
+As almost everything in Lw, this declaration can either appear at top level or be let-bound within a nested scope.
+It does nothing: it just reprensents the intent of overloading and makes the compiler aware of the most generic type any further overloaded instance of the symbol `plus` will have - which basically means that all overloads of `plus` must have a type that is *more specialized* than `'a -> 'a -> 'a`. For example, imagine that `(+) : int -> int -> int` is the native function for integer addition, then
+
+```ocaml
+let over plus x y = x + y
+```
+
+would be an instance of `plus` whose type is `int -> int -> int` - basically an alias of `(+)` which could have written even more concisely like `let over plus = (+)`.
+We may give also another instance of `plus` for booleans (where `|| : bool -> bool -> bool` is the *or* operator):
+
+```ocaml
+let over plus a b = a || b
+```
+
+whose type obvisouly is `bool -> bool -> bool`.
+That's pretty straightforward and apparently not so interesting. Consider though when a function starts mentioning overloaded symbols:
 
 ```ocaml
 let twice x = plus x x
 ```
 
-The type inferred will be `twice : forall 'a :: *. { plus : 'a -> 'a -> a } => 'a -> 'a`, where the actual type of function `twice` is at the right hand of the implication arrow `=>`, and what lies on the left is a type constraint. The overall type scheme means *assuming a symbol plus of type `'a -> 'a -> a` exists in the environment, the type of `twice` is `'a -> 'a` for any type `'a`*. That's actually an implication asserting the need for a given symbol in order to make a type effective.
+The type inferred will be `twice : forall 'a :: *. { plus : 'a -> 'a -> a } => 'a -> 'a`, which reads like: *for all type variables `'a` of kind star, symbol `twice` has type `'a -> 'a` assuming a symbol `plus` having type `'a -> 'a -> 'a` exists in the environment*. Basically the actual type of function `twice` is at the right hand of the implication arrow `=>`, and what lies between that and the universal quantifier are type constraints. The important lesson here is: **when type constraints are satisfied, a symbol does have a real type as well as a value**. Such value can either be a function or any other form of value supported by the language, therefore also constants can be overloaded.
+You may for instance define a *semigroup*-like scenario by adding:
 
-## to be continued..
+```ocaml
+overload zero : 'a
+
+let rec sum = function
+   | []      -> zero
+   | x :: xs -> plus x (sum xs)
+```
+Where the type inferred would be `sum : forall 'a. { plus : 'a -> 'a -> 'a; zero : 'a } => list 'a -> 'a`.
+
+The general rule of thumb is: *use of overloaded symbols puts those symbols into the type constraint set of a type scheme at generalization-time, i.e. when the current let-binding occurs*, **even if overloaded instances are not defined**.
+This means that you may provide no `let over`'s for your overloaded symbols and still be able to use them anytime within your code, yielding to the very same type results.
+That's real **open-world** overloading: **instances are not taken into account until the very end, i.e. until type constraints resolution occurs.**
+
+
+##### Automatic resolution
+
+Type constraints resolution may take place in 3 ways: automatically, semi-automatically or manually.
+In order to make the compiler resolve automatically, proper instances for the types involved must have been provided; in case they haven't, **constraints will simply be kept - totally or partially - until resolution can successfully take place**. And sooner or later it will.
+Consider this example:
+
+```ocaml
+overload plus : 'a -> 'a -> 'a
+
+let twice x = plus x x  // plus : forall 'a. { plus : 'a -> 'a -> 'a } => 'a -> 'a
+
+let a = twice 3         // a : { plus : int -> int -> int } => int
+                        // constraint is unresolved due to lack of instances for int
+
+let b = a + 7           // b : { plus : int -> int -> int } => int
+                        // constraint is still unresolved
+
+let c =                 // c : int = 14
+    let over plus = (+) // local instance plus for int
+    in
+        b + 1           // constraint of b is resolved and finally computes the int value (3 + 3) + 7 = 13
+                        // and the whole expression computes a ground value
+
+let over plus = (*)     // weird instance of plus for int with the semantics of multiplication
+
+let d = b + c           // d : int = 30
+                        // constraint of b is resolved with the multiplicative plus above, hence b = (3 * 3) + 7 = 16
+                        // and c was already the ground value 16 with no constraints
+```
+
+Type constraints not only allow for a form of *constrained parametric polymorphism*, but in case no appropriate instance exist they can be **kept even if no type variables occur anymore**, which means they stand for a form of *controlled dynamic scoping*. Look at the definition of `b`: that's clearly an integer, there's no polymorphism anymore there; a function `plus : int -> int -> int` still missing though. Now look at the definition of `c`: it basically says *evaluate the integer `b` with this instance of `plus` i'm defining here*. Later on, another instance `plus` is given at top-level, whose semantics apply from there on, hence the evaluation of `d`.
+
+
+#### Context-dependent overloading 
+
+As opposed to common imperative languages such as C++, Java and C#, where overloading is closed-world and context-independent, i.e. restricted to the number and type of arguments, in Lw overloading is open-world and **context-dependent**, meaning that even constants having non-arrow types or function co-domains can be overloadeed: there's no restriction to the form of an overloaded symbol principal type and its instances.
+
+```ocaml
+overload convert : 'a -> 'b            // a very generic principal type
+
+let over convert n = sprintf "%d" n    // convert : int -> string
+
+let over convert = function            // convert : int -> bool
+    | 0 -> false
+    | _ -> true  
+
+let f x =                              // f : forall 'a. { convert : 'a -> bool; convert : 'a -> string } => 'a -> string
+ if convert x then convert x           // constraints are unsolved even if instances exist
+ else "nothing" 
+
+let a = f 3                            // a : string
+                                       // the instances above fit just perfectly with int
+```
+
+First of all, notice that in the type scheme of `f` there occur 2 distinct `convert` constraints: that's because each single occurrence of an overloaded symbol is collected separately within the constraint set, as it may be solved by means of different instances. Secondly, the resolution of both `convert`'s relies on the co-domain for being solved, hence the context-dependentness.
+
+
+#### Ambiguities and semi-automatic resolution
+
+Context-dependent overloading may lead to ambiguities. Consider the following:
+
+```ocaml
+overload parse : string -> 'a
+overload pretty : 'a -> string
+
+let parse_and_pretty x = pretty (parse x)
+```
+
+The type inferred is `parse_and_pretty : forall 'a. { pretty : 'a -> string; parse : string -> 'a } => string -> string`.
+Now, look at the type part of the type scheme: no type variable occurs even if `'a` is universally quantified - indeed `'a` does appear in the constraints part. But only there. This is a situation where further unification of the type part would be useless for resolving the constraints: no matter how you will use `parse_and_pretty` in your code, there's no way the type checker can deduce a type for `'a`. This basically means that **any combination of `pretty` and `parse` candidates would do** - and that's what, technically speaking, is considered **ambiguious**.
+
+```ocaml
+let over parse s = sscanf "%d" s    // parse : string -> int
+let over pretty n = sprintf "%d" n  // pretty : int -> string
+
+let x = parse_and_pretty "3"        // x : forall 'a. { pretty : 'a -> string; parse : string -> 'a } => string
+```
+
+Despite the instances introduces above, the resolution of `x` is still ambiguous. The compiler knows it is a string, but no clue indicates that the two instances involving given for `int` are proper candidates.
+A special language construct comes in help here:
+
+```ocaml
+let x = parse_and_pretty "3" where { parse : _ -> int }   // x : string
+```
+
+By specifying at least some part of the type of one of the constraints, the resolution algorithm can narrow the possible set of candidates: that `int` appearing as co-domain of constrained function `parse` is enough in this case. It basically gives a clue for type variable `'a`, which was responsible for the whole ambiguity issue. The rest is done by unification by the compiler, which decides that instance `parse : string -> int` is the best fit, and eventually `pretty : int -> string` comes automatically.
+
+In other words, **the user should provide a tiny bit of type information in order to help the type checker solving all the rest**. That's a least-impact solution for solving ambiguitites.
+Moreover, the general syntax for this *assisted* resolution allows for any type expression to appear after the `where` keyword following an expression: therefore any arbitrarily-complex type computation or alias may come in hand.
+
+
+
+
 
 
