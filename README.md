@@ -68,10 +68,10 @@ Haskell is arguably the most sophisticate language out there - a comparison with
 Moreover, Lw is strict and non purely functional: this means that writing mixed functional and imperative code is much easier in Lw. Basically with Lw you can have the same or even more power of the Haskell, with lighter mechanisms and strict semantics.
 
 
-## A tour of Lw highlights
+## A tour of Lw
 
-Let's start from the basic constructs that every child of ML has.
-The core of the language is exactly as you would expect, so we won't spend too much time introducing it.
+Let's start from the basic constructs that every child of ML usually offers.
+The core of the language is exactly as you would expect, thus we won't spend much time showing it off.
 
 ```ocaml
 let f x = x
@@ -83,8 +83,8 @@ defines the polymorphic identity function `f : forall 'a. 'a -> 'a`. And of cour
 let f = fun x -> x
 ```
 
-where lambdas expressions are actually first-class citizens.
-As usual, function application does not need parentheses, as in `f 23` or `f true` and obviously enables currying as in:
+where lambdas expressions are obviously first-class citizens.
+As usual, function application does not need parentheses, as in `f 23` or `f true`, and obviously enables currying as in:
 
 ```ocaml
 let g x y = (y, x)
@@ -92,7 +92,7 @@ in
     g 11
 ```
 
-which computes a partially-applied functional value that is *missing* the last argument.
+which computes a partially-applied functional value that is *missing the last argument*.
 Recursion works as usual, as well as conditional expressions:
 
 ```ocaml
@@ -101,7 +101,8 @@ let rec fib n =
     else fib (n - 1) (n -2)
 ```
 
-where the type inferred is `fib : int -> int`. And basic pattern matching over common data feels familiar:
+where the type inferred is `fib : int -> int`.
+And basic pattern matching over disjoint union data types feels familiar as well:
 
 ```ocaml
 let rec map f = function
@@ -109,28 +110,50 @@ let rec map f = function
   | x :: xs -> f x :: map f xs
 ```
 
-That's the typical definition of `map : forall 'a :: *, 'b :: *. ('a -> 'b) -> list 'a -> list 'b` where kinds of type variable are annotated when universally quantified.
+That's the typical definition of `map : forall 'a :: *, 'b :: *. ('a -> 'b) -> list 'a -> list 'b` you would write in say OCaml or F#. Just note that in Lw you can tell the interpreter (or the compiler) to pretty print kinds of type variable when universally quantified; by default it does, but there are few other behaviours you may enable in the command line - e.g. hide the universal quantifier and consider ticked type variables as universally quantified unless prefixed by an underscore (like in `'_a` as other MLs do), or annotate kinds only when different from star, or at the first left-to-right occurence.
+
+There will be further detailed sections for new data type definitions, advanced constructs and Lw-specific features.
+
 
 #### A few notes on the syntax
 
-One tiny detail showed up in the last example: **type applications are right-handed**, unlike ML notation. In Lw type applications look like ordinary applications in the expression language, which makes sense for advanced features: value-to-type promotions are more consistent, for example, and writing complex type manipulation functions more straightforward.
+###### Right-handed type applications
 
-Another bit that makes life easier in Lw - compared to many MLs - is the sugar for multiple let-bindings and the `in` keyword. While the plain syntax is as usual `let patt = expr1 in expr2` (remember that a variable identifier is actually a special case of pattern), **multiple `let`s do not need an `in` each, but only the last one does**.
+As already said, Lw shares most ML-like syntax with his brothers. With a few notable differences though.
+One tiny detail showed up in the last example: **type applications are right-handed**, unlike typical ML notation. In Lw type applications look like ordinary applications in the expression language, which makes sense for advanced features: value-to-type promotions are more consistent, for example, and writing complex type manipulation functions more straightforward.
+
+###### Multiple `let`s with a single `in`
+
+One bit that makes life easier in Lw - compared to many MLs - is the sugar for multiple let-bindings and the `in` keyword. While the plain syntax is as usual `let patt = expr1 in expr2` (remember that a variable identifier is actually a special case of pattern), **multiple `let`s do not need an `in` each, but only the last one does**.
 This allows for the following coding style:
 
 ```ocaml
-let x = 3
+let k = 11
 let rec R n = if n < 0 then 0 else g n + 1
 and g n = R (n - 1)
-let swap x y = y, x
+let k = 23
+and swap x y = y, x + k  // the k here is the k bound few lines above, not the one bound just up here
 in
     swap x (R 3)
 ```
     
-Each let-binding or series of mutally-recursive let-rec-bbindings can omit its own `in` except the last one.
+Each let-binding or series of mutally-recursive let-rec-bindings can omit its own `in` except the last one.
 This is different, for example, from F# indentantion-aware lightweight syntax: lexing and parsing in Lw discards whitespaces and end-of-line, totally ignoring indentation.
 
-Mind that variable identifiers can both be lower-case and upper-case; heavyweight data constructors (see GADTs section) must be capitalized though.
+Beware though: do not confuse multiple *`let`s without `in`* and the `let..and` construct. These are two distinct things.
+Mulitple let-bindings separated by an `and` are *bound in the same environment* and are syntactically considered as one sigle declaration, thus requiring one single `in` in theory; while multiple `let`s are supposed to have one `in` each, but Lw supports a *syntactic sugar* that allows for multiple declarations to be written without each own's `in` except the last one.
+Pay attention to the example above: `R` and `g` are *bound in `and`*, thus not needing the `in` anyway; while the first `k` and the aforementioned `R` and `g` couple are distinct let-bindings and are supposed to need one `in` each (one for the `k` and one for the couple), but in Lw you can omit it. Scoping rules still applies though, as proved by the last couple `k` and `swap`.
+
+###### Identifiers and naming conventions
+
+Variable identifiers in expressions can both be lower-case and upper-case; data constructors must be capitalized though. A number of other ticked, back-ticked and marked identifiers exist and will be introduced in dedicated sections: however casing rules are consistent and usually mimic the general one for plain variable identifiers.
+
+**All identifiers are Snake-case, except data constructors which are Pascal-case** (or *capitalized Camel-case*, if you prefer).
+Local variable identifiers may be short, while public bindings should be meaningful and reasonably long.
+Record labels are considered identifiers, thus are Snake-case, and the same applies to type and kind names.
+In the type sub-language ticked snake-cased identifiers are free type variables, possibly universally quantified; not to be confused with type-function parameters or locally let-bound type names which are plain identifiers - as they both are in the expression laguange.
+
+Ticking an identifier in general means *do not consider it as unbound*: this applies both to the type language and the expression language. In the former it refers to generalizable type variables, in the former to constrained free variables (a.k.a. implicit parameters).
 
 
 #### Row types and Records
