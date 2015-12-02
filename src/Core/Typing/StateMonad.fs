@@ -58,9 +58,11 @@ with
         
 type K<'a> = Monad.M<'a, state>
 
-let (|Jb_Overload|Jb_Var|Jb_Data|Jb_Unbound|) = function
+// TODO: rename Jb, Jk and Jm prefixes with Γb, Γk, Γm
+let (|Jb_Overload|Jb_Var|Jb_Data|Jb_OverVar|Jb_Unbound|) = function
     | Some (Jk_Var _, { mode = Jm_Overloadable; scheme = Ungeneralized t }) -> Jb_Overload (refresh_ty t)
     | Some (Jk_Var _, { mode = Jm_Normal; scheme = σ })                     -> Jb_Var σ
+    | Some (Jk_Inst _, { mode = Jm_Overloadable; scheme = _ })              -> Jb_OverVar
     | Some (Jk_Data _, { mode = Jm_Normal; scheme = σ })                    -> Jb_Data σ
     | None                                                                  -> Jb_Unbound
     | Some (jk, jv)                                                         -> unexpected "ill-formed jenv binding: %O = %O" __SOURCE_FILE__ __LINE__ jk jv
@@ -152,7 +154,12 @@ type state_builder (loc : location) =
     member M.search_binding_by_name_Γ x =
         M {
             let! Γ = M.get_Γ
-            return Γ.search_by (fun jk _ -> match jk with Jk_Var y | Jk_Data y -> x = y | Jk_Inst _ -> false)
+            return Γ.search_by (fun jk { mode = jm } ->
+                    match jk, jm with
+                    | Jk_Var y, _
+                    | Jk_Data y, _
+                    | Jk_Inst (y, _), Jm_Overloadable -> x = y
+                    | _                               -> false)
         }
 
     member M.lookup_Γ jk =
@@ -174,10 +181,10 @@ type state_builder (loc : location) =
             return! M.bind_Γ (Jk_Var x) { mode = Jm_Normal; scheme = Ungeneralized t }
         }
 
-    member M.gen_bind_Γ jk (t : ty) =
+    member M.gen_bind_Γ jk jm (t : ty) =
         M {
             let! σ = M.gen t
-            return! M.bind_Γ jk { mode = Jm_Normal; scheme = σ }
+            return! M.bind_Γ jk { mode = jm; scheme = σ }
         }
 
     member M.add_constraint c =

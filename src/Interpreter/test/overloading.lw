@@ -1,0 +1,25 @@
+﻿
+
+namespace Test
+
+
+let test_overload_symbol_escape () =
+    let overload f : 'a -> 'a
+    let over f x = x
+    let over f x = x + 1
+    in
+        f
+
+
+// closed-world
+
+let test_closed_world () =
+    let over add x y = x + y
+    let over add (x, y) = add x y
+    let a = add (x, x)
+    let b = add x x
+    in
+        a, b
+
+            
+        

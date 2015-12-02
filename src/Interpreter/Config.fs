@@ -22,7 +22,7 @@ module Interactive =
     let pretty_closure_max_length = 30
     let pretty_expr (e : expr) = truncate_string_with_ellipsis pretty_closure_max_length e.pretty
     let pretty_closure (x, e, _) = sprintf ": \\%s. %s :" x (pretty_expr e)
-    let pretty_rec_closure (x, e, _) = sprintf ": __rec__ \\%s. %s :" x (pretty_expr e) // TODO: write a fancier pretty-printer for rec-closures
+    let pretty_rec_closure (x, e, _) = sprintf ": __rec__ \\%s. %s :" x (pretty_expr e)
 
 module Exit =
     let ok = 0

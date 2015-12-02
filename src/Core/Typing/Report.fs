@@ -119,6 +119,10 @@ module Error =
     let unbound_data_constructor loc x =
         E 21 loc "data constructor %s is undefined" x
 
+    let closed_world_overload_constraint_not_resolve loc cx ct x t =
+        // TODO: print a better message, hiding the notion of constraint and referring to closed-world overloading only
+        E 22 loc "when generalizing symbol `%O : %O` the constraint `%s : %O` has not been resolved and was referring to a closed-world overloaded symbol" x t cx ct
+
 
 [< RequireQualifiedAccess >]
 module Warn =
@@ -135,7 +139,7 @@ module Warn =
     let shadowing_overloaded_symbol loc x =
         W 3 loc Normal "symbol %s is already overloaded in this context: normal binding will imply shadowing" x
 
-    let overloaded_symbol_escaped loc cx ct x t =
+    let constraint_escaped_scope_of_overload loc cx ct x t =
         W 4 loc Normal "when generalizing symbol `%O : %O` the constraint `%s : %O` has escaped its overload scope and has been converted into a freevar constraint" x t cx ct
 
     let resolution_is_ambiguous loc x t cands =
@@ -160,6 +164,9 @@ module Warn =
 
     let no_constraints_to_loosen loc =
         W 11 loc High "expression does not introduce constraints that could be loosened"
+
+    let let_over_without_previous_let loc x =
+        W 12 loc Low "closed-world overloading of symbol %s without a previous let non-over binding" x
 
 
 [< RequireQualifiedAccess >]

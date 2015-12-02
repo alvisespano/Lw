@@ -27,7 +27,7 @@
     <DocumentationFile>
     </DocumentationFile>
     <Prefer32Bit>false</Prefer32Bit>
-    <StartArguments>test\misc.lw</StartArguments>
+    <StartArguments>test\overloading.lw</StartArguments>
     <StartWorkingDirectory>..\..</StartWorkingDirectory>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
@@ -124,6 +124,7 @@
     <Compile Include="Main.fs" />
     <None Include="test\misc.lw" />
     <None Include="test\interactive.lw" />
+    <None Include="test\overloading.lw" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="FsLexYacc.Runtime">
@@ -136,6 +137,8 @@
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Data.Linq" />
     <Reference Include="System.Numerics" />
     <ProjectReference Include="..\..\..\FSharp.Common\FSharp.Common.fsproj">
       <Name>FSharp.Common</Name>

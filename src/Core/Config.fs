@@ -62,7 +62,8 @@ module Printing =
 
     let sep_in_forall = ", "
     let named_ty_var_bias = 1000000
-    let overload_constraint_fmt : StringFormat<string -> string> = "%s"
+    let openworld_overload_constraint_fmt : StringFormat<string -> string> = "%s"
+    let closedworld_overload_constraint_fmt : StringFormat<string -> string> = "!%s"
     let freevar_fmt : StringFormat<string -> string> = "'%s"
     let freevar_constraint_fmt = freevar_fmt
     let polycons_fmt : StringFormat<string -> string> = "`%s"

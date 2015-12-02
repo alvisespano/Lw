@@ -3,27 +3,39 @@ SHORT-TERM
 ----------
 (+++)   FIX: redesign the behaviour of named tyvars and fix unification problems with them
 
+(+++)   FEAT: support closed-world overloading: let over without overload, resolved locally and immediately
+
 (++)    FEAT: redesign all the ticked identifiers and make the whole thing consistent:
                   X | x     = Var      =>  typing must discriminate between variable names and data constructor names
                   'X | 'x   = FreeVar  =>  typing must discriminate between constrained variable names and constrained data constructor names
                   `X        = PolyCons =>  polymorphic variant
                   `x        = ?        =>  does it make sense? can it be used for something?
 
+(++)    UP: consider multiple overload..and declaration: could they imply some form of implicit type class? E.g. all symbols within an overload..and group could be put into the
+            constraints even if only one of them actually appear in code. The pragmatic benefit is that type variables can be shared between multiple overloaded symbols, like in type classes.
+            Does this make any sense?
+
 (++)    UP: deal with imperative block wisely: 'do' (both single and do {..} blocks) must behave like a binding, i.e. could be mixed with lets without the need for the final 'in'
 
-(+)     SYN: change dataype syntax with '=' in place of 'with'; and support 2 syntaxes for the type name: id :: kind | ty_expr.
-             Where the latter infers the kind from the type expression
-
+(+)     FEAT: design an 'or' construct like Python for dealing with options. 
+                e1 or e2 ~~> match e1 with Some x -> x | None -> e2
+              It actually matches the 'either' function, but it is infix: let (or) a b = either b a
+                
 (-)     FEAT: resolution can be suspended indeterminately until explicit val construct is used; e.g. double-ticked
               identifiers could do that
 
-(-)     SYN: support ticked infix operators: '+ and similar as well as '`myinfix`
+(-)     SYN: support ticked infix operators: '+ for example, as well as '`myinfix` for infixex backticked operators à la Haskell
 
 (-)     UP: when printing kind annotations on types, avoid printing obvious kinds. That means not only K_Star, but also arrows when on left-hand of an application, for example.
             This problem is similar to printing parentheris in applications: integrating (|Application|) active pattern with some special behaviour might be a good idea
 
 (-)     FIX: remove constraint_mode and behave like this: overloaded constraints are loose, dynamically scoped symbols
              are strict
+
+(--)    SYN: change dataype syntax with '=' in place of 'with'; and support 2 syntaxes for the type name: id :: kind | ty_expr.
+             Where the latter infers the kind from the type expression
+
+(--)    FEAT: support a use binding requiring a destructor (overloaded o recorded) and maybe even a constructor (like __enter__() in python)
 
 (--)    IDEA: some operators that might be useful for something: <!>  >=>  >*>  <*. .*>  (| |) 
               or remember we can use TILDE (~) for some special behaviours, e.g resolver best fit or strict/non-strict mode
@@ -43,10 +55,10 @@ LONG-TERM
             also support the val prefix: this would allow users to quickly make a record from a whole set of top-level bindings
             just by embrancing them
 
-(-)     FEAT: support for kind constraints (introduced by freevars, at least, if not overloading) in the type-level language.
+(-)     FEAT: support for kind constraints? (introduced by freevars, at least, if not overloading) in the type-level language.
               Might be useful for advanced type programming; and is also a beautiful simmetry
 
-(-)     FEAT: active patterns and syntactic sugar for pattern-as-argument
+(-)     FEAT: active patterns and syntactic sugar for patterns passed as function arguments
 
 (-)     FEAT: #-expressions introduces sum types. e.g: (match e with A -> #3 | B -> #true) : <int | bool>
               Row types with special labels could be used for implementing this, like tuples are made
@@ -63,8 +75,6 @@ LONG-TERM
 
 (--)    REFACT: reimplement type variables by means of pointers and rewrite substitution accordingly
 
-(--)    FEAT: let-over without pt declaration: pt could be inferred as least general principal type among instances
-
 (--)    FEAT: lazyness and where-bindings in place of let-rec for the type language?
 
 (--)    FEAT: support existential types for explicit subsumption of records. Example: let x : 'a <: { x : int } = if b then { x = 1 } else { x = 2; y = "str" }
@@ -73,7 +83,9 @@ LONG-TERM
                 of it doesn't, the mismatch message prints completely un-unified types, i.e. the parts of the type that had
                 already been unified appear as they were BEFORE the whole unification process. This should be fixed somehow
 
-(---)   SYN: pattern matching supports 2 synyaxes: the arrow (->) style and the fat arrow (=>) style. Are we sure it's ok?
+(--)    FEAT: support separate compilation and modules
+
+(---)   SYN: as of now, pattern matching supports 2 synyaxes: the arrow (->) style and the fat arrow (=>) style. Are we sure it's ok?
 
 (---)   IDEA: when typing of letrec..and bindings fails, try to calculate some dependency graph over the rec variables
               being defined and reshuffle the bindings in that order; then re-iterate type inference and more lucky

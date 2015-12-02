@@ -93,10 +93,17 @@ and pt_expr' ctx e0 =
             let! jv = M.search_binding_by_name_Γ x
             match jv with
             | Jb_Overload t ->
-                let c = constraintt.fresh_strict Cm_Overloaded x t
+                let c = constraintt.fresh_strict Cm_OpenWorldOverload x t
                 do! M.add_constraint c
                 M.translated <- E_CId c
                 yield t
+
+            | Jb_OverVar ->
+                let α = ty.fresh_var
+                let c = constraintt.fresh_strict Cm_ClosedWorldOverload x α
+                do! M.add_constraint c
+                M.translated <- E_CId c
+                yield α
 
             | Jb_Var σ ->
                 let! π, t = M.inst ctx σ
@@ -121,6 +128,7 @@ and pt_expr' ctx e0 =
             let ot =
                 match jb with
                 | Jb_Overload t -> Some t
+                | Jb_OverVar    // TODO: double check this case
                 | Jb_Unbound    -> None
                 | Jb_Data σ     // TODO: for the sake of symmetry, this case should translate to a Reserved_FreeCons
                 | Jb_Var σ      -> Report.Warn.freevar_shadowing e0.loc x σ; None
@@ -267,7 +275,7 @@ and pt_expr' ctx e0 =
             | T_Record (xts, _) ->
                 for x, t in xts do
                     // TODO: think about a special construct for expressing constraint mode and strictness
-                    do! M.add_constraint (constraintt.fresh_strict Cm_Overloaded x t)
+                    do! M.add_constraint (constraintt.fresh_strict Cm_OpenWorldOverload x t)
             | _ -> unexpected "non-record type in eject expression: %O" __SOURCE_FILE__ __LINE__ tr
             let! cs = M.get_constraints
             let x = fresh_reserved_id ()
@@ -290,8 +298,7 @@ and pt_expr' ctx e0 =
                     | Jb_Overload t' -> try do! M.unify τ.loc t t'
                                         with _ -> Report.Warn.manually_resolved_symbol_does_respect_overload e.loc x t t'
                     | Jb_Unbound     -> Report.Warn.manually_resolved_symbol_does_not_exist e.loc x t
-                    | Jb_Data _
-                    | Jb_Var _       -> ()
+                    | _              -> ()
                 }) xts
                                 
             // unify user-defined types to constraints in order of appearence
@@ -314,45 +321,59 @@ and pt_expr' ctx e0 =
 and pt_decl (ctx : context) (d0 : decl) =
     let M = new node_typing_state_builder<_, _> (d0)
     let desugar = desugar M (pt_decl ctx) d0
-    let jk over x t = if over then Jk_Inst (x, t.GetHashCode ()) else Jk_Var x
     let unify_and_resolve (ctx : context) (e : node<_, _>) t1 t2 =
         M {
             do! M.unify e.loc t1 t2
             do! resolve_constraints ctx e
         }
-    let gen prefixes q (e0 : node<_, _>) x t =
+    let jk over x t = if over then Jk_Inst (x, t.GetHashCode ()) else Jk_Var x
+
+    let gen_bind prefixes q (e0 : node<_, _>) x t =
         let loc = e0.loc
         let Lo x = Lo loc x
         M {
             let! { χ = χ; π = { constraints = cs } } = M.get_state
-            // check shadowing
+            // check shadowing and relation with previous bindings
             let! jb = M.search_binding_by_name_Γ x
-            match jb with
-            | Jb_Overload pt ->
-                if q.over then
-                    if not (is_instance_of { loc = loc; χ = χ } pt t) then Report.Error.instance_not_valid loc x t pt
-                else Report.Warn.shadowing_overloaded_symbol loc x
-            | _ -> ()
-            // check constraint scope escaping and solvability
-            let tfv = t.fv
-            for { name = cx; ty = ct } as c in cs do
-                let αs = ct.fv - tfv in if not αs.IsEmpty then Report.Hint.unsolvable_constraint loc x t cx ct αs
-                if c.mode = Cm_Overloaded then
-                    let! jb = M.search_binding_by_name_Γ cx
+            if q.over then
+                match jb with                
+                | Jb_Overload pt -> if not (is_instance_of { loc = loc; χ = χ } pt t) then Report.Error.instance_not_valid loc x t pt   // open-world overloadable instance
+                | Jb_Unbound     -> Report.Warn.let_over_without_previous_let loc x                                                     // let-over binding without a previous let-non-over is a warning
+                | _              -> ()                                                                                                  // let-over binding after anything else is valid closed-world overloading
+            else
+                match jb with                
+                | Jb_Overload _ -> Report.Warn.shadowing_overloaded_symbol loc x    // let-non-over after overload
+                | _             -> ()                                               // normal binding that can shadow legally
 
+            // check constraints solvability and scope escaping
+            for { name = cx; ty = ct } as c in cs do
+                let αs = ct.fv - t.fv in if not αs.IsEmpty then Report.Hint.unsolvable_constraint loc x t cx ct αs
+                match c.mode with
+                | Cm_OpenWorldOverload ->
+                    let! jb = M.search_binding_by_name_Γ cx
                     match jb with
                     | Jb_Overload _ -> ()
                     | _ ->
-                        Report.Warn.overloaded_symbol_escaped loc cx ct x t
+                        Report.Warn.constraint_escaped_scope_of_overload loc cx ct x t
                         do! M.remove_constraint c
-                        do! M.add_constraint { c with mode = Cm_FreeVar; ty = ct }
-            // generalize and translate
+                        do! M.add_constraint { c with mode = Cm_FreeVar; ty = ct }              // escaped overload constraint becomes a FreeVar constraint
+
+                | Cm_ClosedWorldOverload ->
+                    Report.Error.closed_world_overload_constraint_not_resolve loc cx ct x t     // closed-world overload constraint not resolved
+
+                | _ -> ()
+
+            // generalize, bind and translate
             let jk = jk q.over x t
-            let! σ = M.gen_bind_Γ jk t
+            let! σ =
+                let jm = if q.over then Jm_Overloadable else Jm_Normal
+                in
+                    M.gen_bind_Γ jk jm t
             let e1 = if cs.is_empty then e0 else LambdaFun ([possibly_tuple Lo P_CId P_Tuple cs], Lo e0.value)
             Report.prompt ctx (prefixes @ q.as_tokens) x σ None
             return jk, e1
         }
+
     M {
         match d0.value with
         | D_Overload []
@@ -382,7 +403,7 @@ and pt_decl (ctx : context) (d0 : decl) =
                                     return! vars_in_patt p |> Set.toList |> M.List.map (fun x -> M { let! { scheme = Ungeneralized t } = M.lookup_Γ (Jk_Var x) in return b, x, π, t })
                                 }
                             }) bs
-                let! bs' = M.List.map (fun (b : binding, x, π, t) -> M { let! () = M.set_π π in return! gen ["val"] b.qual b.expr x t }) l
+                let! bs' = M.List.map (fun (b : binding, x, π, t) -> M { let! () = M.set_π π in return! gen_bind ["val"] b.qual b.expr x t }) l
                 M.translated <- D_Bind [for jk, e in bs' -> { qual = decl_qual.none; patt = Lo e.loc (P_Jk jk); expr = e }]
             }
 
@@ -403,7 +424,7 @@ and pt_decl (ctx : context) (d0 : decl) =
                             | _         -> Report.Error.value_restriction_non_arrow_in_letrec e.loc te
                         return l
                     }
-                let! bs' = M.List.map (fun (b : rec_binding, x, tx) -> M { return! gen ["rec"; "val"] b.qual b.expr x tx }) l
+                let! bs' = M.List.map (fun (b : rec_binding, x, tx) -> M { return! gen_bind ["rec"; "val"] b.qual b.expr x tx }) l
                 M.translated <- D_Rec [for jk, e in bs' -> { qual = decl_qual.none; par = jk.pretty, None; expr = e }]
             }
 
@@ -451,7 +472,7 @@ and pt_decl (ctx : context) (d0 : decl) =
                 let _, tcod = split (|T_Arrows|_|) tx
                 let! χ = M.get_χ
                 if not (is_principal_type_of { χ = χ; loc = τx.loc } pt tcod) then return Report.Error.data_constructor_codomain_invalid τx.loc x c tcod
-                let! σ = M.gen_bind_Γ (Jk_Data x) tx
+                let! σ = M.gen_bind_Γ (Jk_Data x) Jm_Normal tx
                 Report.prompt ctx ["data"] x σ None
 
         | D_Kind _ ->
@@ -477,10 +498,13 @@ and pt_patt ctx (p0 : patt) =
                     yield t
 
                 | Jb_Overload t ->
-                    return Report.Error.data_constructor_bound_to_wrong_symbol loc0 "overloaded symbol" x t
+                    return Report.Error.data_constructor_bound_to_wrong_symbol loc0 "open-world overloaded symbol" x t
 
                 | Jb_Var σ ->
                     return Report.Error.data_constructor_bound_to_wrong_symbol loc0 "variable" x σ
+
+                | Jb_OverVar ->
+                    return Report.Error.data_constructor_bound_to_wrong_symbol loc0 "closed-world overloaded symbol" x null
 
         | P_PolyCons x ->
             let α = ty.fresh_var

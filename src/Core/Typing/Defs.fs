@@ -75,12 +75,13 @@ with
 // overloaded symbol constraints
 //
 
-type constraint_mode = Cm_FreeVar | Cm_Overloaded
+type constraint_mode = Cm_FreeVar | Cm_OpenWorldOverload | Cm_ClosedWorldOverload
 with
     member this.pretty_as_constraint_id x =
         match this with
-        | Cm_Overloaded      -> sprintf Config.Printing.overload_constraint_fmt x
-        | Cm_FreeVar         -> sprintf Config.Printing.freevar_constraint_fmt x
+        | Cm_OpenWorldOverload      -> sprintf Config.Printing.openworld_overload_constraint_fmt x
+        | Cm_ClosedWorldOverload    -> sprintf Config.Printing.closedworld_overload_constraint_fmt x
+        | Cm_FreeVar                -> sprintf Config.Printing.freevar_constraint_fmt x
 
 type [< CustomEquality; CustomComparison >] constraintt =
     {
@@ -250,7 +251,7 @@ with
             
     member this.pretty =
         match this with
-            | Jm_Overloadable -> "(over) "
+            | Jm_Overloadable -> "(overloadable) "
             | Jm_Normal       -> ""
 
 type [< NoComparison; NoEquality >] jenv_value =
@@ -263,7 +264,7 @@ with
             
     member this.pretty =        
         match this.mode with
-        | Jm_Overloadable -> sprintf "(over) %O" this.scheme
+        | Jm_Overloadable -> sprintf "(overloadable) %O" this.scheme
         | Jm_Normal       -> sprintf "%O" this.scheme
 
 type jenv = Env.t<jenv_key, jenv_value>
