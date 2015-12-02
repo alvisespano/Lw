@@ -58,7 +58,7 @@ Lw does not have a module system though, nor an object system. Lw has a very pow
 Moreover, Lw has heavyweight GADTs as well as lightweight polymorphic variants, as late OCaml revisions do - but in Lw everything is more tied together and does not feel like a language extension.
 Overloading is another story though: OCaml does not support any form of overloading and it does not support the form of constrained polymorphism that Lw offers as central mechanism. This is a major difference.
 
-#### Lw vs. F#
+#### Lw vs. F\#
 
 F# is a great language too. That's the language Lw is currently implemented in, by the way. And most core features of F# are the same of OCaml, therefore the same of Lw. Moveover, Lw supports computation expressions and monads as F# does, although F# uses builder classes and objects for defining custom semantics of *banged* constructs, while Lw uses an system based on constraints and overloading for that purpose. Active patterns are another F# feature that Lw inherited, even though in a slightly more consistent way: in F# active patterns are functions returning `option` while data constructors aren't; in Lw every data constructors, whether a GADT or a polymorphic variant, can be either used as a function returning `option`, rendering them equivalent to active patterns.
 
