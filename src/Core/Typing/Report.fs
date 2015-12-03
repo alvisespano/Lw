@@ -119,8 +119,8 @@ module Error =
     let unbound_data_constructor loc x =
         E 21 loc "data constructor %s is undefined" x
 
-    let closed_world_overload_constraint_not_resolve loc cx ct x t =
-        // TODO: print a better message, hiding the notion of constraint and referring to closed-world overloading only
+    let closed_world_overload_constraint_not_resolved loc cx ct x t =
+        // TODO: print a better message, hiding the mention to constraints and referring to closed-world overloading only
         E 22 loc "when generalizing symbol `%O : %O` the constraint `%s : %O` has not been resolved and was referring to a closed-world overloaded symbol" x t cx ct
 
 

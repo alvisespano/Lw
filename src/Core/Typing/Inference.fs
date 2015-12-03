@@ -346,6 +346,7 @@ and pt_decl (ctx : context) (d0 : decl) =
                 | _             -> ()                                               // normal binding that can shadow legally
 
             // check constraints solvability and scope escaping
+            L.debug Low "constraints: %O" cs
             for { name = cx; ty = ct } as c in cs do
                 let αs = ct.fv - t.fv in if not αs.IsEmpty then Report.Hint.unsolvable_constraint loc x t cx ct αs
                 match c.mode with
@@ -359,7 +360,7 @@ and pt_decl (ctx : context) (d0 : decl) =
                         do! M.add_constraint { c with mode = Cm_FreeVar; ty = ct }              // escaped overload constraint becomes a FreeVar constraint
 
                 | Cm_ClosedWorldOverload ->
-                    Report.Error.closed_world_overload_constraint_not_resolve loc cx ct x t     // closed-world overload constraint not resolved
+                    Report.Error.closed_world_overload_constraint_not_resolved loc cx ct x t     // closed-world overload constraint not resolved
 
                 | _ -> ()
 
