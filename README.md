@@ -14,9 +14,9 @@ Assuming you are using at least VS2013 - though VS2015 Community edition is the 
 
 Lw.sln consists of 3 projects:
 
-* Core. The core of the language: lexer, parser and type checker plus all that is related to them. This is a library project and cannot be run.
-* Interpreter: the real Lw interpreter. This is a startup*-able* project generating an executable.
-* FSharp.Common: this is another library project which both Core and Interpreter projects rely on. It is distributed separately as a stand-alone GitHub project of mine.
+* **Core.** The core of the language: lexer, parser and type checker plus all that is related to them. This is a library project and cannot be run.
+* **Interpreter.** This is the real Lw interpreter and it's a startup*-able* project generating an executable.
+* **FSharp.Common.** This is another library project which both Core and Interpreter projects rely on. It is distributed separately as a stand-alone GitHub project of mine.
 
 #### Usage
 
