@@ -29,12 +29,14 @@ with
 
 type [< NoComparison; NoEquality >] state =
     {
-        Γ   : jenv
-        χ   : kjenv
-        δ   : tenv
-        θ   : tsubst
-        Θ   : ksubst
-        π   : predicate
+        Γ   : jenv              // type judices
+        χ   : kjenv             // kind judices
+        δ   : tenv              // evaluated types
+        θ   : tsubst            // type subst
+        Θ   : ksubst            // kind subst
+        π   : predicate         // global predicate
+
+        named_tyvars   : Env.t<id, int>    // named type variables
     }
 with
     override this.ToString () = this.pretty
@@ -52,6 +54,8 @@ with
             δ   = tenv.empty
             Θ   = ksubst.empty
             π   = predicate.empty
+
+            named_tyvars = Env.empty
         }
 
     member this.Σ = this.θ, this.Θ
@@ -119,6 +123,12 @@ type state_builder (loc : location) =
     member private __.lookup report (env : Env.t<_, _>) x =
         try env.lookup x
         with Env.UnboundSymbol x -> report loc x
+
+    member M.bind_named_tyvar α =
+        M {
+            match α with
+            | Va_Named (x, n) -> do! M.lift_ 
+        }
 
     member M.bind_χ x ς =
         M {

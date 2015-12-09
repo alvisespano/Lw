@@ -1,0 +1,10 @@
+﻿
+namespace Test
+
+
+let f (x : 'pippo) = x
+
+let g (x : 'pippo) (y : 'baudo) =
+    let f (z : 'pippo) = x, z
+    in
+        f y

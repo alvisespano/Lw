@@ -122,7 +122,7 @@ module private VarPrinterState =
     let env : Env.t<int, int> option ref = ref None
     let forall : Set<int> option ref = ref None
 
-// TODO: reimplement variables by means of pointers; reimplement substitution application accordingly as well
+// TODO: reimplement variables by means of pointers; reimplement substitution accordingly as well
 type var =
     | Va of int
     | Va_Named of string * int
@@ -148,7 +148,7 @@ with
         | Va_Named (s, n) ->
             let r = sprintf fmt s
             #if DEBUG_TYVARS
-            sprintf "%s_%d" r (n - Config.Printing.named_ty_var_bias)
+            sprintf "%s_%d" r n // - Config.Printing.named_ty_var_bias)
             #else
             r
             #endif

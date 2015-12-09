@@ -488,6 +488,20 @@ type kscheme with
             | { forall = αs; kind = k } -> k.fv - αs
 
 
+module A =
+
+    let f : 'x -> 'x = fun x -> x
+
+    let g y = y : 'x
+
+    let j (x : 'u) =
+        let f (y : 'u) = x, y
+        let g (z : 'v) = x, z
+        let h (w : 'v) = x, w
+        g 3 = h true
+        
+
+
 // augmentations for types
 //
 

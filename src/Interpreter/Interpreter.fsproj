@@ -27,7 +27,7 @@
     <DocumentationFile>
     </DocumentationFile>
     <Prefer32Bit>false</Prefer32Bit>
-    <StartArguments>test\overloading.lw</StartArguments>
+    <StartArguments>test\tyvars.lw</StartArguments>
     <StartWorkingDirectory>..\..</StartWorkingDirectory>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
@@ -125,6 +125,7 @@
     <None Include="test\misc.lw" />
     <None Include="test\interactive.lw" />
     <None Include="test\overloading.lw" />
+    <None Include="test\tyvars.lw" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="FsLexYacc.Runtime">
