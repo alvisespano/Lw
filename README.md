@@ -164,15 +164,17 @@ One might for instance define the *is_in* function like this - assuming naively 
 let (∈) a b = find (fun x -> x = a) b
 ```
 
-####### Quick lambdas
+###### Quick lambdas
 
-In Lw lambda expressions look like ML ones: the general syntax `fun id -> expr` is clear and well known.
+In Lw, lambda expressions look like ML ones: the general syntax `fun patt -> expr` is clear and well known.
 There exist an alternate syntax though, for writing quick short lambda expressions, which supports either the greek λ or the backslash `\` in place of the keyword `fun` and the dot `.` in place of the arrow `->`, as in:
 
 ```ocaml
 let dont_touch l = map (λx.x) l
 let sum l = fold (\z x. x + z) 0 l
 ```
+
+Mind that this alternate syntax does not support patterns, like `fun` does, or cases, like `function` does. It is simply a short syntax for plain identifier-based lambda expressions possibly having multiple paramters and a brief body.
 
 #### Row types and records
 
