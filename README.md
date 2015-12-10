@@ -3,7 +3,7 @@
 Lw is a general-purpose statically-typed functional language with advanced features.
 It is currently in development and some of its features are yet to come or still unstable, nonetheless it has reached a stage at which people who enjoy experimenting with new programming languages may start to play with it.
 
-I will update this README file in the near future and document the most interesting among its constructs and features. Consider, however, that any feature may change in the future or may get broken at some point until a stable version is released ;)
+I will keep this README file updated and document the most interesting among its constructs and features. Consider, however, that any feature may change in the future or may get broken at some point until a stable version is released ;)
 
 ## Installation
 
@@ -14,9 +14,9 @@ Assuming you are using at least VS2013 - though VS2015 Community edition is the 
 
 Lw.sln consists of 3 projects:
 
-* Core. The core of the language: lexer, parser and type checker plus all that is related to them. This is a library project and cannot be run.
-* Interpreter: the real Lw interpreter. This is a startup*-able* project generating an executable.
-* FSharp.Common: this is another library project which both Core and Interpreter projects rely on. It is distributed separately as a stand-alone GitHub project of mine.
+* **Core.** The core of the language: lexer, parser and type checker plus all that is related to them. This is a library project and cannot be run.
+* **Interpreter.** This is the real Lw interpreter and it's a startup*-able* project generating an executable.
+* **FSharp.Common.** This is another library project which both Core and Interpreter projects rely on. It is distributed separately as a stand-alone GitHub project of mine.
 
 #### Usage
 
@@ -26,17 +26,16 @@ The Lw interpreter can be used in a few ways:
 2. launching the executable with the `--interactive` command line argument: this runs the interpreter in interactive mode, pretty much like other functional languages interactive console. You can write declarations and expressions and see the type inferred as well as the result of the evaluation.
 3. mixing the two ways above: this makes the interpreter evaluate the source input file and eventually open the interactive console with an environment populated with all the stuff defined at top level in the input file.
  
-(2) from VS: activate the Interactive solution configuration on the left of the *play* button and
-as an interactive console.
+Visual Studio users may activate the "Interactive" solution configuration on the left of the *play* button and launch the interpreter in interactive mode.
 
 
 ## Overview
 
-Lw is a general purpose, statically typed, strict, functional-first programming language that supports advanced features and forms of polymorphism for writing robust, extremely reusable, maintenable and succinct code in a lightweight fashion.
+Lw is a general purpose, statically typed, strict, impure, functional-first programming language that supports advanced features and forms of polymorphism for writing robust, reusable, maintenable and succinct code.
 
-It integrates state-of-the-art advancements in the programming language field together with a number of novel bits invented or reinterpreted by myself throughout more than 15 years of study, research and work. Among the most advanced features, Lw supports open-world context-dependent overloading, constrained polymorphism, implicit parameters, fully-inferred GADTs with overloadable data constructors, first-class polymorphism and modules, row types with overloadable labels, higher-order polymorphism with kind inference and much more.
+Ideal for writing big as well as small programs, since almost every feature has a lightweight counterpart, it integrates state-of-the-art advancements in the programming language field together with a number of novel bits invented or reinterpreted by myself throughout more than 15 years of passion, research and work. Among the most advanced features: open-world as well as closed-world context-dependent overloading, constrained polymorphism, implicit parameters, fully-inferred GADTs with overloadable data constructors, first-class polymorphism and modules, row types with overloadable labels, higher-order polymorphism with kind inference and much more.
 
-But what makes Lw unique is the way these features are related together, giving birth to a pretty novel way of writing and reusing code: type constraints resolution is central to many language mechanisms, leading to a form of static dispatching which can either be automatic or controlled by the user in case of ambiguities. On the other hand, row-typed records offer a form of dynamic dispatching - and here is the magic: users can switch type constraints into records and viceversa, making type constraints become first-class row types and values and the other way round. This makes two worlds communicate: the world of static dispatching and the world of dynamic dispatching, maximizing code reuse.
+But what makes Lw unique is the way these features are related together, exposing a pretty novel way of writing and reusing code: type constraints resolution is central to many language mechanisms, leading to a form of static dispatching which can either be automatic or optionally controlled by the user. On the other side of the mirror, row-typed records offer a form of dynamic dispatching - and here's the magic: users can switch type constraints into records and viceversa, converting type constraints into first-class types and the other way round. This makes two worlds communicate: the world of static resolution and the world of dynamic resolution, maximizing chances of reusing code that might have originally been written with the opposite approach in mind.
 
 
 #### &lambda;&omega; = Lw = Lightweight
@@ -117,15 +116,16 @@ There will be further detailed sections for new data type definitions, advanced 
 
 #### A few notes on the syntax
 
-###### Right-handed type applications
+As already said, Lw shares most of ML's look & feel. With a few notable differences though.
 
-As already said, Lw shares most ML-like syntax with his brothers. With a few notable differences though.
-One tiny detail showed up in the last example: **type applications are right-handed**, unlike typical ML notation. In Lw type applications look like ordinary applications in the expression language, which makes sense for advanced features: value-to-type promotions are more consistent, for example, and writing complex type manipulation functions more straightforward.
+###### Right-handed type applications and ticked type variables
 
-###### Multiple `let`s with a single `in`
+One tiny detail has shown up in the last example: **type variables are ticked**, like typical ML notation, but **type applications are right-handed** instead. In Lw type applications look like ordinary applications in the expression language, which makes sense for advanced features: value-to-type promotions are more consistent, for example, and writing complex type manipulation functions more straightforward.
 
-One bit that makes life easier in Lw - compared to many MLs - is the sugar for multiple let-bindings and the `in` keyword. While the plain syntax is as usual `let patt = expr1 in expr2` (remember that a variable identifier is actually a special case of pattern), **multiple `let`s do not need an `in` each, but only the last one does**.
-This allows for the following coding style:
+###### Multiple `let`'s with a single `in`
+
+Another bit that can make life easier in Lw is the sugar for multiple let-bindings with a single final `in` keyword before the body. While the general syntax for `let` is the usual `let patt = expr1 in expr2` (don't forget a variable identifier is actually a special case of pattern), **multiple `let`'s do not need an `in` each, but only the last one does**.
+This basically means that `let x = 1 let y = 2 in x, y` is not parsed as an application where the right `let` is the argument and `1` is the applicand as in `let x = 1 (let y = 2 in x, y)` - therefore you must specifiy parentheses in case you are truly willing to do such weird application, which is something rather situational by the way. Naturally, the sugar is meant to deal with what typically a user desires, i.e. defining multiple `let`'s:
 
 ```ocaml
 let k = 11
@@ -140,8 +140,8 @@ in
 Each let-binding or series of mutally-recursive let-rec-bindings can omit its own `in` except the last one.
 This is different, for example, from F# indentantion-aware lightweight syntax: lexing and parsing in Lw discards whitespaces and end-of-line, totally ignoring indentation.
 
-Beware though: do not confuse multiple *`let`s without `in`* and the `let..and` construct. These are two distinct things.
-Mulitple let-bindings separated by an `and` are *bound in the same environment* and are syntactically considered as one sigle declaration, thus requiring one single `in` in theory; while multiple `let`s are supposed to have one `in` each, but Lw supports a *syntactic sugar* that allows for multiple declarations to be written without each own's `in` except the last one.
+Beware though: do not confuse multiple `let`'s without the `in` with the `let..and..in` construct. These are two distinct things.
+Mulitple let-bindings separated by an `and` are *bound to the same environment* and are syntactically considered as one sigle declaration, thus requiring one single `in` in theory and in practice. Multiple `let`'s, instead, are supposed to have one `in` each, but Lw supports a *syntactic sugar* that allows for multiple `let`'s to be written without each own's `in` except the last one - and that's as if they were declared in cascade, thus each one may refer to the ones above.
 Pay attention to the example above: `R` and `g` are *bound in `and`*, thus not needing the `in` anyway; while the first `k` and the aforementioned `R` and `g` couple are distinct let-bindings and are supposed to need one `in` each (one for the `k` and one for the couple), but in Lw you can omit it. Scoping rules still applies though, as proved by the last couple `k` and `swap`.
 
 ###### Identifiers and naming conventions
@@ -155,8 +155,26 @@ In the type sub-language ticked snake-cased identifiers are free type variables,
 
 Ticking an identifier in general means *do not consider it as unbound*: this applies both to the type language and the expression language. In the former it refers to generalizable type variables, in the former to constrained free variables (a.k.a. implicit parameters).
 
+###### Unicode, greek letters and special symbols
 
-#### Row types and Records
+Lw supports Unicode lexing and pretty printing. Use of **greek letters for type variables** in place of ticked identifiers is supported as well as some other special symbols, such as the ∀ symbol in place of the *forall* keyword for universally quantifying polymorphic type variables in type schemes, or the ∃ symbol in place of the *exists* keyword for explicitly denoting existential types. In general, all Unicode symbols are usable as function or operator identifiers or whatever.
+One might for instance define the *is_in* function like this - assuming naively that `find : ('a -> bool) -> list 'a` is defined for lists:
+
+```ocaml
+let (∈) a b = find (fun x -> x = a) b
+```
+
+####### Quick lambdas
+
+In Lw lambda expressions look like ML ones: the general syntax `fun id -> expr` is clear and well known.
+There exist an alternate syntax though, for writing quick short lambda expressions, which supports either the greek λ or the backslash `\` in place of the keyword `fun` and the dot `.` in place of the arrow `->`, as in:
+
+```ocaml
+let dont_touch l = map (λx.x) l
+let sum l = fold (\z x. x + z) 0 l
+```
+
+#### Row types and records
 
 Consider the following function:
 

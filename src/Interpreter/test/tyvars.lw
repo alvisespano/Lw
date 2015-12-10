@@ -8,3 +8,7 @@ let g (x : 'pippo) (y : 'baudo) =
     let f (z : 'pippo) = x, z
     in
         f y
+        
+let rec f g h x y = g (x : 'a) + h (y : 'a)
+and e (x : 'a) = x + 1
+

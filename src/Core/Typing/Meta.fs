@@ -87,9 +87,8 @@ module private Eval =
             let k0 = τ0.typed
             match τ0.value with
             | Te_PolyVar x ->
-                let α = var.named x
-                do! M.bind_named_tyvar α
-                yield T_Var (var.named x, k0)
+                let! α = M.add_named_tyvar x
+                yield T_Var (α, k0)
 
             | Te_Id x ->
                 yield T_Cons (x, k0)

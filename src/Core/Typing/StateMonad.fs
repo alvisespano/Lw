@@ -82,11 +82,13 @@ type state_builder (loc : location) =
     member __.get_π st = st.π, st
     member M.get_Σ = M { let! s = M.get_state in return s.θ, s.Θ }
     member M.get_constraints = M { let! { constraints = cs } = M.get_π in return cs }
+    member __.get_named_tyvars st = st.named_tyvars, st
 
     member __.lift_Γ f st = (), { st with Γ = f st.Γ |> subst_jenv st.Σ }
     member __.lift_Δ f st = (), { st with δ = f st.δ }
     member __.lift_χ f st = (), { st with χ = f st.χ |> subst_kjenv st.Θ }
     member __.lift_π f (st : state) = (), { st with π = subst_predicate st.Σ (f st.π) }
+    member __.lift_named_tyvars f (st : state) = (), { st with named_tyvars = f st.named_tyvars }
 
     member M.set_Γ x = M.lift_Γ (fun _ -> x)
     member M.set_Δ x = M.lift_Δ (fun _ -> x)
@@ -105,7 +107,8 @@ type state_builder (loc : location) =
                           θ = θ
                           Θ = Θ
                           Γ = subst_jenv Σ s.Γ
-                          π = subst_predicate Σ s.π })
+                          π = subst_predicate Σ s.π
+                          named_tyvars = s.named_tyvars })
         }
 
     member private M.gen t =
@@ -124,10 +127,14 @@ type state_builder (loc : location) =
         try env.lookup x
         with Env.UnboundSymbol x -> report loc x
 
-    member M.bind_named_tyvar α =
+    member M.add_named_tyvar x =
         M {
-            match α with
-            | Va_Named (x, n) -> do! M.lift_ 
+            let! vas = M.get_named_tyvars
+            match vas.search x with
+            | Some n -> return Va_Named (x, n)
+            | None   -> let Va_Named (_, n) as α = var.named x
+                        do! M.lift_named_tyvars (fun vas -> vas.bind x n)
+                        return α
         }
 
     member M.bind_χ x ς =
