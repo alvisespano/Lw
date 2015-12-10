@@ -61,7 +61,6 @@ module Printing =
     // static configuration bindings
 
     let sep_in_forall = ", "
-    let named_ty_var_bias = 100000
     let openworld_overload_constraint_fmt : StringFormat<string -> string> = "%s"
     let closedworld_overload_constraint_fmt : StringFormat<string -> string> = "!%s"
     let freevar_fmt : StringFormat<string -> string> = "'%s"

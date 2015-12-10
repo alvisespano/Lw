@@ -1706,7 +1706,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 204 "Parser.fsy"
-                                                                           { id = _1; pars = [var.named _2]; kind = _4 } 
+                                                                           { id = _1; pars = [var.fresh_named _2]; kind = _4 } 
                    )
 # 204 "Parser.fsy"
                  : 'kind_binding));
@@ -1730,7 +1730,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 208 "Parser.fsy"
-                                                                           [var.named _1] 
+                                                                           [var.fresh_named _1] 
                    )
 # 208 "Parser.fsy"
                  : 'kind_params));
@@ -1742,7 +1742,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 209 "Parser.fsy"
-                                                                           var.named _1 :: _3 
+                                                                           var.fresh_named _1 :: _3 
                    )
 # 209 "Parser.fsy"
                  : 'kind_params));
@@ -2109,7 +2109,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 293 "Parser.fsy"
-                                                                       K_Var (var.named _1) 
+                                                                       K_Var (var.fresh_named _1) 
                    )
 # 293 "Parser.fsy"
                  : 'kind_tuple_atom));

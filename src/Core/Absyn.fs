@@ -123,15 +123,13 @@ module private VarPrinterState =
     let forall : Set<int> option ref = ref None
 
 // TODO: reimplement variables by means of pointers; reimplement substitution accordingly as well
-type var =
-    | Va of int
-    | Va_Named of string * int
+type var = Va of int * string option
 with
     override this.ToString () = this.pretty
 
     member this.uid =
         match this with
-        | Va n | Va_Named (_, n) -> n
+        | Va (n, _) -> n
 
     member private __.rename fmt n =
         // TODO: fix named tyvars
@@ -145,15 +143,15 @@ with
 
     member private this.pretty_fmt fmt =
         match this with
-        | Va_Named (s, n) ->
+        | Va (n, Some s) ->
             let r = sprintf fmt s
             #if DEBUG_TYVARS
-            sprintf "%s_%d" r n // - Config.Printing.named_ty_var_bias)
+            sprintf "%s_%d" r n
             #else
             r
             #endif
 
-        | Va n ->
+        | Va (n, None) ->
             let r = this.rename fmt n
             #if DEBUG_TYVARS
             sprintf "%s?%d" r n
@@ -164,14 +162,12 @@ with
     member this.pretty_quantified = this.pretty_fmt Config.Printing.dynamic.ty_var_fmt
     member this.pretty_fv = this.pretty_fmt Config.Printing.dynamic.ty_freevar_fmt
 
-    static member fresh = Va (fresh_int ())
+    static member fresh = Va (fresh_int (), None)
+    static member fresh_named s = Va (fresh_int (), Some s)
 
     member this.refresh =
         match this with
-        | Va_Named (s, _) -> Va_Named (s, fresh_int () + Config.Printing.named_ty_var_bias)
-        | Va _            -> Va (fresh_int ())
-
-    static member named s = Va_Named (s, s.GetHashCode () + Config.Printing.named_ty_var_bias)
+        | Va (_, so) -> Va (fresh_int (), so)
 
     static member reset_normalization αso =
         VarPrinterState.cnt := 0
@@ -191,10 +187,10 @@ with
             let α =
                 match env.search this.uid with
                 | None   -> let n = !VarPrinterState.cnt
-                            let α = VarPrinterState.cnt := n + 1; Va n
+                            let α = VarPrinterState.cnt := n + 1; Va (n, None)
                             VarPrinterState.env := Some (env.bind this.uid α.uid)
                             α
-                | Some n -> Va n
+                | Some n -> Va (n, None)
             in
                 match !VarPrinterState.forall with
                 | Some αs -> if Set.contains this.uid αs then α.pretty_quantified else α.pretty_fv

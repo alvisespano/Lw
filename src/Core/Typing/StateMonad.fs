@@ -32,8 +32,8 @@ type [< NoComparison; NoEquality >] state =
         Γ   : jenv              // type judices
         χ   : kjenv             // kind judices
         δ   : tenv              // evaluated types
-        θ   : tsubst            // type subst
-        Θ   : ksubst            // kind subst
+        θ   : tsubst            // type substitution
+        Θ   : ksubst            // kind substitution
         π   : predicate         // global predicate
 
         named_tyvars   : Env.t<id, int>    // named type variables
@@ -72,7 +72,6 @@ let (|Jb_Overload|Jb_Var|Jb_Data|Jb_OverVar|Jb_Unbound|) = function
     | Some (jk, jv)                                                         -> unexpected "ill-formed jenv binding: %O = %O" __SOURCE_FILE__ __LINE__ jk jv
 
 type state_builder (loc : location) =
-    // TODO: try to not inherit and define a custom class for this monad: performance might increase
     inherit Monad.state_builder<state> ()
 
     member __.get_Γ st = st.Γ, st
@@ -94,6 +93,7 @@ type state_builder (loc : location) =
     member M.set_Δ x = M.lift_Δ (fun _ -> x)
     member M.set_χ x = M.lift_χ (fun _ -> x)
     member M.set_π x = M.lift_π (fun _ -> x)
+    member M.set_named_tyvars x = M.lift_named_tyvars (fun _ -> x)
 
     member M.clear_constraints = M.set_π predicate.empty
 
@@ -113,8 +113,9 @@ type state_builder (loc : location) =
 
     member private M.gen t =
         M {
-            let! { Γ = Γ; π = π; θ = θ; Θ = Θ } = M.get_state
-            return generalize (π, subst_ty (θ, Θ) t) Γ
+            let! { Γ = Γ; π = π; θ = θ; Θ = Θ } as st = M.get_state
+            let vas = Computation.set { for x, n in st.named_tyvars do yield Va (n, Some x) }
+            return generalize (π, subst_ty (θ, Θ) t) Γ vas
         }
 
     member private M.kgen k =
@@ -131,8 +132,8 @@ type state_builder (loc : location) =
         M {
             let! vas = M.get_named_tyvars
             match vas.search x with
-            | Some n -> return Va_Named (x, n)
-            | None   -> let Va_Named (_, n) as α = var.named x
+            | Some n -> return Va (n, Some x)
+            | None   -> let Va (n, _) as α = var.fresh_named x
                         do! M.lift_named_tyvars (fun vas -> vas.bind x n)
                         return α
         }

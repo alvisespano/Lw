@@ -486,20 +486,7 @@ type kscheme with
     member this.fv =
         match this with
             | { forall = αs; kind = k } -> k.fv - αs
-
-
-module A =
-
-    let f : 'x -> 'x = fun x -> x
-
-    let g y = y : 'x
-
-    let j (x : 'u) =
-        let f (y : 'u) = x, y
-        let g (z : 'v) = x, z
-        let h (w : 'v) = x, w
-        g 3 = h true
-        
+       
 
 
 // augmentations for types
@@ -628,12 +615,12 @@ let instantiate { forall = αs; π = π; ty = t } =
     let cs = constr { for c in π.constraints do yield { c.refresh with ty = c.ty.subst_vars θ } }
     in
         { π with constraints = cs }, t.subst_vars θ
-
+         
 let refresh_ty (t : ty) =
     instantiate { forall = t.fv; π = predicate.empty; ty = t } |> snd
    
-let generalize (π : predicate, t : ty) Γ =
-    let αks = (t.fv + π.fv) - (fv_Γ Γ)
+let generalize (π : predicate, t : ty) Γ restricted_vars =
+    let αks = (t.fv + π.fv) - (fv_Γ Γ) - restricted_vars
     in
         { forall = αks; π = π; ty = t }
 
@@ -643,7 +630,7 @@ let (|Ungeneralized|) = function
 
 let Ungeneralized t = { forall = Set.empty; π = predicate.empty; ty = t }
 
-// kind primiteves
+// kind primitives
 
 let fv_χ (χ : kjenv) = fv_env (fun (ς : kscheme) -> ς.fv) χ
 
@@ -652,6 +639,7 @@ let kinstantiate { forall = αs; kind = k } =
     in
         k.subst_vars θ
 
+// TODO: restricted named vars should be taken into account also for kind generalization?
 let kgeneralize (k : kind) χ =
     let αs = k.fv - (fv_χ χ)
     in

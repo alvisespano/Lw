@@ -127,7 +127,7 @@ let private Γ0, Δ0 =
     List.fold (fun (Γ : jenv, Δ : Eval.env) (x, f) ->
                     let t, v = f x
                     in
-                        Γ.bind (Jk_Var x) { mode = Jm_Normal; scheme = generalize (predicate.empty, t) Γ },
+                        Γ.bind (Jk_Var x) { mode = Jm_Normal; scheme = generalize (predicate.empty, t) Γ Set.empty },
                         Δ.bind x v)
         (Env.empty, Env.empty) Builtin.Values.ΓΔ0
 

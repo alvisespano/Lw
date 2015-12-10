@@ -360,7 +360,7 @@ and pt_decl (ctx : context) (d0 : decl) =
                         do! M.add_constraint { c with mode = Cm_FreeVar; ty = ct }              // escaped overload constraint becomes a FreeVar constraint
 
                 | Cm_ClosedWorldOverload ->
-                    Report.Error.closed_world_overload_constraint_not_resolved loc cx ct x t     // closed-world overload constraint not resolved
+                    Report.Error.closed_world_overload_constraint_not_resolved loc cx ct x t    // closed-world overload constraint not resolved
 
                 | _ -> ()
 

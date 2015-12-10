@@ -1,4 +1,9 @@
 ﻿
+10/12/2015:
+* much documentation written on ReadMe.md
+* REFACT: support for named type variables reworked and fixed
+
+
 18/11/2015:
 * first GitHub publish
 
@@ -10,7 +15,7 @@
 4/11/2015:
 * FIX: usage of substitution composition was sometimes wrong: arguments were inverted in some cases, now should be fixed
 * UP: substitution composition implementation was quite optimized but might have led to unexpected results: now it's been implemented using second
-      operand domain restriction, as in https://en.wikipedia.org/wiki/Substitution_(logic)
+      operand domain restriction, as in "https://en.wikipedia.org/wiki/Substitution_(logic)"
 
 
 3/11/2015:

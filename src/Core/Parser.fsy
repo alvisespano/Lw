@@ -201,12 +201,12 @@ ty_expr_rec_binding:
 
 kind_binding:
   | id EQ kind                                      { { id = $1; pars = []; kind = $3 } }
-  | id TICK_ID EQ kind                              { { id = $1; pars = [var.named $2]; kind = $4 } }
+  | id TICK_ID EQ kind                              { { id = $1; pars = [var.fresh_named $2]; kind = $4 } }
   | id BRA kind_params KET EQ kind                  { { id = $1; pars = $3; kind = $6 } }
 
 kind_params:
-    TICK_ID                                         { [var.named $1] }
-  | TICK_ID COMMA kind_params                       { var.named $1 :: $3 }
+    TICK_ID                                         { [var.fresh_named $1] }
+  | TICK_ID COMMA kind_params                       { var.fresh_named $1 :: $3 }
 
 
 
@@ -290,7 +290,7 @@ kind_tuple_atom:
   | id                                          { K_Id $1 }
   | id kind_tuple_atom                          { K_Cons ($1, [$2]) }
   | id BRA kind_args KET                        { K_Cons ($1, $3) }
-  | TICK_ID                                     { K_Var (var.named $1) }
+  | TICK_ID                                     { K_Var (var.fresh_named $1) }
   | STAR                                        { K_Star }
   | BRA kind KET                                { $2 }
 
