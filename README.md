@@ -3,7 +3,7 @@
 Lw is a general-purpose statically-typed functional language with advanced features.
 It is currently in development and some of its features are yet to come or still unstable, nonetheless it has reached a stage at which people who enjoy experimenting with new programming languages may start to play with it.
 
-I will keep this README file updated and document the most interesting among its constructs and features. Consider, however, that any feature may change in the future or may get broken at some point until a stable version is released ;)
+I will keep this README file updated and document the most interesting among its constructs and features. Consider, however, that any feature may change in the future or may get broken at some point until a stable version is released.
 
 ## Installation
 
@@ -57,7 +57,7 @@ Lw does not have a module system though, nor an object system. Lw has a very pow
 Moreover, Lw has heavyweight GADTs as well as lightweight polymorphic variants, as late OCaml revisions do - but in Lw everything is more tied together and does not feel like a language extension.
 Overloading is another story though: OCaml does not support any form of overloading and it does not support the form of constrained polymorphism that Lw offers as central mechanism. This is a major difference.
 
-#### Lw vs. F\#
+#### Lw vs. F# #
 
 F# is a great language too. That's the language Lw is currently implemented in, by the way. And most core features of F# are the same of OCaml, therefore the same of Lw. Moveover, Lw supports computation expressions and monads as F# does, although F# uses builder classes and objects for defining custom semantics of *banged* constructs, while Lw uses an system based on constraints and overloading for that purpose. Active patterns are another F# feature that Lw inherited, even though in a slightly more consistent way: in F# active patterns are functions returning `option` while data constructors aren't; in Lw every data constructors, whether a GADT or a polymorphic variant, can be either used as a function returning `option`, rendering them equivalent to active patterns.
 
@@ -164,15 +164,17 @@ One might for instance define the *is_in* function like this - assuming naively 
 let (∈) a b = find (fun x -> x = a) b
 ```
 
-####### Quick lambdas
+###### Quick lambdas
 
-In Lw lambda expressions look like ML ones: the general syntax `fun id -> expr` is clear and well known.
+In Lw, lambda expressions look like ML ones: the general syntax `fun patt -> expr` is clear and well known.
 There exist an alternate syntax though, for writing quick short lambda expressions, which supports either the greek λ or the backslash `\` in place of the keyword `fun` and the dot `.` in place of the arrow `->`, as in:
 
 ```ocaml
 let dont_touch l = map (λx.x) l
 let sum l = fold (\z x. x + z) 0 l
 ```
+
+Mind that this alternate syntax does not support patterns, like `fun` does, or cases, like `function` does. It is simply a short syntax for plain identifier-based lambda expressions possibly having multiple paramters and a brief body.
 
 #### Row types and records
 
