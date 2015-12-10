@@ -3,7 +3,7 @@
 Lw is a general-purpose statically-typed functional language with advanced features.
 It is currently in development and some of its features are yet to come or still unstable, nonetheless it has reached a stage at which people who enjoy experimenting with new programming languages may start to play with it.
 
-I will update this README file in the near future and document the most interesting among its constructs and features. Consider, however, that any feature may change in the future or may get broken at some point until a stable version is released ;)
+I will keep this README file updated and document the most interesting among its constructs and features. Consider, however, that any feature may change in the future or may get broken at some point until a stable version is released ;)
 
 ## Installation
 
@@ -26,17 +26,16 @@ The Lw interpreter can be used in a few ways:
 2. launching the executable with the `--interactive` command line argument: this runs the interpreter in interactive mode, pretty much like other functional languages interactive console. You can write declarations and expressions and see the type inferred as well as the result of the evaluation.
 3. mixing the two ways above: this makes the interpreter evaluate the source input file and eventually open the interactive console with an environment populated with all the stuff defined at top level in the input file.
  
-(2) from VS: activate the Interactive solution configuration on the left of the *play* button and
-as an interactive console.
+Visual Studio users may activate the "Interactive" solution configuration on the left of the *play* button and launch the interpreter in interactive mode.
 
 
 ## Overview
 
-Lw is a general purpose, statically typed, strict, functional-first programming language that supports advanced features and forms of polymorphism for writing robust, extremely reusable, maintenable and succinct code in a lightweight fashion.
+Lw is a general purpose, statically typed, strict, impure, functional-first programming language that supports advanced features and forms of polymorphism for writing robust, reusable, maintenable and succinct code.
 
-It integrates state-of-the-art advancements in the programming language field together with a number of novel bits invented or reinterpreted by myself throughout more than 15 years of study, research and work. Among the most advanced features, Lw supports open-world context-dependent overloading, constrained polymorphism, implicit parameters, fully-inferred GADTs with overloadable data constructors, first-class polymorphism and modules, row types with overloadable labels, higher-order polymorphism with kind inference and much more.
+Ideal for writing big as well as small programs, since almost every feature has a lightweight counterpart, it integrates state-of-the-art advancements in the programming language field together with a number of novel bits invented or reinterpreted by myself throughout more than 15 years of passion, research and work. Among the most advanced features: open-world as well as closed-world context-dependent overloading, constrained polymorphism, implicit parameters, fully-inferred GADTs with overloadable data constructors, first-class polymorphism and modules, row types with overloadable labels, higher-order polymorphism with kind inference and much more.
 
-But what makes Lw unique is the way these features are related together, giving birth to a pretty novel way of writing and reusing code: type constraints resolution is central to many language mechanisms, leading to a form of static dispatching which can either be automatic or controlled by the user in case of ambiguities. On the other hand, row-typed records offer a form of dynamic dispatching - and here is the magic: users can switch type constraints into records and viceversa, making type constraints become first-class row types and values and the other way round. This makes two worlds communicate: the world of static dispatching and the world of dynamic dispatching, maximizing code reuse.
+But what makes Lw unique is the way these features are related together, exposing a pretty novel way of writing and reusing code: type constraints resolution is central to many language mechanisms, leading to a form of static dispatching which can either be automatic or optionally controlled by the user. On the other side of the mirror, row-typed records offer a form of dynamic dispatching - and here's the magic: users can switch type constraints into records and viceversa, converting type constraints into first-class types and the other way round. This makes two worlds communicate: the world of static resolution and the world of dynamic resolution, maximizing chances of reusing code that might have originally been written with the opposite approach in mind.
 
 
 #### &lambda;&omega; = Lw = Lightweight
