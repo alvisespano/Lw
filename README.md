@@ -57,7 +57,7 @@ Lw does not have a module system though, nor an object system. Lw has a very pow
 Moreover, Lw has heavyweight GADTs as well as lightweight polymorphic variants, as late OCaml revisions do - but in Lw everything is more tied together and does not feel like a language extension.
 Overloading is another story though: OCaml does not support any form of overloading and it does not support the form of constrained polymorphism that Lw offers as central mechanism. This is a major difference.
 
-#### Lw vs. F# #
+#### Lw vs. F\#
 
 F# is a great language too. That's the language Lw is currently implemented in, by the way. And most core features of F# are the same of OCaml, therefore the same of Lw. Moveover, Lw supports computation expressions and monads as F# does, although F# uses builder classes and objects for defining custom semantics of *banged* constructs, while Lw uses an system based on constraints and overloading for that purpose. Active patterns are another F# feature that Lw inherited, even though in a slightly more consistent way: in F# active patterns are functions returning `option` while data constructors aren't; in Lw every data constructors, whether a GADT or a polymorphic variant, can be either used as a function returning `option`, rendering them equivalent to active patterns.
 
@@ -116,15 +116,16 @@ There will be further detailed sections for new data type definitions, advanced 
 
 #### A few notes on the syntax
 
-###### Right-handed type applications
+As already said, Lw shares most of ML's look & feel. With a few notable differences though.
 
-As already said, Lw shares most ML-like syntax with his brothers. With a few notable differences though.
-One tiny detail showed up in the last example: **type applications are right-handed**, unlike typical ML notation. In Lw type applications look like ordinary applications in the expression language, which makes sense for advanced features: value-to-type promotions are more consistent, for example, and writing complex type manipulation functions more straightforward.
+###### Right-handed type applications and ticked type variables
 
-###### Multiple `let`s with a single `in`
+One tiny detail has shown up in the last example: **type variables are ticked**, like typical ML notation, but **type applications are right-handed** instead. In Lw type applications look like ordinary applications in the expression language, which makes sense for advanced features: value-to-type promotions are more consistent, for example, and writing complex type manipulation functions more straightforward.
 
-One bit that makes life easier in Lw - compared to many MLs - is the sugar for multiple let-bindings and the `in` keyword. While the plain syntax is as usual `let patt = expr1 in expr2` (remember that a variable identifier is actually a special case of pattern), **multiple `let`s do not need an `in` each, but only the last one does**.
-This allows for the following coding style:
+###### Multiple `let`'s with a single `in`
+
+Another bit that can make life easier in Lw is the sugar for multiple let-bindings with a single final `in` keyword before the body. While the general syntax for `let` is the usual `let patt = expr1 in expr2` (don't forget a variable identifier is actually a special case of pattern), **multiple `let`'s do not need an `in` each, but only the last one does**.
+This basically means that `let x = 1 let y = 2 in x, y` is not parsed as an application where the right `let` is the argument and `1` is the applicand as in `let x = 1 (let y = 2 in x, y)` - therefore you must specifiy parentheses in case you are truly willing to do such weird application, which is something rather situational by the way. Naturally, the sugar is meant to deal with what typically a user desires, i.e. defining multiple `let`'s:
 
 ```ocaml
 let k = 11
@@ -139,8 +140,8 @@ in
 Each let-binding or series of mutally-recursive let-rec-bindings can omit its own `in` except the last one.
 This is different, for example, from F# indentantion-aware lightweight syntax: lexing and parsing in Lw discards whitespaces and end-of-line, totally ignoring indentation.
 
-Beware though: do not confuse multiple *`let`s without `in`* and the `let..and` construct. These are two distinct things.
-Mulitple let-bindings separated by an `and` are *bound in the same environment* and are syntactically considered as one sigle declaration, thus requiring one single `in` in theory; while multiple `let`s are supposed to have one `in` each, but Lw supports a *syntactic sugar* that allows for multiple declarations to be written without each own's `in` except the last one.
+Beware though: do not confuse multiple `let`'s without the `in` with the `let..and..in` construct. These are two distinct things.
+Mulitple let-bindings separated by an `and` are *bound to the same environment* and are syntactically considered as one sigle declaration, thus requiring one single `in` in theory and in practice. Multiple `let`'s, instead, are supposed to have one `in` each, but Lw supports a *syntactic sugar* that allows for multiple `let`'s to be written without each own's `in` except the last one - and that's as if they were declared in cascade, thus each one may refer to the ones above.
 Pay attention to the example above: `R` and `g` are *bound in `and`*, thus not needing the `in` anyway; while the first `k` and the aforementioned `R` and `g` couple are distinct let-bindings and are supposed to need one `in` each (one for the `k` and one for the couple), but in Lw you can omit it. Scoping rules still applies though, as proved by the last couple `k` and `swap`.
 
 ###### Identifiers and naming conventions
@@ -154,8 +155,26 @@ In the type sub-language ticked snake-cased identifiers are free type variables,
 
 Ticking an identifier in general means *do not consider it as unbound*: this applies both to the type language and the expression language. In the former it refers to generalizable type variables, in the former to constrained free variables (a.k.a. implicit parameters).
 
+###### Unicode, greek letters and special symbols
 
-#### Row types and Records
+Lw supports Unicode lexing and pretty printing. Use of **greek letters for type variables** in place of ticked identifiers is supported as well as some other special symbols, such as the ∀ symbol in place of the *forall* keyword for universally quantifying polymorphic type variables in type schemes, or the ∃ symbol in place of the *exists* keyword for explicitly denoting existential types. In general, all Unicode symbols are usable as function or operator identifiers or whatever.
+One might for instance define the *is_in* function like this - assuming naively that `find : ('a -> bool) -> list 'a` is defined for lists:
+
+```ocaml
+let (∈) a b = find (fun x -> x = a) b
+```
+
+####### Quick lambdas
+
+In Lw lambda expressions look like ML ones: the general syntax `fun id -> expr` is clear and well known.
+There exist an alternate syntax though, for writing quick short lambda expressions, which supports either the greek λ or the backslash `\` in place of the keyword `fun` and the dot `.` in place of the arrow `->`, as in:
+
+```ocaml
+let dont_touch l = map (λx.x) l
+let sum l = fold (\z x. x + z) 0 l
+```
+
+#### Row types and records
 
 Consider the following function:
 
