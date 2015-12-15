@@ -120,7 +120,7 @@ let pretty_param sep (id, tyo) =
 module private VarPrinterState =
     let cnt = ref 0
     let env : Env.t<int, int> option ref = ref None
-    let forall : Set<int> option ref = ref None
+    let forall : Set<int> ref = ref Set.empty
 
 // TODO: reimplement variables by means of pointers; reimplement substitution accordingly as well
 type var = Va of int * string option
@@ -132,8 +132,7 @@ with
         | Va (n, _) -> n
 
     member private __.rename fmt n =
-        // TODO: fix named tyvars
-        let start, endd = Config.Printing.dynamic.ty_var_range
+        let start, endd = Config.Printing.dynamic.tyvar_range
         let start, endd = Convert.ToInt32 start, Convert.ToInt32 endd
         let bas = endd - start + 1
         let chr n = n + start |> Convert.ToChar |> Convert.ToString
@@ -159,8 +158,8 @@ with
             r
             #endif
 
-    member this.pretty_quantified = this.pretty_fmt Config.Printing.dynamic.ty_var_fmt
-    member this.pretty_fv = this.pretty_fmt Config.Printing.dynamic.ty_freevar_fmt
+    member this.pretty_quantified = this.pretty_fmt Config.Printing.dynamic.tyvar_quantified_fmt
+    member this.pretty_unquantified = this.pretty_fmt Config.Printing.dynamic.tyvar_unquantified_fmt
 
     static member fresh = Va (fresh_int (), None)
     static member fresh_named s = Va (fresh_int (), Some s)
@@ -169,14 +168,15 @@ with
         match this with
         | Va (_, so) -> Va (fresh_int (), so)
 
-    static member reset_normalization αso =
+    static member reset_normalization ?quantified_vars =
+        let quantified_vars = defaultArg quantified_vars Set.empty
         VarPrinterState.cnt := 0
         VarPrinterState.env := Some Env.empty
-        VarPrinterState.forall := Option.map (Set.map (fun (α : var) -> α.uid)) αso
+        VarPrinterState.forall := Set.map (fun (α : var) -> α.uid) quantified_vars
         { new IDisposable with
             member __.Dispose () =
                 VarPrinterState.env := None
-                VarPrinterState.forall := None
+                VarPrinterState.forall := Set.empty
         }
 
     member this.pretty =
@@ -192,9 +192,7 @@ with
                             α
                 | Some n -> Va (n, None)
             in
-                match !VarPrinterState.forall with
-                | Some αs -> if Set.contains this.uid αs then α.pretty_quantified else α.pretty_fv
-                | None    -> α.pretty_quantified
+                if Set.contains this.uid !VarPrinterState.forall then α.pretty_quantified else α.pretty_unquantified
 
 
 // kinds
@@ -465,7 +463,7 @@ type ty_uexpr with
         let (|Te_Sym|_|) = (|Sym|_|) (function Te_Id x -> Some (x, x) | _ -> None)
         match this with
             | Te_Sym x                 -> sprintf "(%O)" x
-            | Te_PolyVar x             -> sprintf Config.Printing.dynamic.ty_var_fmt x
+            | Te_PolyVar x             -> sprintf Config.Printing.dynamic.tyvar_quantified_fmt x
 //            | Te_Var x
             | Te_Id x                  -> x
             | Te_Tuple ([] | [_])      -> unexpected "empty or unary tuple type expression" __SOURCE_FILE__ __LINE__
@@ -682,7 +680,7 @@ type uexpr with
             | Sym x                 -> sprintf "(%s)" x
             | Var x                 -> sprintf "%s" x
             | Reserved_Cons x       -> x
-            | FreeVar x             -> sprintf Config.Printing.freevar_fmt x    // TODO: why is freevars' print fmt configurable while other exprs' aren't?
+            | FreeVar x             -> sprintf Config.Printing.freevar_fmt x
             | PolyCons x            -> sprintf Config.Printing.polycons_fmt x
             | App (A s)             -> s
             | Lambda (ta, e)        -> sprintf "fun %s -> %O" (pretty_param ":" ta) e

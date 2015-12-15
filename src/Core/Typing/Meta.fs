@@ -71,7 +71,7 @@ let private prompt_inferred_kind, prompt_evaluated_type =
 module private Eval =
 
     let rec eval_ty_expr (ctx : context) (τ : ty_expr) =
-        let M = new node_typing_state_builder<_, _> (τ)
+        let M = new translator_typing_builder<_, _> (τ)
         M {            
             let! _, Θ = M.get_Σ
             τ.typed <- subst_kind Θ τ.typed // apply latest subst to each typed node
@@ -81,7 +81,7 @@ module private Eval =
         } 
 
     and eval_ty_expr' (ctx : context) (τ0 : ty_expr) =
-        let M = new node_typing_state_builder<_, _> (τ0)
+        let M = new translator_typing_builder<_, _> (τ0)
         let E = eval_ty_expr ctx
         M {
             let k0 = τ0.typed
@@ -249,7 +249,7 @@ module private Eval =
 //#region kind inference
 
 let rec pk_ty_expr (ctx : context) (τ0 : ty_expr) =
-    let K = new kinding_state_builder<_> (τ0)
+    let K = new kinding_builder<_> (τ0)
     K {
         let! k = pk_ty_expr' ctx τ0
         L.debug Min "[t::K] %O\n      :: %O\n" τ0 k
@@ -257,7 +257,7 @@ let rec pk_ty_expr (ctx : context) (τ0 : ty_expr) =
     }
 
 and pk_ty_expr' (ctx : context) (τ0 : ty_expr) =
-    let K = new kinding_state_builder<_> (τ0)
+    let K = new kinding_builder<_> (τ0)
     let R = pk_ty_expr ctx
     K {
         match τ0.value with
@@ -378,11 +378,11 @@ and pk_ty_rec_bindings (ctx : context) loc bs  =
             }
         for x, kx in bs do
             let! ς = M.gen_bind_χ x kx
-            prompt_inferred_kind ctx ["rec"; "type"] x ς
+            prompt_inferred_kind ctx Config.Printing.Prompt.rec_type_decl_prefixes x ς
     }
 
 and pk_ty_patt ctx (p0 : ty_patt) =
-    let K = new kinding_state_builder<_> (p0)
+    let K = new kinding_builder<_> (p0)
     let R = pk_ty_patt ctx
     K {
         match p0.value with
@@ -454,7 +454,7 @@ and pk_ty_patt ctx (p0 : ty_patt) =
 //
 
 let pk_and_eval_ty_expr (ctx : context) τ =
-    let M = new node_typing_state_builder<_, _> (τ)
+    let M = new translator_typing_builder<_, _> (τ)
     M {
         let! k = pk_ty_expr ctx τ
         let! t = Eval.eval_ty_expr ctx τ

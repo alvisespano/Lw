@@ -63,7 +63,7 @@ let private restrict_overloaded x (Γ : jenv) =
         }
 
 let rec resolve_constraints (ctx : context) e0 =
-    let M = new node_typing_state_builder<_, _> (e0)
+    let M = new translator_typing_builder<_, _> (e0)
     let loc = e0.loc
     let L0 x = Lo loc x
     M {

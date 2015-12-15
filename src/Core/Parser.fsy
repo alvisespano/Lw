@@ -124,7 +124,7 @@ value_level_decl_:
   | DATATYPE datatype                   { D_Datatype $2 }
 
 datatype:
-    id COLON2 kind WITH datatype_bindings       { { id = $1; kind = $3; datacons = $5 } }
+    id COLON2 kind EQ datatype_bindings         { { id = $1; kind = $3; datacons = $5 } }
 
 datatype_bindings:
     datatype_bindings_                          { $1 }

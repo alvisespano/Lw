@@ -110,7 +110,7 @@ let interactive (envs : Intrinsic.envs) =
             async {
                 let p = Process.GetCurrentProcess ()
                 while true do
-                    do! Async.Sleep (int <| Config.Interactive.watchdog_interval * 1000.0)  // TODO: use a function in place of a constant factor (e.g. log t)
+                    do! Async.Sleep (int <| Config.Interactive.watchdog_interval * 1000.0)
                     L.hint High "evaluation is in progress (cpu time: %s)..." p.UserProcessorTime.pretty
             }
         async {

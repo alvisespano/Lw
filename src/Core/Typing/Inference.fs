@@ -35,7 +35,7 @@ let pt_lit = function
     | Unit        -> T_Unit
 
 
-let desugar (M : node_typing_state_builder<_, _>) f (e0 : node<_, _>) (e : node<_, _>) =
+let desugar (M : translator_typing_builder<_, _>) f (e0 : node<_, _>) (e : node<_, _>) =
     M {
         L.debug Low "[DESUGAR] %O ~~> %O" e0 e
         let! t = f e
@@ -50,7 +50,7 @@ let pt_typed_param ctx = function
             return ty.fresh_var            
         }
     | _, Some τ ->
-        let K = new kinding_state_builder<_> (τ)
+        let K = new kinding_builder<_> (τ)
         K {
             let! t, k = pk_and_eval_ty_expr ctx τ
             do! K.kunify τ.loc K_Star k
@@ -58,7 +58,7 @@ let pt_typed_param ctx = function
         }
 
 let rec pt_expr (ctx : context) (e0 : expr) =
-    let M = new node_typing_state_builder<_, _> (e0)
+    let M = new translator_typing_builder<_, _> (e0)
     M {
         let e = e0.value // NOTE: uexpr must be bound before translation, or printing will not work
         let! t = pt_expr' ctx e0
@@ -70,7 +70,7 @@ let rec pt_expr (ctx : context) (e0 : expr) =
 
 and pt_expr' ctx e0 =
     let Lo x = Lo e0.loc x
-    let M = new node_typing_state_builder<_, _> (e0)
+    let M = new translator_typing_builder<_, _> (e0)
     let desugar = desugar M (pt_expr ctx) e0
     M {
         match e0.value with
@@ -126,11 +126,12 @@ and pt_expr' ctx e0 =
         | FreeVar x ->
             let! jb = M.search_binding_by_name_Γ x
             let ot =
+                // TODO: double check the behaviour of free vars in conjunction with the following cases
                 match jb with
                 | Jb_Overload t -> Some t
-                | Jb_OverVar    // TODO: double check this case
+                | Jb_OverVar    
                 | Jb_Unbound    -> None
-                | Jb_Data σ     // TODO: for the sake of symmetry, this case should translate to a Reserved_FreeCons
+                | Jb_Data σ   
                 | Jb_Var σ      -> Report.Warn.freevar_shadowing e0.loc x σ; None
             let t = either ty.fresh_var ot
             do! M.add_constraint (constraintt.fresh_strict Cm_FreeVar x t)
@@ -319,7 +320,7 @@ and pt_expr' ctx e0 =
 
 
 and pt_decl (ctx : context) (d0 : decl) =
-    let M = new node_typing_state_builder<_, _> (d0)
+    let M = new translator_typing_builder<_, _> (d0)
     let desugar = desugar M (pt_decl ctx) d0
     let unify_and_resolve (ctx : context) (e : node<_, _>) t1 t2 =
         M {
@@ -404,7 +405,7 @@ and pt_decl (ctx : context) (d0 : decl) =
                                     return! vars_in_patt p |> Set.toList |> M.List.map (fun x -> M { let! { scheme = Ungeneralized t } = M.lookup_Γ (Jk_Var x) in return b, x, π, t })
                                 }
                             }) bs
-                let! bs' = M.List.map (fun (b : binding, x, π, t) -> M { let! () = M.set_π π in return! gen_bind ["val"] b.qual b.expr x t }) l
+                let! bs' = M.List.map (fun (b : binding, x, π, t) -> M { let! () = M.set_π π in return! gen_bind Config.Printing.Prompt.value_decl_prefixes b.qual b.expr x t }) l
                 M.translated <- D_Bind [for jk, e in bs' -> { qual = decl_qual.none; patt = Lo e.loc (P_Jk jk); expr = e }]
             }
 
@@ -425,7 +426,7 @@ and pt_decl (ctx : context) (d0 : decl) =
                             | _         -> Report.Error.value_restriction_non_arrow_in_letrec e.loc te
                         return l
                     }
-                let! bs' = M.List.map (fun (b : rec_binding, x, tx) -> M { return! gen_bind ["rec"; "val"] b.qual b.expr x tx }) l
+                let! bs' = M.List.map (fun (b : rec_binding, x, tx) -> M { return! gen_bind Config.Printing.Prompt.rec_value_decl_prefixes b.qual b.expr x tx }) l
                 M.translated <- D_Rec [for jk, e in bs' -> { qual = decl_qual.none; par = jk.pretty, None; expr = e }]
             }
 
@@ -474,7 +475,7 @@ and pt_decl (ctx : context) (d0 : decl) =
                 let! χ = M.get_χ
                 if not (is_principal_type_of { χ = χ; loc = τx.loc } pt tcod) then return Report.Error.data_constructor_codomain_invalid τx.loc x c tcod
                 let! σ = M.gen_bind_Γ (Jk_Data x) Jm_Normal tx
-                Report.prompt ctx ["data"] x σ None
+                Report.prompt ctx Config.Printing.Prompt.data_decl_prefixes x σ None
 
         | D_Kind _ ->
             return not_implemented "%O" __SOURCE_FILE__ __LINE__ d0
@@ -483,7 +484,7 @@ and pt_decl (ctx : context) (d0 : decl) =
 
 
 and pt_patt ctx (p0 : patt) =
-    let M = new node_typing_state_builder<_, _> (p0)
+    let M = new translator_typing_builder<_, _> (p0)
     let R = pt_patt ctx
     let loc0 = p0.loc
     M {
@@ -577,7 +578,7 @@ and pt_patt ctx (p0 : patt) =
 
 and pt_program (prg : program) =
     let ctx = context.top_level
-    let M = new typing_state_builder (new location ())
+    let M = new typing_builder (new location ())
     M {
         for d in prg.decls do
             do! pt_decl ctx d

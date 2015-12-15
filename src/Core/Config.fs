@@ -52,9 +52,9 @@ module Printing =
 
         member this.forall = if this.unicode then "∀" else "forall "
 
-        member this.ty_var_range = if this.greek_tyvars then 'α', 'ζ' else 'a', 'z'
-        member this.ty_var_fmt : Printf.StringFormat<_> = if this.greek_tyvars then "%s" else "'%s"
-        member this.ty_freevar_fmt : Printf.StringFormat<_> = if this.greek_tyvars then "?%s" else "'_%s"
+        member this.tyvar_range = if this.greek_tyvars then 'α', 'ζ' else 'a', 'z'
+        member this.tyvar_quantified_fmt : Printf.StringFormat<_> = if this.greek_tyvars then "%s" else "'%s"
+        member this.tyvar_unquantified_fmt : Printf.StringFormat<_> = if this.greek_tyvars then "?%s" else "'_%s"
 
     let dynamic = new cfg ()
 
@@ -72,6 +72,18 @@ module Printing =
     let wildcard_reserved_fmt : StringFormat<int -> string> = "_$%d"
     let tuple_index_label_fmt : StringFormat<int -> string> = "#%d"
 
+    module Prompt =
+        let prefix_sep = " "
+        let nested_decl_prefix = "let"
+        let rec_prefix = "rec"
+        let type_prefix = "type"
+        let value_prefix = "val"
+        let data_prefix = "data"
+        let type_decl_prefixes = [type_prefix]
+        let value_decl_prefixes = [value_prefix]
+        let data_decl_prefixes = [data_prefix]
+        let rec_type_decl_prefixes = [rec_prefix; type_prefix]
+        let rec_value_decl_prefixes = [rec_prefix; value_prefix]
 
 module Log =
     open FSharp.Common.Log

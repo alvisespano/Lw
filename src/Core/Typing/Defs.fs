@@ -478,7 +478,7 @@ type kscheme with
     member ς.pretty =
         match ς with
             | { forall = αs; kind = k } ->
-                use N = var.reset_normalization (Some αs)
+                use N = var.reset_normalization αs
                 let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.sep_in_forall αs)
                 in
                     sprintf "%s%O" αspart k
@@ -564,7 +564,7 @@ type scheme with
     member σ.pretty =
         match σ with
             | { forall = αs; π = { constraints = cs } as π; ty = t } ->
-                use N = var.reset_normalization (Some αs)
+                use N = var.reset_normalization αs
                 let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.sep_in_forall αs)
                 let πpart = if cs.is_empty then "" else sprintf "%O => " π
                 in
@@ -579,7 +579,7 @@ type scheme with
 // substitution applications
 //
 
-// TODO: implement actual substitution of type constraints
+// TODO: implement actual substitution of type constraints for GADTs
 let subst_type_constraints _ tcs = tcs
 
 let subst_predicate Σ π =

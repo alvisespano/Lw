@@ -62,7 +62,6 @@ with
         
 type K<'a> = Monad.M<'a, state>
 
-// TODO: rename Jb, Jk and Jm prefixes with Γb, Γk, Γm
 let (|Jb_Overload|Jb_Var|Jb_Data|Jb_OverVar|Jb_Unbound|) = function
     | Some (Jk_Var _, { mode = Jm_Overloadable; scheme = Ungeneralized t }) -> Jb_Overload (refresh_ty t)
     | Some (Jk_Var _, { mode = Jm_Normal; scheme = σ })                     -> Jb_Var σ
@@ -259,23 +258,19 @@ type state_builder (loc : location) =
             return r
         }
 
-// TODO: questi nomi di builder sono orrendi: non si capisce che questo qui traduce le expr facendo un side-effect
 
-type typing_state_builder (loc) =
+type typing_builder (loc) =
     inherit state_builder (loc)
     member __.Yield ((x, t : ty)) = fun (s : state) -> (x, subst_ty s.Σ t), s
     member M.Yield (t : ty) = M { let! (), r = M { yield (), t } in return r }
     member M.YieldFrom f = M { let! (r : ty) = f in yield r }
 
-type node_typing_state_builder<'u, 'a> (e : node<'u, 'a>) =
-    inherit typing_state_builder (e.loc)
-//    member M.translate x = M { e.value <- x }   // TODO: rinominare la property value in modo che sia più chiaro che ospita l'espressione tradotta?
+type translator_typing_builder<'u, 'a> (e : node<'u, 'a>) =
+    inherit typing_builder (e.loc)
     member __.translated with set x = e.value <- x 
-//    new (ctx : context, node) = new node_typing_state_builder<'u, 'a> (node, ctx.loc)
 
-type kinding_state_builder<'u> (τ : node<'u, kind>) = //, ?loc : location) =
+type kinding_builder<'u> (τ : node<'u, kind>) =
     inherit state_builder (τ.loc)
     member __.Yield ((x, k : kind)) = fun s -> let k = subst_kind s.Θ k in τ.typed <- k; (x, k), s
     member M.Yield (k : kind) = M { let! (), r = M { yield (), k } in return r }
     member M.YieldFrom f = M { let! (r : kind) = f in yield r }
-//    new (ctx : context, node) = new kinding_state_builder<'u> (node, ctx.loc)

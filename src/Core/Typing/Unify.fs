@@ -149,7 +149,6 @@ module Mgu =
                         | T_Var (α, k) as tα, t
                         | t, (T_Var (α, k) as tα) ->
                             yield kmgu ctx k t.kind
-                            // TODO: come mai non entra mai nell'if?
                             if Set.contains α t.fv then Report.Error.circularity loc (S t1) (S t2) (S tα) (S t)
                             yield new tsubst (α, t) |> check_circularity
 
@@ -198,7 +197,6 @@ module Mgu =
                         | T_Var (α, k) as tα, t
                         | t, (T_Var (α, k) as tα) ->
                             yield! kmgu ctx k t.kind
-                            // TODO: come mai non entra mai nell'if?
                             if Set.contains α t.fv then Report.Error.circularity loc (S t1) (S t2) (S tα) (S t)
                             yield! new tsubst (α, t) |> check_circularity
 
@@ -242,6 +240,7 @@ let multi_mgu_comparison equals fs x =
         ret r1
 
 
+// TODO: debug multiple mgus and remove this
 let multi_mgu =
     [ "pure", Mgu.Pure.mgu
       "func", Mgu.Computational.Functional.mgu
@@ -280,4 +279,4 @@ let is_instance_of ctx pt t =
     let Σ = mgu ctx pt t
     let t = subst_ty Σ t
     in
-        is_principal_type_of ctx pt t   // TODO: non basta unificare: l'unificatore deve essere più piccolo! così si capisce se è un'instance
+        is_principal_type_of ctx pt t   // TODO: unification is not enough: unifier must be SMALLER - that would tell whether it's an actual instance

@@ -1,11 +1,23 @@
 ﻿
+15/12/2015:
+* 
+
+
+14/12/2015:
+* REFACT: many minor changes are reworks, also involving named type variables
+
+
 10/12/2015:
-* much documentation written on ReadMe.md
-* REFACT: support for named type variables reworked and fixed
+* REFACT: support for named type variables: var type reworked and scoping rules of named type variables implemented
+
+
+23/12/2015:
+* REFACT: closed-world overloading introduced: no need for the 'overload' declaration; 'let over' at will; locally resolved via a special tag for constraints
 
 
 18/11/2015:
 * first GitHub publish
+* started writing of documentation on README.md
 
 
 9/11/2015: [v0.8.0]
