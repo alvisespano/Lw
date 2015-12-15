@@ -359,7 +359,7 @@ and pk_ty_bindings (ctx : context) loc bs =
                 }) bs
         for x, k in l do
             let! ς = M.gen_bind_χ x k
-            prompt_inferred_kind ctx ["type"] x ς
+            prompt_inferred_kind ctx Config.Printing.Prompt.type_decl_prefixes x ς
     }   
 
 and pk_ty_rec_bindings (ctx : context) loc bs  =
@@ -378,6 +378,7 @@ and pk_ty_rec_bindings (ctx : context) loc bs  =
             }
         for x, kx in bs do
             let! ς = M.gen_bind_χ x kx
+            // TODO: all type definitions should be implicitly recursive
             prompt_inferred_kind ctx Config.Printing.Prompt.rec_type_decl_prefixes x ς
     }
 

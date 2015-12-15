@@ -37,13 +37,13 @@ let private search_best_candidate ctx p cx ct jkσs =
     [ for jk, σ in jkσs do
             let π, ti = instantiate σ
             match try_principal_type_of ctx ti ct with
-                | Some (θ : tsubst, Θ) ->
-                    yield { constraints = π.constraints
-                            jk         = jk
-                            σ           = σ
-                            δ           = (θ.restrict ti.fv).dom.Count
-                            Σ           = θ, Θ }
-                | _ -> ()
+            | Some (θ : tsubst, Θ) ->
+                yield { constraints = π.constraints
+                        jk          = jk
+                        σ           = σ
+                        δ           = (θ.restrict ti.fv).dom.Count
+                        Σ           = θ, Θ }
+            | _ -> ()
       ] |> List.sortBy (fun cand -> cand.δ)
         |> function
            | []     -> None
@@ -58,8 +58,8 @@ let private restrict_overloaded x (Γ : jenv) =
     seq {
         for jk, jv in Γ do
             match jk, jv with
-                | Jk_Inst (y, _), { mode = Jm_Normal; scheme = σ } when y = x -> yield jk, σ
-                | _ -> ()
+            | Jk_Inst (y, _), { mode = Jm_Normal; scheme = σ } when y = x -> yield jk, σ
+            | _ -> ()
         }
 
 let rec resolve_constraints (ctx : context) e0 =

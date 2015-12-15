@@ -78,12 +78,13 @@ module Printing =
         let rec_prefix = "rec"
         let type_prefix = "type"
         let value_prefix = "val"
-        let data_prefix = "data"
         let type_decl_prefixes = [type_prefix]
         let value_decl_prefixes = [value_prefix]
-        let data_decl_prefixes = [data_prefix]
+        let data_decl_prefixes = ["data"]
         let rec_type_decl_prefixes = [rec_prefix; type_prefix]
         let rec_value_decl_prefixes = [rec_prefix; value_prefix]
+        let overload_decl_prefixes = ["overload"]
+        let datatype_decl_prefixes = ["datatype"]
 
 module Log =
     open FSharp.Common.Log

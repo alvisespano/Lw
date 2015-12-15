@@ -9,6 +9,6 @@ let g (x : 'pippo) (y : 'baudo) =
     in
         f y
         
-let rec f g h x y = g (x : 'a) + h (y : 'a)
-and e (x : 'a) = x + 1
+let rec f g h x y = g (x : 'bau) + h (y : 'bau)
+and e (x : 'bau) = x + 1
 

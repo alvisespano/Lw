@@ -218,7 +218,7 @@ and pt_expr' ctx e0 =
             for ei in es do
                 let! ti = pt_expr ctx ei
                 try do! M.unify ei.loc T_Unit ti
-                with :? Report.type_error as e -> Report.Warn.expected_unit_in_combine ei.loc ti
+                with :? Report.type_error as e -> Report.Warn.expected_unit_statement ei.loc ti
             yield! pt_expr ctx e
 
         | Select (e, x) ->
@@ -259,7 +259,7 @@ and pt_expr' ctx e0 =
                 return! M.get_constraints
             }
             let x = fresh_reserved_id ()
-            if cs.is_empty then Report.Warn.no_constraints_to_abstract e.loc 
+            if cs.is_empty then Report.Warn.no_constraints_to_abstract e.loc
             let e1 =
                 let bs = [ for c in cs -> let xi = c.name in { qual = decl_qual.none; patt = Lo <| P_Var xi; expr = Lo <| Select (Lo <| Id x, xi) } ]
                 in
@@ -389,7 +389,7 @@ and pt_decl (ctx : context) (d0 : decl) =
                 let! t, k = pk_and_eval_ty_expr ctx τ
                 do! M.kunify τ.loc K_Star k
                 let! _ = M.bind_Γ (Jk_Var x) { mode = Jm_Overloadable; scheme = Ungeneralized t }
-                Report.prompt ctx ["overload"] x t None
+                Report.prompt ctx Config.Printing.Prompt.overload_decl_prefixes x t None
 
         | D_Bind bs ->
             do! M.fork_π <| M {
@@ -459,7 +459,7 @@ and pt_decl (ctx : context) (d0 : decl) =
             let kdom, kcod = split (|K_Arrows|_|) kc
             do! M.kunify d0.loc kcod K_Star    // TODO: unification might be wrong: consider pattern matching againts K_Star instead
             let! ς = M.gen_bind_χ c kc
-            Report.prompt ctx ["datatype"] c ς None
+            Report.prompt ctx Config.Printing.Prompt.datatype_decl_prefixes c ς None
             // rebind kc to the unified kind, by reinstantiating it rather than keeping the user-declared one
             let kc = kinstantiate ς 
             for { id = x; signature = τx } in bs do

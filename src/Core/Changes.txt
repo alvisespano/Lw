@@ -1,6 +1,8 @@
 ﻿
 15/12/2015:
-* 
+* REFACT: var class reworked: former private module for effecting normalization has now become a bunch of static private members; normalization now
+          keeps possible var name
+* REFACT: all prefixes in prompt have now become configurable; prompt prefixes are also trimmed and flattened more consistently now
 
 
 14/12/2015:

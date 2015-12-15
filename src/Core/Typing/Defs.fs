@@ -151,7 +151,7 @@ type constraints (set : Set<constraintt>) =
     static member (+) (cs1 : constraints, cs2 : constraints) = new constraints (cs1.set + cs2.set)
     static member (-) (cs1 : constraints, cs2 : constraints) = new constraints (cs1.set - cs2.set)
 
-    member __.pretty = flatten_stringables "; " set
+    member __.pretty = sprintf "{ %s }" (flatten_stringables "; " set)
     override this.ToString () = this.pretty
 
     static member empty = new constraints (Set.empty)

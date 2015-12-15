@@ -58,6 +58,10 @@ module Mgu =
             | _ -> ()
         θ
 
+    let (|T_NamedVar|_|) = function
+        | T_Var (Va (_, Some _) as α, k) -> Some (α, k)
+        | _ -> None
+
     module Pure =
 
         let mgu (ctx : mgu_context) t1_ t2_ =
@@ -81,11 +85,12 @@ module Mgu =
                             R (S Σ r) (S Σ s')
                     in
                         Σ3 ** Σ2 ** Σ1
-
+                    
+                | T_Var (α, k), (T_NamedVar _ as t)
+                | (T_NamedVar _ as t), T_Var (α, k)
                 | T_Var (α, k), t
                 | t, T_Var (α, k) ->
-                    let kt = t.kind
-                    let Θ = kmgu ctx k kt
+                    let Θ = kmgu ctx k t.kind
                     in
                         if Set.contains α t.fv then Report.Error.circularity loc t1_ t2_ (T_Var (α, Sk Θ k)) t
                         else new tsubst (α, t) |> check_circularity, Θ
@@ -146,7 +151,9 @@ module Mgu =
                                 yield! R t t'
                                 yield! R r s'
 
-                        | T_Var (α, k) as tα, t
+                        | T_Var (α, k) as tα, (T_NamedVar _ as t)
+                        | (T_NamedVar _ as t), (T_Var (α, k) as tα)
+                        | (T_Var (α, k) as tα), t
                         | t, (T_Var (α, k) as tα) ->
                             yield kmgu ctx k t.kind
                             if Set.contains α t.fv then Report.Error.circularity loc (S t1) (S t2) (S tα) (S t)
@@ -194,7 +201,9 @@ module Mgu =
                                 yield! R t t'
                                 yield! R r s'
 
-                        | T_Var (α, k) as tα, t
+                        | T_Var (α, k) as tα, (T_NamedVar _ as t)
+                        | (T_NamedVar _ as t), (T_Var (α, k) as tα)
+                        | (T_Var (α, k) as tα), t
                         | t, (T_Var (α, k) as tα) ->
                             yield! kmgu ctx k t.kind
                             if Set.contains α t.fv then Report.Error.circularity loc (S t1) (S t2) (S tα) (S t)
@@ -234,7 +243,7 @@ let multi_mgu_comparison equals fs x =
                         (flatten_strings ", " names)
                         (match r with Choice1Of2 (θ, Θ) -> sprintf "tsubst = %O\n\tksubst = %O" θ Θ | Choice2Of2 ex -> pretty_exn_and_inners ex))
                 "\n" rs')
-        #if DEBUG
+        #if DEBUG_MGU
         System.Diagnostics.Debugger.Break ()
         #endif
         ret r1

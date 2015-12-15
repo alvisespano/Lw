@@ -14,6 +14,7 @@ open Lw.Core.Absyn
 open Lw.Core.Typing.Defs
 open Lw.Core.Globals
 open Printf
+open System
 
 type numeric_error (header, msg, n : int, loc) =
     inherit located_error (header, msg, loc)
@@ -25,13 +26,15 @@ type type_error (msg, n, loc) =
 type kind_error (msg, n, loc) =
     inherit numeric_error ("kind error", msg, n, loc)
 
+let flatten_and_trim_strings sep ss = flatten_strings sep (seq { for s : string in ss do let s = s.Trim () in if not <| String.IsNullOrWhiteSpace s then yield s })
+
 let inline prompt ctx prefixes x (σ : ^s) o =
     let top_level = (^a : (member top_level_decl : bool) ctx)
     let log = if top_level then L.msg High else L.msg Normal
     let prefixes = List.distinct <| if top_level then prefixes else Config.Printing.Prompt.nested_decl_prefix :: prefixes
     use N = var.reset_normalization ()
-    log "0%s1 2%s3 %O4%s5"
-        (flatten_strings Config.Printing.Prompt.prefix_sep (prefixes @ [x]))
+    log "%s %s %O%s"
+        (flatten_and_trim_strings Config.Printing.Prompt.prefix_sep (prefixes @ [x]))
         (^s : (static member binding_separator : string) ())
         σ
         (soprintf " = %O" o)
@@ -128,7 +131,7 @@ module Warn =
         if Set.contains n Config.Report.disabled_warnings then null_L.warn Unmaskerable fmt
         else L.nwarn n pri ("%O: " %+%% fmt) loc
 
-    let expected_unit_in_combine loc t =
+    let expected_unit_statement loc t =
         W 1 loc High "expected expression of type %O when used as statement, but got type %O" T_Unit t
 
     let cyclic_constraint loc x t =
