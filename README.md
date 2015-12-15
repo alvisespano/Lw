@@ -16,7 +16,7 @@ Lw.sln consists of 3 projects:
 
 * **Core.** The core of the language: lexer, parser and type checker plus all that is related to them. This is a library project and cannot be run.
 * **Interpreter.** This is the real Lw interpreter and it's a startup*-able* project generating an executable.
-* **FSharp.Common.** This is another library project which both Core and Interpreter projects rely on. It is distributed separately as a stand-alone GitHub project of mine.
+* **FSharp.Common.** This is another library project which both Core and Interpreter projects rely on. It is distributed separately as a stand-alone GitHub [project of mine](https://github.com/alvisespano/FSharp.Common).
 
 #### Usage
 
@@ -30,4 +30,4 @@ Visual Studio users may activate the "Interactive" solution configuration on the
 
 ### Language spec
 
-Please read the Lw spec document doc/spec.md for further details.
+Please read the Lw [spec document](doc/spec.md) for further details.
