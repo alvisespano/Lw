@@ -12,6 +12,8 @@ SHORT-TERM
             3) for variables used as aliases, when the type they are aliased to would be invalid in the scope of the enclosing definition (i.e. when it
                     contains free universal type variables, or locally defined types.)"
 
+(+++)   SYN: deal with imperative block wisely: 'do' (both single and do {..} blocks) must behave like a binding and should be mixed with lets without the need for the final 'in'
+
 (+++)   FEAT: support closed-world overloading: let over without overload, resolved locally and immediately
 
 (++)    FEAT: redesign all the ticked identifiers and make the whole thing consistent:
@@ -24,11 +26,10 @@ SHORT-TERM
             constraints even if only one of them actually appear in code. The pragmatic benefit is that type variables can be shared between multiple overloaded symbols, like in type classes.
             Does this make any sense?
 
-(++)    UP: deal with imperative block wisely: 'do' (both single and do {..} blocks) must behave like a binding, i.e. could be mixed with lets without the need for the final 'in'
-
 (+)     FEAT: design an 'or' construct like Python for dealing with options. 
                 e1 or e2 ~~> match e1 with Some x -> x | None -> e2
               It actually matches the 'either' function, but it is infix: let (or) a b = either b a
+              Also, design a special if-like construct for optionals: when e1 is x then e2 ~~~> match e1 with None -> () | Some x -> e2 x
                 
 (-)     FEAT: resolution can be suspended indeterminately until explicit val construct is used; e.g. double-ticked
               identifiers could do that

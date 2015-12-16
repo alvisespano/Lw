@@ -69,7 +69,9 @@ let rec resolve_constraints (ctx : context) e0 =
     M {
         if ctx.resolution <> Res_No then
             let! { χ = χ; Γ = Γ; π = { constraints = cs } } = M.get_state
-//            L.debug Low "resolving constraints: %O" cs
+            #if DEBUG_RESOLVE
+            L.debug Low "resolving constraints: %O" cs
+            #endif
             if not cs.is_empty then
                 let mgu_ctx = { mgu_context.loc = loc; χ = χ }
                 for { name = x; ty = t } as c in cs do

@@ -41,8 +41,7 @@ type logger () =
 
     member this.cputime name f x =
         let r, span = cputime f x
-        #if RELEASE
-        #else
+        #if DEBUG_PERF
         this.perf Normal "[%s] CPU time = %s" name span.pretty
         #endif
         r
@@ -51,8 +50,7 @@ type logger () =
         let r1, t1 = cputime f1 ()
         let r2, t2 = cputime f2 ()
         let name1, t1, r1, name2, t2, r2 = if t1 < t2 then name1, t1, r1, name2, t2, r2 else name2, t2, r2, name1, t1, r1
-        #if RELEASE
-        #else
+        #if DEBUG_PERF
         this.perf Normal "[%s] faster than [%s] by CPU time = %s" name1 name2 ((t2 - t1).pretty)
         #endif
         r1

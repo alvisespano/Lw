@@ -45,7 +45,7 @@ let desugar (M : translator_typing_builder<_, _>) f (e0 : node<_, _>) (e : node<
 
 let pt_typed_param ctx = function
     | _, None ->
-        let M = new state_builder (new location ())
+        let M = new basic_builder (new location ())
         M {
             return ty.fresh_var            
         }
@@ -317,9 +317,18 @@ and pt_expr' ctx e0 =
             yield te
 
     }
+    
+
+and pt_decl ctx d =
+    let M = new translator_typing_builder<_, _> (d)
+    M {
+        let! αs = M.get_named_tyvars
+        do! pt_decl' ctx d
+        do! M.set_named_tyvars αs
+    }  
 
 
-and pt_decl (ctx : context) (d0 : decl) =
+and pt_decl' (ctx : context) (d0 : decl) =
     let M = new translator_typing_builder<_, _> (d0)
     let desugar = desugar M (pt_decl ctx) d0
     let unify_and_resolve (ctx : context) (e : node<_, _>) t1 t2 =
@@ -347,7 +356,9 @@ and pt_decl (ctx : context) (d0 : decl) =
                 | _             -> ()                                               // normal binding that can shadow legally
 
             // check constraints solvability and scope escaping
-            L.debug Low "constraints: %O" cs
+            #if DEBUG_CONSTRAINTS
+            L.debug Low "global constraints: %O" cs
+            #endif
             for { name = cx; ty = ct } as c in cs do
                 let αs = ct.fv - t.fv in if not αs.IsEmpty then Report.Hint.unsolvable_constraint loc x t cx ct αs
                 match c.mode with
@@ -479,8 +490,7 @@ and pt_decl (ctx : context) (d0 : decl) =
 
         | D_Kind _ ->
             return not_implemented "%O" __SOURCE_FILE__ __LINE__ d0
-    }
-   
+    }  
 
 
 and pt_patt ctx (p0 : patt) =

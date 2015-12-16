@@ -10,6 +10,17 @@ open System
 open Printf
 open FSharp.Common.Prelude
 
+(* -- Compilation Switches --
+ *
+ * Activate them in the project panel as compilation symbols.
+ * Mind that logger special methods such as .mgu and .resolve are independent from these.
+ *
+ * DEBUG_TYVARS
+ * DEBUG_MGU
+ * DEBUG_CONSTRAINTS
+ * DEBUG_PERF
+ * DEBUG_RESOLVE
+ *)
 
 module Typing =
     let negate_symbol = "neg"

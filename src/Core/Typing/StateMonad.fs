@@ -70,7 +70,7 @@ let (|Jb_Overload|Jb_Var|Jb_Data|Jb_OverVar|Jb_Unbound|) = function
     | None                                                                  -> Jb_Unbound
     | Some (jk, jv)                                                         -> unexpected "ill-formed jenv binding: %O = %O" __SOURCE_FILE__ __LINE__ jk jv
 
-type state_builder (loc : location) =
+type basic_builder (loc : location) =
     inherit Monad.state_builder<state> ()
 
     member __.get_Γ st = st.Γ, st
@@ -260,7 +260,7 @@ type state_builder (loc : location) =
 
 
 type typing_builder (loc) =
-    inherit state_builder (loc)
+    inherit basic_builder (loc)
     member __.Yield ((x, t : ty)) = fun (s : state) -> (x, subst_ty s.Σ t), s
     member M.Yield (t : ty) = M { let! (), r = M { yield (), t } in return r }
     member M.YieldFrom f = M { let! (r : ty) = f in yield r }
@@ -270,7 +270,7 @@ type translator_typing_builder<'u, 'a> (e : node<'u, 'a>) =
     member __.translated with set x = e.value <- x 
 
 type kinding_builder<'u> (τ : node<'u, kind>) =
-    inherit state_builder (τ.loc)
+    inherit basic_builder (τ.loc)
     member __.Yield ((x, k : kind)) = fun s -> let k = subst_kind s.Θ k in τ.typed <- k; (x, k), s
     member M.Yield (k : kind) = M { let! (), r = M { yield (), k } in return r }
     member M.YieldFrom f = M { let! (r : kind) = f in yield r }

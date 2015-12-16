@@ -118,7 +118,7 @@ with
         let id =
             let id = this.mode.pretty_as_constraint_id this.name
             in
-                #if DEBUG
+                #if DEBUG_CONSTRAINTS
                 sprintf Config.Printing.cid_fmt id this.num
                 #else
                 id

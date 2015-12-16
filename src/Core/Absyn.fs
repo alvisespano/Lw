@@ -186,7 +186,8 @@ with
             let α =
                 match env.search this.uid with
                 | None   -> let n = !var.cnt
-                            let α = var.cnt := n + 1; Va (n, match this with Va (_, so) -> so)
+                            var.cnt := n + 1
+                            let α = Va (n, match this with Va (_, so) -> so)
                             var.env := Some (env.bind this.uid α)
                             α
                 | Some α -> α

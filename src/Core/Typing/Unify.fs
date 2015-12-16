@@ -48,7 +48,7 @@ let rec rewrite_row loc t1 t2 r0 l =
                 
 
 [< RequireQualifiedAccess >]
-module Mgu =
+module internal Mgu =
 
     let check_circularity (θ : tsubst) =
         for α, t in θ do
@@ -67,7 +67,6 @@ module Mgu =
         let mgu (ctx : mgu_context) t1_ t2_ =
             let ( ** ) = compose_tksubst
             let S = subst_ty
-            let Sk = subst_kind
             let loc = ctx.loc
             let rec R t1 t2 =        
                 match t1, t2 with
@@ -86,14 +85,15 @@ module Mgu =
                     in
                         Σ3 ** Σ2 ** Σ1
                     
-                | T_Var (α, k), (T_NamedVar _ as t)
+                | T_Var (α, k), (T_NamedVar _ as t) // prefer named tyvars over anonymous tyvars when unifying tyvar against tyvar
                 | (T_NamedVar _ as t), T_Var (α, k)
                 | T_Var (α, k), t
                 | t, T_Var (α, k) ->
-                    let Θ = kmgu ctx k t.kind
+                    let _, Θ as Σ = tsubst.empty, kmgu ctx k t.kind
+                    let S = S Σ
                     in
-                        if Set.contains α t.fv then Report.Error.circularity loc t1_ t2_ (T_Var (α, Sk Θ k)) t
-                        else new tsubst (α, t) |> check_circularity, Θ
+                        if Set.contains α t.fv then Report.Error.circularity loc (S t1_) (S t2_) (S (T_Var (α, k))) (S t)
+                        else new tsubst (α, S t) |> check_circularity, Θ
 
                 | T_App (t1, t2), T_App (t1', t2') ->
                     let Σ1 = R t1 t1'
@@ -112,7 +112,7 @@ module Mgu =
        
         let private __tYield _Yield (θ : tsubst) = _Yield ((θ, ksubst.empty))
         let private __kYield _Yield (Θ : ksubst) = _Yield ((tsubst.empty, Θ))
-        let private __YieldFrom _Bind _Yield f = _Bind (f, _Yield) // { let! (r : tksubst) = f in yield r }
+        let private __YieldFrom _Bind _Yield f = _Bind (f, _Yield)
 
         module StateMonad =
 
@@ -220,62 +220,62 @@ module Mgu =
                     R t1_ t2_
 
 
-let multi_mgu_comparison equals fs x =
-    let ret = function
-        | Choice1Of2 Σ -> Σ
-        | Choice2Of2 ex -> raise ex
-    let rs = [ for name, f in fs do yield name, (try Choice1Of2 (f x) with ex -> Choice2Of2 ex) ]
-    let rs' = List.fold (fun z (_, r) ->        
-                    let occurs name = z |> List.map snd |> List.concat |> Seq.exists ((=) name)
-                    in
-                        match [ for name', r' in rs do if not (occurs name') && equals r r' then yield name' ] with
-                        | [] -> z
-                        | names ->  (r, names) :: z)
-                [] rs
-    match rs' with
-    | [] -> unexpected "empty function list" __SOURCE_FILE__ __LINE__
-    | [r, _] -> ret r
-    | _ ->
-        let r1, names1 = List.maxBy (fun (_, names) -> List.length names) rs'
-        L.debug High "functions behaved differently: picking most common result: %s. Results are:\n%s" names1.[0]
-            (mappen_strings (fun (r, names) ->
-                    sprintf "%s:\n\t%s\n"
-                        (flatten_strings ", " names)
-                        (match r with Choice1Of2 (θ, Θ) -> sprintf "tsubst = %O\n\tksubst = %O" θ Θ | Choice2Of2 ex -> pretty_exn_and_inners ex))
-                "\n" rs')
-        #if DEBUG_MGU
-        System.Diagnostics.Debugger.Break ()
-        #endif
-        ret r1
+    let private multi_comparison equals fs x =
+        let ret = function
+            | Choice1Of2 Σ  -> Σ
+            | Choice2Of2 ex -> raise ex
+        let rs = [ for name, f in fs do yield name, (try Choice1Of2 (f x) with ex -> Choice2Of2 ex) ]
+        let rs' = List.fold (fun z (_, r) ->        
+                        let occurs name = z |> List.map snd |> List.concat |> Seq.exists ((=) name)
+                        in
+                            match [ for name', r' in rs do if not (occurs name') && equals r r' then yield name' ] with
+                            | [] -> z
+                            | names ->  (r, names) :: z)
+                    [] rs
+        match rs' with
+        | [] -> unexpected "empty function list" __SOURCE_FILE__ __LINE__
+        | [r, _] -> ret r
+        | _ ->
+            let r1, names1 = List.maxBy (fun (_, names) -> List.length names) rs'
+            L.debug High "functions behaved differently: picking most common result: %s. Results are:\n%s" names1.[0]
+                (mappen_strings (fun (r, names) ->
+                        sprintf "%s:\n\t%s\n"
+                            (flatten_strings ", " names)
+                            (match r with Choice1Of2 (θ, Θ) -> sprintf "tsubst = %O\n\tksubst = %O" θ Θ | Choice2Of2 ex -> pretty_exn_and_inners ex))
+                    "\n" rs')
+            #if DEBUG_MGU
+            System.Diagnostics.Debugger.Break ()
+            #endif
+            ret r1
 
 
-// TODO: debug multiple mgus and remove this
-let multi_mgu =
-    [ "pure", Mgu.Pure.mgu
-      "func", Mgu.Computational.Functional.mgu
-      "monad", Mgu.Computational.StateMonad.mgu ]
-    |> List.map (fun (a, b) -> a, uncurry3 b)
-    |> multi_mgu_comparison
-            (fun r1 r2 ->
-                match r1, r2 with
-                | Choice1Of2 (θ1, Θ1), Choice1Of2 (θ2, Θ2) -> let p x = sprintf "%O" x in p θ1 = p θ2 && p Θ1 = p Θ2
-                | Choice2Of2 ex1, Choice2Of2 ex2           -> let p = pretty_exn_and_inners in p ex1 = p ex2
-                | _ -> false)
-    |> curry3
+    // TODO: debug multiple mgus and remove this
+    let multi =
+        [ "pure", Pure.mgu
+          "func", Computational.Functional.mgu
+          "monad", Computational.StateMonad.mgu ]
+        |> List.map (fun (a, b) -> a, uncurry3 b)
+        |> multi_comparison
+                (fun r1 r2 ->
+                    match r1, r2 with
+                    | Choice1Of2 (θ1, Θ1), Choice1Of2 (θ2, Θ2) -> let p x = sprintf "%O" x in p θ1 = p θ2 && p Θ1 = p Θ2
+                    | Choice2Of2 ex1, Choice2Of2 ex2           -> let p = pretty_exn_and_inners in p ex1 = p ex2
+                    | _ -> false)
+        |> curry3
 
-let mgu = multi_mgu
+let mgu = Mgu.multi
 
 let try_mgu ctx t1 t2 =
     try Some (mgu ctx t1 t2)
     with :? Report.type_error -> None
     
-type state_builder with
+type basic_builder with
     member M.unify loc t1 t2 =
         M {
             let! { θ = θ; Θ = Θ; χ = χ } = M.get_state
             let Σ = θ, Θ
             let θ, Θ as Σ = mgu { loc = loc; χ = χ } (subst_ty Σ t1) (subst_ty Σ t2)
-            L.mgu "[U] %O == %O // [%O] // [%O]" t1 t2 θ Θ
+            L.mgu "[U] %O == %O\n    [%O] --- [%O]" t1 t2 θ Θ
             do! M.update_subst Σ
         }
 
@@ -288,4 +288,4 @@ let is_instance_of ctx pt t =
     let Σ = mgu ctx pt t
     let t = subst_ty Σ t
     in
-        is_principal_type_of ctx pt t   // TODO: unification is not enough: unifier must be SMALLER - that would tell whether it's an actual instance
+        is_principal_type_of ctx pt t   // TODO: unification is not enough: unifier must be SMALLER - that would tell whether it is actually an instance

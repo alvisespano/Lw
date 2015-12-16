@@ -48,7 +48,7 @@ let rec kmgu (ctx : mgu_context) k1_ k2_ =
     in
         R k1_ k2_
 
-type state_builder with
+type basic_builder with
     member M.kunify loc (k1 : kind) (k2 : kind) =
         M {
             let! { Θ = Θ; χ = χ } = M.get_state
@@ -145,7 +145,7 @@ module private Eval =
         }
 
     and eval_ty_decl ctx d =
-        let M = new state_builder (d.loc)
+        let M = new basic_builder (d.loc)
         M {
             match d.value with
             | Td_Bind bs ->
@@ -159,7 +159,7 @@ module private Eval =
         }
 
     and eval_ty_bindings (ctx : context) loc bs =
-        let M = new state_builder (loc)
+        let M = new basic_builder (loc)
         M {
             for { patt = p; expr = τ } in bs do
                 let! t = eval_ty_expr ctx τ
@@ -171,7 +171,7 @@ module private Eval =
         }
 
     and eval_ty_rec_bindings (ctx : context) loc bs =
-        let M = new state_builder (loc)
+        let M = new basic_builder (loc)
         M {
             let! Δ = M.get_Δ
             let Δr = ref Env.empty
@@ -183,7 +183,7 @@ module private Eval =
         }
 
     and eval_ty_patt ctx (p : ty_patt) t =
-        let M = new state_builder (p.loc)
+        let M = new basic_builder (p.loc)
         let R = eval_ty_patt ctx
         M {
             match p.value, t with
@@ -333,7 +333,7 @@ and pk_ty_expr' (ctx : context) (τ0 : ty_expr) =
     }
 
 and pk_ty_decl ctx d =
-    let M = new state_builder (d.loc)
+    let M = new basic_builder (d.loc)
     M {
         match d.value with
         | Td_Bind bs ->
@@ -347,7 +347,7 @@ and pk_ty_decl ctx d =
     }
 
 and pk_ty_bindings (ctx : context) loc bs =
-    let M = new state_builder (loc)
+    let M = new basic_builder (loc)
     M {
         let! l = M.List.collect (fun { patt = p; expr = τ } -> M {
                     let! ke = pk_ty_expr ctx τ
@@ -363,7 +363,7 @@ and pk_ty_bindings (ctx : context) loc bs =
     }   
 
 and pk_ty_rec_bindings (ctx : context) loc bs  =
-    let M = new state_builder (loc)
+    let M = new basic_builder (loc)
     M {
         let! bs = M.fork_χ <| M {
                 for { par = x, ko } in bs do
@@ -463,14 +463,14 @@ let pk_and_eval_ty_expr (ctx : context) τ =
     }
 
 let pk_and_eval_ty_bindings (ctx : context) loc bs =
-    let M = new state_builder (loc)
+    let M = new basic_builder (loc)
     M {
         do! pk_ty_bindings ctx loc bs
         do! Eval.eval_ty_bindings ctx loc bs
     }
 
 let pk_and_eval_ty_rec_bindings (ctx : context) loc bs =
-    let M = new state_builder (loc)
+    let M = new basic_builder (loc)
     M {
         do! pk_ty_rec_bindings ctx loc bs
         do! Eval.eval_ty_rec_bindings ctx loc bs
