@@ -421,7 +421,7 @@ let trans : uint16[] array =
     (* State 201 *)
      [| 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; 65535us; |];
     |] 
-let actions : uint16[] = [|65535us; 0us; 1us; 2us; 65535us; 9us; 58us; 7us; 6us; 8us; 10us; 11us; 57us; 14us; 15us; 16us; 17us; 18us; 19us; 24us; 76us; 25us; 66us; 30us; 30us; 65535us; 76us; 76us; 76us; 76us; 76us; 76us; 76us; 76us; 76us; 76us; 76us; 76us; 59us; 60us; 61us; 62us; 63us; 64us; 68us; 69us; 65535us; 65535us; 73us; 75us; 76us; 76us; 76us; 75us; 75us; 72us; 73us; 65535us; 72us; 65535us; 72us; 72us; 65535us; 72us; 72us; 65535us; 72us; 72us; 65535us; 79us; 79us; 71us; 71us; 79us; 79us; 71us; 79us; 79us; 70us; 65535us; 72us; 72us; 65us; 49us; 76us; 76us; 76us; 54us; 76us; 76us; 76us; 55us; 76us; 52us; 48us; 76us; 50us; 76us; 44us; 76us; 43us; 76us; 76us; 76us; 42us; 76us; 53us; 76us; 41us; 76us; 76us; 76us; 40us; 76us; 76us; 46us; 76us; 76us; 76us; 76us; 47us; 76us; 76us; 39us; 76us; 76us; 37us; 35us; 45us; 76us; 76us; 76us; 76us; 38us; 76us; 36us; 76us; 34us; 76us; 33us; 76us; 56us; 76us; 76us; 76us; 76us; 76us; 32us; 77us; 77us; 31us; 77us; 77us; 77us; 77us; 30us; 30us; 74us; 78us; 78us; 78us; 78us; 78us; 78us; 74us; 29us; 67us; 27us; 76us; 76us; 76us; 76us; 76us; 76us; 76us; 76us; 51us; 23us; 20us; 26us; 28us; 22us; 21us; 13us; 12us; 5us; 65535us; 4us; 3us; 4us; 65535us; 0us; 1us; 1us; 0us; 65535us; 2us; 1us; 2us; 2us; 1us; 0us; |]
+let actions : uint16[] = [|65535us; 0us; 1us; 2us; 65535us; 9us; 58us; 7us; 6us; 8us; 10us; 11us; 57us; 14us; 15us; 16us; 17us; 18us; 19us; 24us; 76us; 25us; 66us; 30us; 30us; 65535us; 76us; 76us; 76us; 76us; 76us; 76us; 76us; 76us; 76us; 76us; 76us; 76us; 59us; 60us; 61us; 62us; 63us; 64us; 68us; 69us; 65535us; 65535us; 73us; 75us; 76us; 76us; 76us; 75us; 75us; 72us; 73us; 65535us; 72us; 65535us; 72us; 72us; 65535us; 72us; 72us; 65535us; 72us; 72us; 65535us; 79us; 79us; 71us; 71us; 79us; 79us; 71us; 79us; 79us; 70us; 65535us; 72us; 72us; 65us; 49us; 76us; 76us; 76us; 54us; 76us; 76us; 76us; 55us; 76us; 52us; 48us; 76us; 50us; 76us; 44us; 76us; 43us; 76us; 76us; 76us; 42us; 76us; 53us; 76us; 41us; 76us; 76us; 76us; 40us; 76us; 76us; 46us; 76us; 76us; 76us; 76us; 47us; 76us; 76us; 39us; 76us; 76us; 37us; 35us; 45us; 76us; 76us; 76us; 76us; 38us; 76us; 36us; 76us; 34us; 76us; 33us; 76us; 56us; 76us; 32us; 76us; 76us; 76us; 31us; 77us; 77us; 30us; 77us; 77us; 77us; 77us; 30us; 30us; 74us; 78us; 78us; 78us; 78us; 78us; 78us; 74us; 29us; 67us; 27us; 76us; 76us; 76us; 76us; 76us; 76us; 76us; 76us; 51us; 23us; 20us; 26us; 28us; 22us; 21us; 13us; 12us; 5us; 65535us; 4us; 3us; 4us; 65535us; 0us; 1us; 1us; 0us; 65535us; 2us; 1us; 2us; 2us; 1us; 0us; |]
 let _fslex_tables = Microsoft.FSharp.Text.Lexing.UnicodeTables.Create(trans,actions)
 let rec _fslex_dummy () = _fslex_dummy() 
 (* Rule comment *)
@@ -617,252 +617,252 @@ and _fslex_tokenize  _fslex_state lexbuf =
 # 617 "Lexer.fs"
           )
   | 30 -> ( 
-# 75 "Lexer.fsl"
+# 76 "Lexer.fsl"
                                      INFIX (lexeme lexbuf) 
 # 622 "Lexer.fs"
           )
   | 31 -> ( 
-# 76 "Lexer.fsl"
-                                     INFIX (lexeme lexbuf) 
+# 79 "Lexer.fsl"
+                                     DATATYPE 
 # 627 "Lexer.fs"
           )
   | 32 -> ( 
-# 79 "Lexer.fsl"
-                                     DATATYPE 
+# 80 "Lexer.fsl"
+                                     DATA 
 # 632 "Lexer.fs"
           )
   | 33 -> ( 
-# 80 "Lexer.fsl"
+# 81 "Lexer.fsl"
                                      VAL 
 # 637 "Lexer.fs"
           )
   | 34 -> ( 
-# 81 "Lexer.fsl"
+# 82 "Lexer.fsl"
                             TYPE 
 # 642 "Lexer.fs"
           )
   | 35 -> ( 
-# 82 "Lexer.fsl"
+# 83 "Lexer.fsl"
                            IF 
 # 647 "Lexer.fs"
           )
   | 36 -> ( 
-# 83 "Lexer.fsl"
+# 84 "Lexer.fsl"
                                   THEN 
 # 652 "Lexer.fs"
           )
   | 37 -> ( 
-# 84 "Lexer.fsl"
+# 85 "Lexer.fsl"
                             ELSE 
 # 657 "Lexer.fs"
           )
   | 38 -> ( 
-# 85 "Lexer.fsl"
+# 86 "Lexer.fsl"
                             TRUE 
 # 662 "Lexer.fs"
           )
   | 39 -> ( 
-# 86 "Lexer.fsl"
+# 87 "Lexer.fsl"
                              FALSE 
 # 667 "Lexer.fs"
           )
   | 40 -> ( 
-# 87 "Lexer.fsl"
+# 88 "Lexer.fsl"
                              MATCH 
 # 672 "Lexer.fs"
           )
   | 41 -> ( 
-# 88 "Lexer.fsl"
+# 89 "Lexer.fsl"
                             WITH 
 # 677 "Lexer.fs"
           )
   | 42 -> ( 
-# 89 "Lexer.fsl"
+# 90 "Lexer.fsl"
                             WHEN 
 # 682 "Lexer.fs"
           )
   | 43 -> ( 
-# 90 "Lexer.fsl"
+# 91 "Lexer.fsl"
                             LET 
 # 687 "Lexer.fs"
           )
   | 44 -> ( 
-# 91 "Lexer.fsl"
+# 92 "Lexer.fsl"
                             REC 
 # 692 "Lexer.fs"
           )
   | 45 -> ( 
-# 92 "Lexer.fsl"
+# 93 "Lexer.fsl"
                            IN 
 # 697 "Lexer.fs"
           )
   | 46 -> ( 
-# 93 "Lexer.fsl"
+# 94 "Lexer.fsl"
                             FUN 
 # 702 "Lexer.fs"
           )
   | 47 -> ( 
-# 94 "Lexer.fsl"
+# 95 "Lexer.fsl"
                                FUNCTION 
 # 707 "Lexer.fs"
           )
   | 48 -> ( 
-# 95 "Lexer.fsl"
+# 96 "Lexer.fsl"
                            AS 
 # 712 "Lexer.fs"
           )
   | 49 -> ( 
-# 96 "Lexer.fsl"
+# 97 "Lexer.fsl"
                            OF 
 # 717 "Lexer.fs"
           )
   | 50 -> ( 
-# 97 "Lexer.fsl"
+# 98 "Lexer.fsl"
                             AND 
 # 722 "Lexer.fs"
           )
   | 51 -> ( 
-# 98 "Lexer.fsl"
+# 99 "Lexer.fsl"
                                 NAMESPACE 
 # 727 "Lexer.fs"
           )
   | 52 -> ( 
-# 99 "Lexer.fsl"
+# 100 "Lexer.fsl"
                                      OPEN 
 # 732 "Lexer.fs"
           )
   | 53 -> ( 
-# 100 "Lexer.fsl"
+# 101 "Lexer.fsl"
                                      WHERE 
 # 737 "Lexer.fs"
           )
   | 54 -> ( 
-# 101 "Lexer.fsl"
+# 102 "Lexer.fsl"
                                      OVER 
 # 742 "Lexer.fs"
           )
   | 55 -> ( 
-# 102 "Lexer.fsl"
+# 103 "Lexer.fsl"
                                      OVERLOAD 
 # 747 "Lexer.fs"
           )
   | 56 -> ( 
-# 103 "Lexer.fsl"
+# 104 "Lexer.fsl"
                                      DO 
 # 752 "Lexer.fs"
           )
   | 57 -> ( 
-# 104 "Lexer.fsl"
+# 105 "Lexer.fsl"
                                      UNDERSCORE 
 # 757 "Lexer.fs"
           )
   | 58 -> ( 
-# 107 "Lexer.fsl"
+# 108 "Lexer.fsl"
                           BRA 
 # 762 "Lexer.fs"
           )
   | 59 -> ( 
-# 108 "Lexer.fsl"
+# 109 "Lexer.fsl"
                           KET 
 # 767 "Lexer.fs"
           )
   | 60 -> ( 
-# 109 "Lexer.fsl"
+# 110 "Lexer.fsl"
                           SQBRA 
 # 772 "Lexer.fs"
           )
   | 61 -> ( 
-# 110 "Lexer.fsl"
+# 111 "Lexer.fsl"
                           SQKET 
 # 777 "Lexer.fs"
           )
   | 62 -> ( 
-# 111 "Lexer.fsl"
+# 112 "Lexer.fsl"
                           CURBRA 
 # 782 "Lexer.fs"
           )
   | 63 -> ( 
-# 112 "Lexer.fsl"
+# 113 "Lexer.fsl"
                           CURKET 
 # 787 "Lexer.fs"
           )
   | 64 -> ( 
-# 115 "Lexer.fsl"
+# 116 "Lexer.fsl"
                           SEMICOLON 
 # 792 "Lexer.fs"
           )
   | 65 -> ( 
-# 116 "Lexer.fsl"
+# 117 "Lexer.fsl"
                            SEMICOLON2 
 # 797 "Lexer.fs"
           )
   | 66 -> ( 
-# 117 "Lexer.fsl"
+# 118 "Lexer.fsl"
                           COLON 
 # 802 "Lexer.fs"
           )
   | 67 -> ( 
-# 118 "Lexer.fsl"
+# 119 "Lexer.fsl"
                            COLON2 
 # 807 "Lexer.fs"
           )
   | 68 -> ( 
-# 119 "Lexer.fsl"
+# 120 "Lexer.fsl"
                           COMMA 
 # 812 "Lexer.fs"
           )
   | 69 -> ( 
-# 120 "Lexer.fsl"
+# 121 "Lexer.fsl"
                           DOT 
 # 817 "Lexer.fs"
           )
   | 70 -> ( 
-# 123 "Lexer.fsl"
+# 124 "Lexer.fsl"
                                        let s = lexeme lexbuf in STRING (s.Trim [|'\"'|]) 
 # 822 "Lexer.fs"
           )
   | 71 -> ( 
-# 124 "Lexer.fsl"
+# 125 "Lexer.fsl"
                                        let s = lexeme lexbuf in CHAR ((s.Trim [|'\''|]).Chars 0) 
 # 827 "Lexer.fs"
           )
   | 72 -> ( 
-# 125 "Lexer.fsl"
+# 126 "Lexer.fsl"
                                              FLOAT (parse_float (lexeme lexbuf)) 
 # 832 "Lexer.fs"
           )
   | 73 -> ( 
-# 126 "Lexer.fsl"
+# 127 "Lexer.fsl"
                                  INT32 (Int32.Parse (lexeme lexbuf)) 
 # 837 "Lexer.fs"
           )
   | 74 -> ( 
-# 127 "Lexer.fsl"
+# 128 "Lexer.fsl"
                                     AT_INT32 (trim '@' lexbuf |> Int32.Parse) 
 # 842 "Lexer.fs"
           )
   | 75 -> ( 
-# 130 "Lexer.fsl"
+# 131 "Lexer.fsl"
                                       UID (lexeme lexbuf) 
 # 847 "Lexer.fs"
           )
   | 76 -> ( 
-# 131 "Lexer.fsl"
+# 132 "Lexer.fsl"
                                  LID (lexeme lexbuf) 
 # 852 "Lexer.fs"
           )
   | 77 -> ( 
-# 134 "Lexer.fsl"
+# 135 "Lexer.fsl"
                                     BACKTICK_ID <| trim '#' lexbuf 
 # 857 "Lexer.fs"
           )
   | 78 -> ( 
-# 135 "Lexer.fsl"
+# 136 "Lexer.fsl"
                                     AT_ID <| trim '@' lexbuf 
 # 862 "Lexer.fs"
           )
   | 79 -> ( 
-# 136 "Lexer.fsl"
+# 137 "Lexer.fsl"
                                      TICK_ID <| trim '\'' lexbuf 
 # 867 "Lexer.fs"
           )

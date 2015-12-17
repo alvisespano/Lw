@@ -42,7 +42,7 @@ with
     override this.ToString () = this.pretty
 
     member this.pretty =
-        let p (env : Env.t<_, _>) = env.pretty ":" "\n"
+        let p (env : Env.t<_, _>) = env.pretty Config.Printing.type_annotation_sep "\n"
         in
             sprintf "Γ:\n%s\n\nθ:\n%O\n" (p this.Γ) this.θ
 

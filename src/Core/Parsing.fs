@@ -12,7 +12,6 @@ open FSharp.Common.Log
 open FSharp.Common.Parsing
 open Lw.Core.Globals
 
-
 let load_and_parse_program filename =
     use fstr = new IO.FileStream (filename, IO.FileMode.Open)
     use rd = new IO.StreamReader (fstr)

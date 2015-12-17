@@ -15,7 +15,7 @@ let parse_error_rich = Some (fun ctx -> raise (ParseErrorContextException ctx))
 %token <System.Double> FLOAT
 %token <System.Char> CHAR
 %token <System.String> STRING UID LID INFIX TICK_ID BACKTICK_ID AT_ID
-%token TYPE EQ STAR ARROW VAL OVER BRAGT LTKET BRALT GTKET HASH DO INJECT EJECT IMPLIES DATATYPE
+%token TYPE EQ STAR ARROW VAL OVER BRAGT LTKET BRALT GTKET HASH DO INJECT EJECT IMPLIES DATATYPE DATA
        LET REC IN IF THEN ELSE FUN MATCH WHEN WITH FUNCTION TRUE FALSE AS OF NAMESPACE OPEN WHERE OVERLOAD
 	   DOUBLEAMP DOUBLEPIPE UNDERSCORE BACKSLASH KIND QUESTION
 	   BRA KET CURBRA CURKET SQBRA SQKET 
@@ -31,9 +31,9 @@ let parse_error_rich = Some (fun ctx -> raise (ParseErrorContextException ctx))
 %right ARROW
 %left PIPE DOUBLEPIPE
 %left AMP DOUBLEAMP
-%right COLON2
+%right COLON2 
 %left EQ LT GT LEQ GEQ NEQ 
-%left PLUS MINUS
+%left PLUS MINUS 
 %left INFIX
 %left STAR SLASH MOD 
 %left BACKSLASH
@@ -99,7 +99,7 @@ top_decls:
 
 top_decl:								
   | LET let_or_letrec_decl              { $2 }
-  | value_level_decl                    { $1 }
+  | nested_decl                    { $1 }
 
 
 
@@ -112,10 +112,10 @@ let_quals:
   | OVER                                { { over = true }, identity }
   | OVER VAL                            { { over = true }, fun (e : expr) -> Lo e.loc (Val e) }
 
-value_level_decl:
-    value_level_decl_                   { pos parseState 1 $1 }
+nested_decl:
+    nested_decl_                        { pos parseState 1 $1 }
 
-value_level_decl_:
+nested_decl_:
   | OPEN expr                           { D_Open (decl_qual.none, $2) }
   | OPEN let_quals expr                 { D_Open (let q, f = $2 in q, f $3) }
   | OVERLOAD over_and_bindings          { D_Overload $2 }
@@ -541,10 +541,10 @@ expr_app_atom_:
 let_decls:								
 	inner_decl							{ [$1] }
   | inner_decl LET let_decls		    { $1 :: $3 }
-
+  
 inner_decl:
-    let_or_letrec_decl                  { $1 }
-  | value_level_decl                    { $1 }
+    let_or_letrec_decl                  { $1 }  
+  | nested_decl                         { $1 }
 
 cases:
     cases_                              { $1 }

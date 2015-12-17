@@ -2,18 +2,23 @@
 namespace Test
 
 
-let f (x : 'pippo) = x
+let f1 (x : 'pippo) = x
 
-let g (x : 'pippo) (y : 'baudo) =
+let f2 x y =
+    let i z = x, z
+    in
+        i y
+
+let g1 (x : 'pippo) (y : 'baudo) =
     let f (z : 'pippo) = x, z
     in
         f y
         
-let rec f g h x y = g (x : 'bau) + h (y : 'bau)
+let rec f2 g h x y = g (x : 'bau) + h (y : 'bau)
 and e (x : 'bau) = x 
 
 
-let f (x : 'ragno) (y : 'topo) =
+let f3 (x : 'ragno) (y : 'topo) =
     let rec g1 (a : 'topo) = g2 a
     and g2 (c : 'mucca) = let b = c = 3 in g1 y e 
     let h1 (a : 'mucca) = a = x

@@ -162,8 +162,8 @@ with
         | Va (_, so) -> Va (fresh_int (), so)
 
     static member private cnt = ref 0
-    static member private env : Env.t<int, var> option ref = ref None
-    static member private forall : Set<int> ref = ref Set.empty
+    static member private env = ref None
+    static member private forall = ref Set.empty
 
     static member reset_normalization ?quantified_vars =
         let quantified_vars = defaultArg quantified_vars Set.empty
@@ -171,17 +171,14 @@ with
         var.env := Some Env.empty
         var.forall := Set.map (fun (α : var) -> α.uid) quantified_vars
         { new IDisposable with
-            member __.Dispose () =
-                var.env := None
-                var.forall := Set.empty
+            member __.Dispose () = var.env := None
         }
 
     override this.ToString () = this.pretty
 
     member this.pretty =
-        let env = var.env
-        match !env with
-        | None     -> this.pretty_quantified
+        match !var.env with
+        | None     -> this.pretty_quantified  // when env is None it means normalization is disabled, so tyvars are printed as quantified by default
         | Some env ->
             let α =
                 match env.search this.uid with
@@ -203,7 +200,7 @@ type kind =
     | K_Cons of id * kind list
 with
     interface annotable with
-        member __.annot_sep = "::"
+        member __.annot_sep = Config.Printing.kind_annotation_sep
 
 let K_Arrow (k1, k2) = K_Cons ("->", [k1; k2])
 let (|K_Arrow|_|) = function
@@ -295,7 +292,7 @@ let pretty_cases cases = mappen_strings pretty_case "\n  | " cases
 // rows
 //
 
-let make_rows rowed ((|Rowed|_|) : id -> _ -> _) =
+let internal make_rows rowed ((|Rowed|_|) : id -> _ -> _) =
     let Record = rowed Config.Typing.TyCons.Rows.record
     let (|Record|_|) = (|Rowed|_|) Config.Typing.TyCons.Rows.record
     let Variant = rowed Config.Typing.TyCons.Rows.variant
@@ -340,11 +337,10 @@ type [< NoComparison; NoEquality >] ty_upatt =
     | Tp_Row of (id * ty_patt) list * ty_patt option
 with
     interface annotable with
-        member __.annot_sep = "::"
+        member __.annot_sep = Config.Printing.kind_annotation_sep
 
 and [< NoComparison; NoEquality >] ty_uexpr =
     | Te_PolyVar of id
-//    | Te_Var of id
     | Te_Id of id
     | Te_Lambda of kinded_param * ty_expr
     | Te_HTuple of ty_expr list
@@ -355,7 +351,7 @@ and [< NoComparison; NoEquality >] ty_uexpr =
     | Te_Row of (id * ty_expr) list * ty_expr option
 with
     interface annotable with
-        member __.annot_sep = "::"
+        member __.annot_sep = Config.Printing.kind_annotation_sep
 
 and [< NoComparison; NoEquality >] ty_udecl =
     | Td_Bind of ty_binding list
@@ -438,8 +434,8 @@ type ty_upatt with
             | Tp_Cons x             -> x
             | Tp_Tuple ([] | [_])   -> unexpected "empty or unary tuple type pattern" __SOURCE_FILE__ __LINE__
             | Tp_Tuple ps           -> sprintf "(%s)" (flatten_stringables " * " ps)
-            | Tp_Record row         -> sprintf "{ %s }" (pretty_row "; " ":" row)
-            | Tp_Variant row        -> sprintf "< %s >" (pretty_row " | " ":" row)
+            | Tp_Record row         -> sprintf "{ %s }" (pretty_row "; " Config.Printing.type_annotation_sep row)
+            | Tp_Variant row        -> sprintf "< %s >" (pretty_row " | " Config.Printing.type_annotation_sep row)
             | Tp_HTuple ([] | [_])  -> unexpected "empty or unary tupled type pattern" __SOURCE_FILE__ __LINE__
             | Tp_HTuple ps          -> sprintf "(%s)" (flatten_stringables ", " ps)
             | Tp_App (App s)        -> s
@@ -448,7 +444,7 @@ type ty_upatt with
             | Tp_Or (p1, p2)        -> sprintf "(%O | %O)" p1 p2
             | Tp_And (p1, p2)       -> sprintf "(%O & %O)" p1 p2
             | Tp_Wildcard           -> "_"
-            | Tp_Row (bs, o)        -> sprintf "(| %s |)" (pretty_row " | " ":" (bs, o))
+            | Tp_Row (bs, o)        -> sprintf "(| %s |)" (pretty_row " | " Config.Printing.type_annotation_sep (bs, o))
 
 type ty_uexpr with
     override this.ToString () = this.pretty
@@ -464,12 +460,11 @@ type ty_uexpr with
         match this with
             | Te_Sym x                 -> sprintf "(%O)" x
             | Te_PolyVar x             -> sprintf Config.Printing.dynamic.tyvar_quantified_fmt x
-//            | Te_Var x
             | Te_Id x                  -> x
             | Te_Tuple ([] | [_])      -> unexpected "empty or unary tuple type expression" __SOURCE_FILE__ __LINE__
             | Te_Tuple es              -> sprintf "(%s)" (flatten_stringables " * " es)
-            | Te_Record row            -> sprintf "{ %s }" (pretty_row "; " ":" row)
-            | Te_Variant row           -> sprintf "< %s >" (pretty_row " | " ":" row)
+            | Te_Record row            -> sprintf "{ %s }" (pretty_row "; " Config.Printing.type_annotation_sep row)
+            | Te_Variant row           -> sprintf "< %s >" (pretty_row " | " Config.Printing.type_annotation_sep row)
             | Te_HTuple ([] | [_])     -> unexpected "empty or unary tupled type expression" __SOURCE_FILE__ __LINE__
             | Te_HTuple es             -> sprintf "(%s)" (flatten_stringables ", " es)
 
@@ -478,11 +473,11 @@ type ty_uexpr with
             | Te_Arrow (t1, t2)               -> sprintf "%O -> %O" t1 t2
 
             | Te_App (App s)           -> s
-            | Te_Lambda (ka, e)        -> sprintf "fun %s -> %O" (pretty_param "::" ka) e
+            | Te_Lambda (ka, e)        -> sprintf "fun %s -> %O" (pretty_param Config.Printing.kind_annotation_sep ka) e
             | Te_Annot (e, ty)         -> sprintf "(%O : %O)" e ty
             | Te_Let (d, e)            -> sprintf "let %O in %O" d e
             | Te_Match (e, cases)      -> sprintf "match %O with\n| %s" e (pretty_cases cases)
-            | Te_Row (bs, o)           -> sprintf "(| %s |)" (pretty_row " | " ":" (bs, o))
+            | Te_Row (bs, o)           -> sprintf "(| %s |)" (pretty_row " | " Config.Printing.type_annotation_sep (bs, o))
 
 type ty_udecl with       
     override this.ToString () = this.pretty
@@ -632,7 +627,7 @@ type [< NoComparison; NoEquality >] uexpr =
     | Eject of expr
 with
     interface annotable with
-        member __.annot_sep = ":"
+        member __.annot_sep = Config.Printing.type_annotation_sep
  
 and binding = qbinding<decl_qual, upatt, uexpr, unit>
 and rec_binding = rec_qbinding<decl_qual, ty_expr, uexpr, unit>
@@ -683,7 +678,7 @@ type uexpr with
             | FreeVar x             -> sprintf Config.Printing.freevar_fmt x
             | PolyCons x            -> sprintf Config.Printing.polycons_fmt x
             | App (A s)             -> s
-            | Lambda (ta, e)        -> sprintf "fun %s -> %O" (pretty_param ":" ta) e
+            | Lambda (ta, e)        -> sprintf "fun %s -> %O" (pretty_param Config.Printing.type_annotation_sep ta) e
             | Select (e, id)        -> sprintf "%O.%s" e id
             | Restrict (e, id)      -> sprintf "%O \ %s" e id
             | If (e1, e2, e3)       -> sprintf "if %O then %O else %O" e1 e2 e3

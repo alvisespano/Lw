@@ -48,35 +48,36 @@ and tokenize = parse
 	| ('/' | '(') '*'	{ comment lexbuf }
      
 	| "->"			{ ARROW }
-	| "+"			{ PLUS }
-	| "-"			{ MINUS }
-	| "*"			{ STAR }
-	| "/"			{ SLASH }
-	| "%"			{ MOD }
+	| '+'			{ PLUS }
+	| '-'			{ MINUS }
+	| '*'			{ STAR }
+	| '/'			{ SLASH }
+	| '%'			{ MOD }
 	| "\\"			{ BACKSLASH }
 	| "\\_"		    { INJECT } 
 	| "_/"		    { EJECT } 
-	| "!"			{ BANG }
-	| "?"			{ QUESTION }
-	| "#"			{ HASH }
-	| "|"			{ PIPE }
-	| "&"			{ AMP }
-	| "="			{ EQ }
+	| '!'			{ BANG }
+	| '?'			{ QUESTION }
+	| '#'			{ HASH }
+	| '|'			{ PIPE }
+	| '&'			{ AMP }
+	| '='			{ EQ }
 	| "<>"			{ NEQ }
 	| "||"			{ DOUBLEPIPE }
 	| "&&"			{ DOUBLEAMP }
 	| "not"			{ NOT }
-	| "<"			{ LT }
-	| ">"			{ GT }
+	| '<'			{ LT }
+	| '>'			{ GT }
 	| "<="			{ LEQ }
 	| ">="			{ GEQ }
     | "=>"          { IMPLIES }
 	| ":="			{ ASSIGN }
-    | op            { INFIX (lexeme lexbuf) }
+    | op            
     | '`' id '`'    { INFIX (lexeme lexbuf) }
 
 	// keywords
     | "datatype"    { DATATYPE }
+    | "data"        { DATA }
     | "val"         { VAL } 
 	| "type"		{ TYPE }
 	| "if"			{ IF }
@@ -101,7 +102,7 @@ and tokenize = parse
     | "over"        { OVER }
     | "overload"    { OVERLOAD }
     | "do"          { DO }
-    | "_"           { UNDERSCORE }
+    | '_'           { UNDERSCORE }
     
 	// brakets
 	| '('			{ BRA }
@@ -112,12 +113,12 @@ and tokenize = parse
 	| '}'			{ CURKET }
 
 	// punctuation
-	| ";"			{ SEMICOLON }
+	| ';'			{ SEMICOLON }
 	| ";;"			{ SEMICOLON2 }
-	| ":"			{ COLON }
+	| ':'			{ COLON }
 	| "::"			{ COLON2 }
-	| ","			{ COMMA }
-	| "."			{ DOT }
+	| ','			{ COMMA }
+	| '.'			{ DOT }
 
 	// literals
 	| "\"" [^'"']* "\""		{ let s = lexeme lexbuf in STRING (s.Trim [|'\"'|]) }

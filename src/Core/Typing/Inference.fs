@@ -322,9 +322,9 @@ and pt_expr' ctx e0 =
 and pt_decl ctx d =
     let M = new translator_typing_builder<_, _> (d)
     M {
-        let! αs = M.get_named_tyvars
+//        let! αs = M.get_named_tyvars
         do! pt_decl' ctx d
-        do! M.set_named_tyvars αs
+//        do! M.set_named_tyvars αs
     }  
 
 
@@ -404,6 +404,7 @@ and pt_decl' (ctx : context) (d0 : decl) =
 
         | D_Bind bs ->
             do! M.fork_π <| M {
+                let! named_tyvars = M.get_named_tyvars
                 let! l =
                     M.List.collect (fun ({ patt = p; expr = e } as b) -> M {
                                 do! M.clear_constraints
@@ -416,12 +417,14 @@ and pt_decl' (ctx : context) (d0 : decl) =
                                     return! vars_in_patt p |> Set.toList |> M.List.map (fun x -> M { let! { scheme = Ungeneralized t } = M.lookup_Γ (Jk_Var x) in return b, x, π, t })
                                 }
                             }) bs
+                do! M.set_named_tyvars named_tyvars
                 let! bs' = M.List.map (fun (b : binding, x, π, t) -> M { let! () = M.set_π π in return! gen_bind Config.Printing.Prompt.value_decl_prefixes b.qual b.expr x t }) l
                 M.translated <- D_Bind [for jk, e in bs' -> { qual = decl_qual.none; patt = Lo e.loc (P_Jk jk); expr = e }]
             }
 
         | D_Rec bs ->
             do! M.fork_π <| M {
+                let! named_tyvars = M.get_named_tyvars
                 let! l = M.fork_Γ <| M {
                         do! M.clear_constraints
                         let! l = M.List.map (fun ({ qual = q; par = x, _; expr = e } as b) -> M {
@@ -437,11 +440,13 @@ and pt_decl' (ctx : context) (d0 : decl) =
                             | _         -> Report.Error.value_restriction_non_arrow_in_letrec e.loc te
                         return l
                     }
+                do! M.set_named_tyvars named_tyvars
                 let! bs' = M.List.map (fun (b : rec_binding, x, tx) -> M { return! gen_bind Config.Printing.Prompt.rec_value_decl_prefixes b.qual b.expr x tx }) l
                 M.translated <- D_Rec [for jk, e in bs' -> { qual = decl_qual.none; par = jk.pretty, None; expr = e }]
             }
 
         | D_Open (q, e) ->
+            // TODO: deal with tyvars scoping in open declaration
             let! t = pt_expr ctx e
             do! unify_and_resolve ctx e (T_Tailed_Record []) t
             let Lo x = Lo e.loc x
@@ -460,6 +465,7 @@ and pt_decl' (ctx : context) (d0 : decl) =
                 do! pt_decl ctx d
 
         | D_Type bs ->
+            // TODO: deal with tyvars scoping in type declaration
             do! pk_and_eval_ty_rec_bindings ctx d0.loc bs                    
 
         | D_Datatype { id = c; kind = kc; datacons = bs } ->

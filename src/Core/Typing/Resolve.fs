@@ -23,7 +23,7 @@ open Lw.Core.Typing.Meta
 
 type [< NoComparison; NoEquality >] candidate =
     {
-        jk         : jenv_key
+        jk          : jenv_key
         constraints : constraints
         σ           : scheme
         δ           : int

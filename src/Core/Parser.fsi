@@ -18,6 +18,7 @@ type token =
   | EJECT
   | IMPLIES
   | DATATYPE
+  | DATA
   | LET
   | REC
   | IN
@@ -101,6 +102,7 @@ type tokenId =
     | TOKEN_EJECT
     | TOKEN_IMPLIES
     | TOKEN_DATATYPE
+    | TOKEN_DATA
     | TOKEN_LET
     | TOKEN_REC
     | TOKEN_IN
@@ -182,8 +184,8 @@ type nonTerminalId =
     | NONTERM_top_decls
     | NONTERM_top_decl
     | NONTERM_let_quals
-    | NONTERM_value_level_decl
-    | NONTERM_value_level_decl_
+    | NONTERM_nested_decl
+    | NONTERM_nested_decl_
     | NONTERM_datatype
     | NONTERM_datatype_bindings
     | NONTERM_datatype_bindings_

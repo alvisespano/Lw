@@ -100,3 +100,8 @@ LONG-TERM
 (---)   IDEA: when typing of letrec..and bindings fails, try to calculate some dependency graph over the rec variables
               being defined and reshuffle the bindings in that order; then re-iterate type inference and more lucky
               unifications might occur
+
+(---)   REFACT: evaluate the use of FParsec in place of fsyacc/fslex
+
+
+

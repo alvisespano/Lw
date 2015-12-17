@@ -14,8 +14,8 @@ open FSharp.Common
 open FSharp.Common.Prelude
 open FSharp.Common.Log
 open Lw.Core
-open Lw.Core.Absyn
 open Lw.Core.Globals
+open Lw.Core.Absyn
 
 // types, schemes, predicates, constraints, environments, etc.
 //
@@ -37,7 +37,7 @@ and [< NoComparison; CustomEquality >] ty =
     | T_App of (ty * ty)
     | T_Closure of id * tenv ref * ty_expr * kind
 with
-    static member binding_separator = ":"
+    static member binding_separator = Config.Printing.type_annotation_sep
 
     member this.kind =
         match this with
@@ -114,7 +114,7 @@ with
     member this.pretty_as_translated_id = sprintf Config.Printing.cid_fmt this.name this.num
 
     member this.pretty =
-        let sep = if this.strict then ":" else ":>"
+        let sep = if this.strict then Config.Printing.type_annotation_sep else ":>"
         let id =
             let id = this.mode.pretty_as_constraint_id this.name
             in
@@ -507,9 +507,9 @@ type ty with
             | T_Tuple ([] | [_]) as t -> unexpected "empty or unary tuple: %O" __SOURCE_FILE__ __LINE__ t
             | T_Tuple ts              -> mappen_strings (fun t -> (match t with A _ -> sprintf "%s" | _ -> sprintf "(%s)") (R t))  " * " ts
 
-            | T_Record row  -> sprintf "{ %s }" (pretty_row "; " ":" row)
-            | T_Variant row -> sprintf "< %s >" (pretty_row " | " ":" row)
-            | T_Row row     -> sprintf "(| %s |)" (pretty_row " | " ":" row)
+            | T_Record row  -> sprintf "{ %s }" (pretty_row "; " Config.Printing.type_annotation_sep row)
+            | T_Variant row -> sprintf "< %s >" (pretty_row " | " Config.Printing.type_annotation_sep row)
+            | T_Row row     -> sprintf "(| %s |)" (pretty_row " | " Config.Printing.type_annotation_sep row)
 
             | T_HTuple (([] | [_]), _) as t -> unexpected "empty or unary htuple: %O" __SOURCE_FILE__ __LINE__ t
             | T_HTuple (ts, _)              -> mappen_strings (fun t -> (match t with A _ -> sprintf "%s" | _ -> sprintf "(%s)") (R t))  ", " ts

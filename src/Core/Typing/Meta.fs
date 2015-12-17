@@ -346,6 +346,7 @@ and pk_ty_decl ctx d =
             return not_implemented "%O" __SOURCE_FILE__ __LINE__ d
     }
 
+// TODO: deal with kindvars scoping; should resemble tyvars scoping, with restriction when generalization occurs etc.
 and pk_ty_bindings (ctx : context) loc bs =
     let M = new basic_builder (loc)
     M {
