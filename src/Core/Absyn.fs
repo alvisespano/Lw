@@ -117,7 +117,6 @@ let pretty_param sep (id, tyo) =
 // variables
 //
 
-// TODO: reimplement variables by means of pointers; reimplement substitution accordingly as well
 type var = Va of int * string option
 with
     member this.uid =
@@ -161,35 +160,40 @@ with
         match this with
         | Va (_, so) -> Va (fresh_int (), so)
 
-    static member private cnt = ref 0
-    static member private env = ref None
-    static member private forall = ref Set.empty
 
+// this module is needed and cannot be turn into static members of the var class because static members are unit closures and cannot be constants
+module private VarPrinterState =
+    let cnt = ref 0
+    let env : Env.t<int, var> option ref = ref None
+    let forall : Set<int> ref = ref Set.empty
+
+
+type var with
     static member reset_normalization ?quantified_vars =
         let quantified_vars = defaultArg quantified_vars Set.empty
-        var.cnt := 0
-        var.env := Some Env.empty
-        var.forall := Set.map (fun (α : var) -> α.uid) quantified_vars
+        VarPrinterState.cnt := 0
+        VarPrinterState.env := Some Env.empty
+        VarPrinterState.forall := Set.map (fun (α : var) -> α.uid) quantified_vars
         { new IDisposable with
-            member __.Dispose () = var.env := None
+            member __.Dispose () = VarPrinterState.env := None
         }
 
     override this.ToString () = this.pretty
 
     member this.pretty =
-        match !var.env with
+        match !VarPrinterState.env with
         | None     -> this.pretty_quantified  // when env is None it means normalization is disabled, so tyvars are printed as quantified by default
         | Some env ->
             let α =
                 match env.search this.uid with
-                | None   -> let n = !var.cnt
-                            var.cnt := n + 1
+                | None   -> let n = !VarPrinterState.cnt
+                            VarPrinterState.cnt := n + 1
                             let α = Va (n, match this with Va (_, so) -> so)
-                            var.env := Some (env.bind this.uid α)
+                            VarPrinterState.env := Some (env.bind this.uid α)
                             α
                 | Some α -> α
             in
-                if Set.contains this.uid !var.forall then α.pretty_quantified else α.pretty_unquantified
+                if Set.contains this.uid !VarPrinterState.forall then α.pretty_quantified else α.pretty_unquantified
 
 
 // kinds

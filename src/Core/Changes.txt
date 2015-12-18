@@ -1,4 +1,8 @@
 ﻿
+18/12/2015:
+* REFACT: more tyvars again: VarPrinterState module rewritten because static members were not suitable for the purpose, as they introduce unit closures
+
+
 15/12/2015:
 * REFACT: var class reworked: former private module for effecting normalization has now become a bunch of static private members; normalization now
           keeps possible var name
