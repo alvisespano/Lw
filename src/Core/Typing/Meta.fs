@@ -20,7 +20,7 @@ open Lw.Core.Typing.Utils
 type [< NoComparison; NoEquality >] mgu_context =
     { 
         loc            : location
-        χ              : kjenv
+        γ              : kjenv
     }
 
 
@@ -51,8 +51,8 @@ let rec kmgu (ctx : mgu_context) k1_ k2_ =
 type basic_builder with
     member M.kunify loc (k1 : kind) (k2 : kind) =
         M {
-            let! { Θ = Θ; χ = χ } = M.get_state
-            let Θ = kmgu { loc = loc; χ = χ } (subst_kind Θ k1) (subst_kind Θ k2)
+            let! { Θ = Θ; γ = γ } = M.get_state
+            let Θ = kmgu { loc = loc; γ = γ } (subst_kind Θ k1) (subst_kind Θ k2)
             L.mgu "[kU] %O == %O [%O]" k1 k2 Θ
             do! M.update_subst (tsubst.empty, Θ)
         }
@@ -262,25 +262,25 @@ and pk_ty_expr' (ctx : context) (τ0 : ty_expr) =
     K {
         match τ0.value with
         | Te_PolyVar x ->
-            let! o = K.search_χ x
+            let! o = K.search_γ x
             match o with
                 | Some (KUngeneralized k) ->
                     yield k
 
                 | None ->
                     let α = K_Var var.fresh
-                    let! _ = K.bind_χ x { forall = Set.empty; kind = α }
+                    let! _ = K.bind_γ x { forall = Set.empty; kind = α }
                     yield α
 
 //            | Te_Var x
         | Te_Id x ->
-            let! ς = K.lookup_χ x
+            let! ς = K.lookup_γ x
             yield kinstantiate ς
 
         | Te_Lambda ((x, ko), τ) ->
             let kx = either kind.fresh_var ko
-            return! K.fork_χ <| K {
-                let! _ = K.bind_χ x (KUngeneralized kx)
+            return! K.fork_γ <| K {
+                let! _ = K.bind_γ x (KUngeneralized kx)
                 let! k = R τ
                 yield K_Arrow (kx, k)
             }
@@ -303,7 +303,7 @@ and pk_ty_expr' (ctx : context) (τ0 : ty_expr) =
             yield k
 
         | Te_Let (d, τ) ->
-            yield! K.fork_χ <| K {
+            yield! K.fork_γ <| K {
                 do! pk_ty_decl { ctx with top_level_decl = false } d
                 yield! R τ
             }                 
@@ -313,7 +313,7 @@ and pk_ty_expr' (ctx : context) (τ0 : ty_expr) =
             let! k1 = R τ1
             let kr0 = kind.fresh_var
             for p, _, τ in cases do
-                do! K.fork_χ <| K {
+                do! K.fork_γ <| K {
                     let! kp = pk_ty_patt ctx p
                     do! K.kunify p.loc k1 kp
                     let! tr = pk_ty_expr ctx τ
@@ -352,33 +352,33 @@ and pk_ty_bindings (ctx : context) loc bs =
     M {
         let! l = M.List.collect (fun { patt = p; expr = τ } -> M {
                     let! ke = pk_ty_expr ctx τ
-                    return! M.fork_χ <| M {
+                    return! M.fork_γ <| M {
                         let! kp = pk_ty_patt ctx p
                         do! M.kunify p.loc kp ke
-                        return! M.List.map (fun x -> M { let! (KUngeneralized k) = M.lookup_χ x in return x, k }) (vars_in_ty_patt p |> Set.toList)
+                        return! M.List.map (fun x -> M { let! (KUngeneralized k) = M.lookup_γ x in return x, k }) (vars_in_ty_patt p |> Set.toList)
                     }
                 }) bs
         for x, k in l do
-            let! ς = M.gen_bind_χ x k
+            let! ς = M.gen_bind_γ x k
             prompt_inferred_kind ctx Config.Printing.Prompt.type_decl_prefixes x ς
     }   
 
 and pk_ty_rec_bindings (ctx : context) loc bs  =
     let M = new basic_builder (loc)
     M {
-        let! bs = M.fork_χ <| M {
+        let! bs = M.fork_γ <| M {
                 for { par = x, ko } in bs do
                     let kx = either kind.fresh_var ko
-                    do! M.ignore <| M.bind_χ x (KUngeneralized kx)
+                    do! M.ignore <| M.bind_γ x (KUngeneralized kx)
                 return! M.List.map (fun { par = x, _; expr = τ } -> M {
-                                let! KUngeneralized kx = M.lookup_χ x
+                                let! KUngeneralized kx = M.lookup_γ x
                                 let! k = pk_ty_expr ctx τ
                                 do! M.kunify τ.loc kx k
                                 return x, kx
                         }) bs
             }
         for x, kx in bs do
-            let! ς = M.gen_bind_χ x kx
+            let! ς = M.gen_bind_γ x kx
             // TODO: all type definitions should be implicitly recursive
             prompt_inferred_kind ctx Config.Printing.Prompt.rec_type_decl_prefixes x ς
     }
@@ -389,12 +389,12 @@ and pk_ty_patt ctx (p0 : ty_patt) =
     K {
         match p0.value with
         | Tp_Cons x ->
-            let! ς = K.lookup_χ x
+            let! ς = K.lookup_γ x
             yield kinstantiate ς
 
         | Tp_Var x ->
             let α = kind.fresh_var
-            let! _ = K.bind_χ x (KUngeneralized α)
+            let! _ = K.bind_γ x (KUngeneralized α)
             yield α
 
         | Tp_Or (p1, p2) ->
@@ -441,7 +441,7 @@ and pk_ty_patt ctx (p0 : ty_patt) =
 
         | Tp_As (p, x) ->
             let! kp = R p
-            let! _ = K.bind_χ x (KUngeneralized kp)
+            let! _ = K.bind_γ x (KUngeneralized kp)
             yield kp
 
         | Tp_Annot (p, k) ->

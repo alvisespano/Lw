@@ -330,7 +330,7 @@
 * NEW: tuples have been encoded by using record rows { #1 : t1 .. #n : tn }: this takes place in types as well as in patterns and expressions
 * NEW: kind inference and type evaluation subsystems initiated
 * REFACT: subst have beeen rendered polymorphic and application to types etc. are now global functions
-* TODO: a new environment for binding free type variables is neeeded: χ is just for type constructors/identifiers, which have different scopes than ticked variables
+* TODO: a new environment for binding free type variables is neeeded: γ is just for type constructors/identifiers, which have different scopes than ticked variables
 
 
 15/10/2014:

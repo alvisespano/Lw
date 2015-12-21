@@ -34,11 +34,11 @@ let rec rewrite_row loc t1 t2 r0 l =
                 t, T_Row_Ext (l', t', r'), θ
 
     | T_Row_Var ρ ->
-        let γ = ty.fresh_var
+        let α = ty.fresh_var
         let β = T_Row_Var var.fresh
-        let t = T_Row_Ext (l, γ, β)
+        let t = T_Row_Ext (l, α, β)
         in
-            γ, β, new tsubst (ρ, t)
+            α, β, new tsubst (ρ, t)
 
     | T_Row_Empty ->
         Report.Error.cannot_rewrite_row loc l t1 t2
@@ -272,9 +272,9 @@ let try_mgu ctx t1 t2 =
 type basic_builder with
     member M.unify loc t1 t2 =
         M {
-            let! { θ = θ; Θ = Θ; χ = χ } = M.get_state
+            let! { θ = θ; Θ = Θ; γ = γ } = M.get_state
             let Σ = θ, Θ
-            let θ, Θ as Σ = mgu { loc = loc; χ = χ } (subst_ty Σ t1) (subst_ty Σ t2)
+            let θ, Θ as Σ = mgu { loc = loc; γ = γ } (subst_ty Σ t1) (subst_ty Σ t2)
             L.mgu "[U] %O == %O\n    [%O] --- [%O]" t1 t2 θ Θ
             do! M.update_subst Σ
         }

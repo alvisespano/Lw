@@ -61,6 +61,8 @@ LONG-TERM
 
 (+)     SYN: find a better syntax for loosen operator, such as: <_ expr _>; |(expr)|; |> expr <|; <* expr *>; ]> expr <[
 
+(-)     FEAT: lazyness shortcut introduced by where-bindings: call-by-need identifiers automatically recursive. Evaluated at lookup-time.
+
 (-)     SYN: top-level lets could be 'val x = e' (hence existing 'val' construct would become 'value'); record bindings should
             also support the val prefix: this would allow users to quickly make a record from a whole set of top-level bindings
             just by embrancing them

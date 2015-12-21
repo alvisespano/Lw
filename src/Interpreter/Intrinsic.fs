@@ -27,7 +27,7 @@ module Builtin =
         let private Stars = Arity K_Arrow K_Star
         let private Arrows ts s = s, K_Arrows ts
 
-        let χ0 = 
+        let γ0 = 
             [
                 Stars 0 "int"
                 Stars 0 "float"
@@ -119,7 +119,7 @@ module Builtin =
 type [< NoEquality; NoComparison >] envs = {
     Γ : jenv
     Δ : Eval.env
-    χ : kjenv
+    γ : kjenv
     δ : tenv
 }
 
@@ -131,12 +131,12 @@ let private Γ0, Δ0 =
                         Δ.bind x v)
         (Env.empty, Env.empty) Builtin.Values.ΓΔ0
 
-let private χ0, δ0 =
-    List.fold (fun (χ : kjenv, δ : tenv) (x, k) ->
+let private γ0, δ0 =
+    List.fold (fun (γ : kjenv, δ : tenv) (x, k) ->
                     let t = T_Cons (x, k)
                     in
-                        χ.bind x (kgeneralize k χ),
-                        δ.bind x t) (Env.empty, Env.empty) Builtin.Types.χ0
+                        γ.bind x (kgeneralize k γ),
+                        δ.bind x t) (Env.empty, Env.empty) Builtin.Types.γ0
 
-let envs0 = { Γ = Γ0; Δ = Δ0; χ = χ0; δ = δ0 }
+let envs0 = { Γ = Γ0; Δ = Δ0; γ = γ0; δ = δ0 }
 

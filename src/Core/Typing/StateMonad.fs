@@ -30,7 +30,7 @@ with
 type [< NoComparison; NoEquality >] state =
     {
         Γ   : jenv              // type judices
-        χ   : kjenv             // kind judices
+        γ   : kjenv             // kind judices
         δ   : tenv              // evaluated types
         θ   : tsubst            // type substitution
         Θ   : ksubst            // kind substitution
@@ -49,7 +49,7 @@ with
     static member empty =
         {
             Γ   = Env.empty
-            χ   = Env.empty
+            γ   = Env.empty
             θ   = tsubst.empty
             δ   = tenv.empty
             Θ   = ksubst.empty
@@ -75,7 +75,7 @@ type basic_builder (loc : location) =
 
     member __.get_Γ st = st.Γ, st
     member __.get_Δ st = st.δ, st
-    member __.get_χ st = st.χ, st
+    member __.get_γ st = st.γ, st
     member __.get_θ st = st.θ, st
     member __.get_π st = st.π, st
     member M.get_Σ = M { let! s = M.get_state in return s.θ, s.Θ }
@@ -84,13 +84,13 @@ type basic_builder (loc : location) =
 
     member __.lift_Γ f st = (), { st with Γ = f st.Γ |> subst_jenv st.Σ }
     member __.lift_Δ f st = (), { st with δ = f st.δ }
-    member __.lift_χ f st = (), { st with χ = f st.χ |> subst_kjenv st.Θ }
+    member __.lift_γ f st = (), { st with γ = f st.γ |> subst_kjenv st.Θ }
     member __.lift_π f (st : state) = (), { st with π = subst_predicate st.Σ (f st.π) }
     member __.lift_named_tyvars f (st : state) = (), { st with named_tyvars = f st.named_tyvars }
 
     member M.set_Γ x = M.lift_Γ (fun _ -> x)
     member M.set_Δ x = M.lift_Δ (fun _ -> x)
-    member M.set_χ x = M.lift_χ (fun _ -> x)
+    member M.set_γ x = M.lift_γ (fun _ -> x)
     member M.set_π x = M.lift_π (fun _ -> x)
     member M.set_named_tyvars x = M.lift_named_tyvars (fun _ -> x)
 
@@ -101,7 +101,7 @@ type basic_builder (loc : location) =
             do! M.lift_state (fun s ->
                     let θ, Θ as Σ = compose_tksubst Σ s.Σ
                     in
-                        { χ = subst_kjenv Θ s.χ
+                        { γ = subst_kjenv Θ s.γ
                           δ = subst_tenv Σ s.δ
                           θ = θ
                           Θ = Θ
@@ -119,8 +119,8 @@ type basic_builder (loc : location) =
 
     member private M.kgen k =
         M {
-            let! { χ = χ; Θ = Θ } = M.get_state
-            return kgeneralize (subst_kind Θ k) χ
+            let! { γ = γ; Θ = Θ } = M.get_state
+            return kgeneralize (subst_kind Θ k) γ
         }
 
     member private __.lookup report (env : Env.t<_, _>) x =
@@ -137,18 +137,18 @@ type basic_builder (loc : location) =
                         return α
         }
 
-    member M.bind_χ x ς =
+    member M.bind_γ x ς =
         M {
             let! _, Θ = M.get_Σ
             let ς = subst_kscheme Θ ς
-            do! M.lift_χ (fun χ -> χ.bind x ς)
+            do! M.lift_γ (fun γ -> γ.bind x ς)
             return ς
         }
         
-    member M.gen_bind_χ x k =
+    member M.gen_bind_γ x k =
         M {
             let! ς = M.kgen k
-            return! M.bind_χ x ς
+            return! M.bind_γ x ς
         }
 
     member M.bind_Δ x t =
@@ -156,16 +156,16 @@ type basic_builder (loc : location) =
             do! M.lift_Δ (fun Δ -> Δ.bind x t)
         }
 
-    member M.search_χ x =
+    member M.search_γ x =
         M {
-            let! χ = M.get_χ
-            return χ.search x
+            let! γ = M.get_γ
+            return γ.search x
         }
 
-    member M.lookup_χ x =
+    member M.lookup_γ x =
         M {
-            let! χ = M.get_χ
-            return M.lookup Report.Error.unbound_type_symbol χ x
+            let! γ = M.get_γ
+            return M.lookup Report.Error.unbound_type_symbol γ x
         }
         
     member M.search_binding_by_name_Γ x =
@@ -226,6 +226,14 @@ type basic_builder (loc : location) =
             return π, t
         }
 
+    member M.fork_named_tyvars f =
+        M {
+            let! Γ = M.get_named_tyvars
+            let! r = f
+            do! M.set_named_tyvars Γ
+            return r
+        }
+
     member M.fork_Γ f =
         M {
             let! Γ = M.get_Γ
@@ -234,11 +242,11 @@ type basic_builder (loc : location) =
             return r
         }
 
-    member M.fork_χ f =
+    member M.fork_γ f =
         M {
-            let! Γ = M.get_χ
+            let! Γ = M.get_γ
             let! r = f
-            do! M.set_χ Γ
+            do! M.set_γ Γ
             return r
         }
 

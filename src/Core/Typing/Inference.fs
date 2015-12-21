@@ -303,8 +303,8 @@ and pt_expr' ctx e0 =
                 }) xts
                                 
             // unify user-defined types to constraints in order of appearence
-            let! χ = M.get_χ
-            let mgu_ctx = { loc = e.loc; χ = χ }
+            let! γ = M.get_γ
+            let mgu_ctx = { loc = e.loc; γ = γ }
             for x, t in xts do
                 let! cs = M.get_constraints
                 do! M.ignore <| M.List.tryFind (fun c -> M {
@@ -322,9 +322,7 @@ and pt_expr' ctx e0 =
 and pt_decl ctx d =
     let M = new translator_typing_builder<_, _> (d)
     M {
-//        let! αs = M.get_named_tyvars
-        do! pt_decl' ctx d
-//        do! M.set_named_tyvars αs
+        return! (if ctx.top_level_decl then M.fork_named_tyvars else M.ReturnFrom) <| M { do! pt_decl' ctx d }
     }  
 
 
@@ -342,12 +340,12 @@ and pt_decl' (ctx : context) (d0 : decl) =
         let loc = e0.loc
         let Lo x = Lo loc x
         M {
-            let! { χ = χ; π = { constraints = cs } } = M.get_state
+            let! { γ = γ; π = { constraints = cs } } = M.get_state
             // check shadowing and relation with previous bindings
             let! jb = M.search_binding_by_name_Γ x
             if q.over then
                 match jb with                
-                | Jb_Overload pt -> if not (is_instance_of { loc = loc; χ = χ } pt t) then Report.Error.instance_not_valid loc x t pt   // open-world overloadable instance
+                | Jb_Overload pt -> if not (is_instance_of { loc = loc; γ = γ } pt t) then Report.Error.instance_not_valid loc x t pt   // open-world overloadable instance
                 | Jb_Unbound     -> Report.Warn.let_over_without_previous_let loc x                                                     // let-over binding without a previous let-non-over is a warning
                 | _              -> ()                                                                                                  // let-over binding after anything else is valid closed-world overloading
             else
@@ -404,7 +402,6 @@ and pt_decl' (ctx : context) (d0 : decl) =
 
         | D_Bind bs ->
             do! M.fork_π <| M {
-                let! named_tyvars = M.get_named_tyvars
                 let! l =
                     M.List.collect (fun ({ patt = p; expr = e } as b) -> M {
                                 do! M.clear_constraints
@@ -413,19 +410,17 @@ and pt_decl' (ctx : context) (d0 : decl) =
                                     let! tp = pt_patt ctx p
                                     do! unify_and_resolve ctx e tp te
                                     let! π = M.get_π
-                                    // NOTE: no need to match Jm_Var
                                     return! vars_in_patt p |> Set.toList |> M.List.map (fun x -> M { let! { scheme = Ungeneralized t } = M.lookup_Γ (Jk_Var x) in return b, x, π, t })
                                 }
                             }) bs
-                do! M.set_named_tyvars named_tyvars
                 let! bs' = M.List.map (fun (b : binding, x, π, t) -> M { let! () = M.set_π π in return! gen_bind Config.Printing.Prompt.value_decl_prefixes b.qual b.expr x t }) l
                 M.translated <- D_Bind [for jk, e in bs' -> { qual = decl_qual.none; patt = Lo e.loc (P_Jk jk); expr = e }]
             }
 
         | D_Rec bs ->
             do! M.fork_π <| M {
-                let! named_tyvars = M.get_named_tyvars
-                let! l = M.fork_Γ <| M {
+                let! l =
+                    M.fork_Γ <| M {
                         do! M.clear_constraints
                         let! l = M.List.map (fun ({ qual = q; par = x, _; expr = e } as b) -> M {
                                         let! tx = pt_typed_param ctx b.par
@@ -440,13 +435,11 @@ and pt_decl' (ctx : context) (d0 : decl) =
                             | _         -> Report.Error.value_restriction_non_arrow_in_letrec e.loc te
                         return l
                     }
-                do! M.set_named_tyvars named_tyvars
                 let! bs' = M.List.map (fun (b : rec_binding, x, tx) -> M { return! gen_bind Config.Printing.Prompt.rec_value_decl_prefixes b.qual b.expr x tx }) l
                 M.translated <- D_Rec [for jk, e in bs' -> { qual = decl_qual.none; par = jk.pretty, None; expr = e }]
             }
 
         | D_Open (q, e) ->
-            // TODO: deal with tyvars scoping in open declaration
             let! t = pt_expr ctx e
             do! unify_and_resolve ctx e (T_Tailed_Record []) t
             let Lo x = Lo e.loc x
@@ -465,7 +458,6 @@ and pt_decl' (ctx : context) (d0 : decl) =
                 do! pt_decl ctx d
 
         | D_Type bs ->
-            // TODO: deal with tyvars scoping in type declaration
             do! pk_and_eval_ty_rec_bindings ctx d0.loc bs                    
 
         | D_Datatype { id = c; kind = kc; datacons = bs } ->
@@ -475,7 +467,7 @@ and pt_decl' (ctx : context) (d0 : decl) =
                 | k         -> [], k
             let kdom, kcod = split (|K_Arrows|_|) kc
             do! M.kunify d0.loc kcod K_Star    // TODO: unification might be wrong: consider pattern matching againts K_Star instead
-            let! ς = M.gen_bind_χ c kc
+            let! ς = M.gen_bind_γ c kc
             Report.prompt ctx Config.Printing.Prompt.datatype_decl_prefixes c ς None
             // rebind kc to the unified kind, by reinstantiating it rather than keeping the user-declared one
             let kc = kinstantiate ς 
@@ -489,8 +481,8 @@ and pt_decl' (ctx : context) (d0 : decl) =
                 // each data constructor's codomain must be the type constructor being defined
                 let pt = T_Apps [ yield T_Cons (c, kc); for _ in kdom -> ty.fresh_var ]
                 let _, tcod = split (|T_Arrows|_|) tx
-                let! χ = M.get_χ
-                if not (is_principal_type_of { χ = χ; loc = τx.loc } pt tcod) then return Report.Error.data_constructor_codomain_invalid τx.loc x c tcod
+                let! γ = M.get_γ
+                if not (is_principal_type_of { γ = γ; loc = τx.loc } pt tcod) then return Report.Error.data_constructor_codomain_invalid τx.loc x c tcod
                 let! σ = M.gen_bind_Γ (Jk_Data x) Jm_Normal tx
                 Report.prompt ctx Config.Printing.Prompt.data_decl_prefixes x σ None
 

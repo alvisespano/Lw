@@ -632,7 +632,7 @@ let Ungeneralized t = { forall = Set.empty; π = predicate.empty; ty = t }
 
 // kind primitives
 
-let fv_χ (χ : kjenv) = fv_env (fun (ς : kscheme) -> ς.fv) χ
+let fv_γ (γ : kjenv) = fv_env (fun (ς : kscheme) -> ς.fv) γ
 
 let kinstantiate { forall = αs; kind = k } =
     let θ = var_refresher αs
@@ -640,8 +640,8 @@ let kinstantiate { forall = αs; kind = k } =
         k.subst_vars θ
 
 // TODO: restricted named vars should be taken into account also for kind generalization?
-let kgeneralize (k : kind) χ =
-    let αs = k.fv - (fv_χ χ)
+let kgeneralize (k : kind) γ =
+    let αs = k.fv - (fv_γ γ)
     in
         { forall = αs; kind = k }
 

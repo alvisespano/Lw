@@ -68,12 +68,12 @@ let rec resolve_constraints (ctx : context) e0 =
     let L0 x = Lo loc x
     M {
         if ctx.resolution <> Res_No then
-            let! { χ = χ; Γ = Γ; π = { constraints = cs } } = M.get_state
+            let! { γ = γ; Γ = Γ; π = { constraints = cs } } = M.get_state
             #if DEBUG_RESOLVE
             L.debug Low "resolving constraints: %O" cs
             #endif
             if not cs.is_empty then
-                let mgu_ctx = { mgu_context.loc = loc; χ = χ }
+                let mgu_ctx = { mgu_context.loc = loc; γ = γ }
                 for { name = x; ty = t } as c in cs do
                     let strict = ctx.resolution = Res_Strict && c.strict
                     let jkσs = restrict_overloaded x Γ

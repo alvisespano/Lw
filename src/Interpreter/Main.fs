@@ -23,10 +23,10 @@ module A = Lw.Core.Absyn
 Console.CancelKeyPress.AddHandler (fun _ _ -> ())
 
 let typecheck_prg (envs : Intrinsic.envs) prg =
-    let st = { Typing.StateMonad.state.empty with Γ = envs.Γ; χ = envs.χ }
+    let st = { Typing.StateMonad.state.empty with Γ = envs.Γ; γ = envs.γ }
     let (), st = Typing.Inference.pt_program prg st
     in
-        { envs with Γ = st.Γ; χ = st.χ; δ = st.δ }
+        { envs with Γ = st.Γ; γ = st.γ; δ = st.δ }
 
 let eval_prg (envs : Intrinsic.envs) prg =
     let Δ, vo = Eval.eval_prg Eval.context.non_cancellable envs.Δ prg
@@ -91,7 +91,7 @@ let interactive (envs : Intrinsic.envs) =
     Console.CancelKeyPress.AddHandler default_ctrl_c_handler
 
     let rΔ = ref envs.Δ
-    let st = ref { Typing.StateMonad.state.empty with Γ = envs.Γ; χ = envs.χ }
+    let st = ref { Typing.StateMonad.state.empty with Γ = envs.Γ; γ = envs.γ }
     let unM f x =
         let ctx = Typing.StateMonad.context.top_level
         let r, st' = f ctx x !st

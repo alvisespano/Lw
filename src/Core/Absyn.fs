@@ -195,6 +195,23 @@ type var with
             in
                 if Set.contains this.uid !VarPrinterState.forall then α.pretty_quantified else α.pretty_unquantified
 
+// TODO: [continue] explore lexically-scoped type variables. The SHARED approach (Ocaml and Haskell) should be ours
+let h () =
+    let f x =
+        let g z =
+            let h (x : 'pippo) = if x = () then "caz" else "pip"
+            1
+        1
+    let g (y : 'pippo) = if y then 'a' else 'b'
+    1
+    
+let f (x : 'pippo) = if x = 1 then "caz" else "pip"
+let g (y : 'pippo) = if y then 'a' else 'b'
+
+let k x =
+    let i (y : 'baudo) = x = y
+    x
+
 
 // kinds
 //
