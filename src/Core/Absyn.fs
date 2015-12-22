@@ -162,38 +162,64 @@ with
 
 
 // this module is needed and cannot be turn into static members of the var class because static members are unit closures and cannot be constants
-module private VarPrinterState =
+module private VarNormalizerState =
+    // TODO: add thread-safe support with a mutex or something
     let cnt = ref 0
-    let env : Env.t<int, var> option ref = ref None
+    let env : Env.t<int, string> option ref = ref None
     let forall : Set<int> ref = ref Set.empty
 
 
 type var with
     static member reset_normalization ?quantified_vars =
         let quantified_vars = defaultArg quantified_vars Set.empty
-        VarPrinterState.cnt := 0
-        VarPrinterState.env := Some Env.empty
-        VarPrinterState.forall := Set.map (fun (α : var) -> α.uid) quantified_vars
+        VarNormalizerState.cnt := 0
+        VarNormalizerState.env := Some Env.empty
+        VarNormalizerState.forall := Set.map (fun (α : var) -> α.uid) quantified_vars
         { new IDisposable with
-            member __.Dispose () = VarPrinterState.env := None
+            member __.Dispose () = VarNormalizerState.env := None
         }
 
     override this.ToString () = this.pretty
 
     member this.pretty =
-        match !VarPrinterState.env with
+        match !VarNormalizerState.env with
         | None     -> this.pretty_quantified  // when env is None it means normalization is disabled, so tyvars are printed as quantified by default
         | Some env ->
-            let α =
+            let name =
                 match env.search this.uid with
-                | None   -> let n = !VarPrinterState.cnt
-                            VarPrinterState.cnt := n + 1
-                            let α = Va (n, match this with Va (_, so) -> so)
-                            VarPrinterState.env := Some (env.bind this.uid α)
-                            α
-                | Some α -> α
-            in
-                if Set.contains this.uid !VarPrinterState.forall then α.pretty_quantified else α.pretty_unquantified
+                | Some s -> s
+                | None ->
+                    let name_exists s = env.exists (fun _ s' -> s' = s)
+                    let next_fresh_name () =
+                        let r = var.auto_name "%s" !VarNormalizerState.cnt
+                        VarNormalizerState.cnt := !VarNormalizerState.cnt + 1
+                        r
+                    match this with
+                    | Va (_, None) ->
+                        let rec R () =
+                            let r = next_fresh_name ()
+                            in
+                                if name_exists r then R () else r
+                        in
+                            R ()
+
+                    | Va (_, Some s) ->
+                        let rec R s cnt =
+                            if name_exists s then R (sprintf Config.Printing.changed_var_name_fmt s cnt) (cnt + 1) else s
+                        in
+                            R s 0
+
+            VarNormalizerState.env := Some (env.bind this.uid name)
+            #if DEBUG_TYVARS
+            let fmt = 
+                match this with
+                | Va (_, Some _) -> Config.Printing.named_var_fmt
+                | Va (_, None)   -> Config.Printing.anonymous_var_fmt
+            sprintf fmt name this.uid
+            #else
+            name
+            #endif
+            |> sprintf (if Set.contains this.uid !VarNormalizerState.forall then Config.Printing.dynamic.tyvar_quantified_fmt else Config.Printing.dynamic.tyvar_unquantified_fmt)
 
 // TODO: [continue] explore lexically-scoped type variables. The SHARED approach (Ocaml and Haskell) should be ours
 let h () =

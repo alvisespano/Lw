@@ -1,4 +1,9 @@
 ﻿
+22/12/2015:
+* REFACT: var printer greatly redesigned and rewritten: now it deals with named vars more consistently, and new names are generated if already allocated by
+          named vars; it also renames named vars which are accidentally equal to generated names for anonymous vars.
+
+
 18/12/2015:
 * REFACT: more tyvars again: VarPrinterState module rewritten because static members were not suitable for the purpose, as they introduce unit closures
 

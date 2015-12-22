@@ -29,6 +29,21 @@ let vars_in_term (|Var|Leaf|Nodes|) =
     in
         R
 
+let rec vars_in_kind k =
+    Computation.set {
+        match k with
+        | K_Var α        -> yield α
+        | K_Cons (_, ks) -> for k in ks do yield! vars_in_kind k }
+
+//let rec vars_in_ty t =
+//    Computation.set {
+//        match t with
+//        | T_Var (α, k)     -> yield α; yield! vars_in_kind k
+//        | T_Cons (_, k)    -> yield! vars_in_kind k
+//        | T_HTuple (ts, k) -> for t in ts do yield! vars_in_ty t; yield! vars_in_kind k
+//        | T_App (t1, t2)   -> yield! vars_in_ty t1; yield! vars_in_ty t2
+//        | T_Closure ( kind }
+
 let vars_in_patt p =
     let (|Var|Leaf|Nodes|) (p : patt) =
         match p.value with

@@ -41,12 +41,8 @@ and e (x : 'bau) = x
 
 let f3 (x : 'ragno) (y : 'topo) =
     let rec g1 (a : 'topo) = g2 a
-    and g2 (c : 'mucca) = let b = c = 3 in g1 y e 
+    and g2 (c : 'mucca) = let b = c = 3 in g1 y e
     let h1 (a : 'mucca) = a = x
     in
         do { x = true; h1 }
-        
-        
-        
-    
-        
+

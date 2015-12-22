@@ -65,7 +65,7 @@ module Printing =
 
         member this.tyvar_range = if this.greek_tyvars then 'α', 'ζ' else 'a', 'z'
         member this.tyvar_quantified_fmt : Printf.StringFormat<_> = if this.greek_tyvars then "%s" else "'%s"
-        member this.tyvar_unquantified_fmt : Printf.StringFormat<_> = if this.greek_tyvars then "?%s" else "'_%s"
+        member this.tyvar_unquantified_fmt : Printf.StringFormat<_> = if this.greek_tyvars then "_%s" else "'_%s"
 
     let dynamic = new cfg ()
 
@@ -84,6 +84,11 @@ module Printing =
     let fresh_reserved_id_fmt : StringFormat<int -> string> = "$%d"
     let wildcard_reserved_fmt : StringFormat<int -> string> = "_$%d"
     let tuple_index_label_fmt : StringFormat<int -> string> = "#%d"
+    let changed_var_name_fmt : StringFormat<string -> int -> string> = "%s%d"
+    #if DEBUG_TYVARS
+    let anonymous_var_fmt : StringFormat<string -> int -> string> = "%s?%d"
+    let named_var_fmt : StringFormat<string -> int -> string> = "%s_%d"
+    #endif
 
     module Prompt =
         let prefix_sep = " "
