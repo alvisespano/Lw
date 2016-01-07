@@ -222,21 +222,21 @@ type var with
             |> sprintf (if Set.contains this.uid !VarNormalizerState.forall then Config.Printing.dynamic.tyvar_quantified_fmt else Config.Printing.dynamic.tyvar_unquantified_fmt)
 
 // TODO: [continue] explore lexically-scoped type variables. The SHARED approach (Ocaml and Haskell) should be ours
-let h () =
-    let f x =
-        let g z =
-            let h (x : 'pippo) = if x = () then "caz" else "pip"
-            1
-        1
-    let g (y : 'pippo) = if y then 'a' else 'b'
-    1
-    
-let f (x : 'pippo) = if x = 1 then "caz" else "pip"
-let g (y : 'pippo) = if y then 'a' else 'b'
-
-let k x =
-    let i (y : 'baudo) = x = y
-    x
+//let h () =
+//    let f x =
+//        let g z =
+//            let h (x : 'pippo) = if x = () then "caz" else "pip"
+//            1
+//        1
+//    let g (y : 'pippo) = if y then 'a' else 'b'
+//    1
+//    
+//let f (x : 'pippo) = if x = 1 then "caz" else "pip"
+//let g (y : 'pippo) = if y then 'a' else 'b'
+//
+//let k x =
+//    let i (y : 'baudo) = x = y
+//    x
 
 
 // kinds

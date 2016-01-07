@@ -2,7 +2,7 @@
 namespace Test
 
 
-// check scoping
+// check type variable scoping
 //
 
 // these 2 should compile because top-level tyvars are independent

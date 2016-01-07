@@ -1,6 +1,6 @@
 # Lw
 
-This document will be written and kept updated in the upcoming weeks.
+This document will be kept updated as development goes on.
 Keep in mind that features may change anytime, since Lw is a work in progress.
 
 
@@ -15,9 +15,9 @@ But what makes Lw unique is the way these features are related together, exposin
 
 #### &lambda;&omega; = Lw = Lightweight
 
-Lw full name is Lightweight, which stands for one of its core principles: almost every feature has little to no impact on code verbosity and size, while of course retaining robustness and safeness intact. Almost everything is statically inferred, from record types to data constructor types, to overloaded symbols principal types.
+Lw full name is Lightweight, which stands for one of its core principles: almost every feature has little to no impact on code verbosity and size, while of course retaining robustness and safeness intact. Everything is by default statically inferred, automatic or implicit and most features do not require declarations of any sort - hence the name Lightweight. Nonetheless, the *heavyweight* approach is an option as well: users can add type annotations, define global types and write less agile code when needed or desired.
 
-The `L` and `w` letters also stand for greek &lambda; and &omega;, resembling its theoretical heritage: &lambda;-calculus and System-*F*&omega;.
+The `L` and `w` letters also stand for greek &lambda; and &omega;, resembling Lw theoretical heritage: &lambda;-calculus and System-*F*&omega;.
 
 
 ### Comparisons with the **big** languanges
@@ -66,7 +66,7 @@ in
     g 11
 ```
 
-which computes a partially-applied functional value that is *missing the last argument*.
+which computes a partially-applied functional value of type `forall 'a. 'a -> int * 'a` that is *missing the second argument*.
 Recursion works as usual, as well as conditional expressions:
 
 ```ocaml
@@ -84,7 +84,7 @@ let rec map f = function
   | x :: xs -> f x :: map f xs
 ```
 
-That's the typical definition of `map : forall 'a :: *, 'b :: *. ('a -> 'b) -> list 'a -> list 'b` you would write in say OCaml or F#. Just note that in Lw you can tell the interpreter (or the compiler) to pretty print kinds of type variable when universally quantified; by default it does, but there are few other behaviours you may enable in the command line - e.g. hide the universal quantifier and consider ticked type variables as universally quantified unless prefixed by an underscore (like in `'_a` as other MLs do), or annotate kinds only when different from star, or at the first left-to-right occurence.
+That's the typical definition of `map : forall 'a 'b. ('a -> 'b) -> list 'a -> list 'b` you would write in say OCaml or F#. Just note that in Lw you can tell the interpreter (or the compiler) to pretty print kinds of type variable when universally quantified; by default it does, but there are few other behaviours you may enable in the command line - e.g. hide the universal quantifier and consider ticked type variables as universally quantified unless prefixed by an underscore (like in `'_a` as other MLs do), or annotate kinds only when different from star, or at the first left-to-right occurence.
 
 There will be further detailed sections for new data type definitions, advanced constructs and Lw-specific features.
 

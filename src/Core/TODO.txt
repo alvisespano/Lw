@@ -30,6 +30,9 @@ SHORT-TERM
                 e1 or e2 ~~> match e1 with Some x -> x | None -> e2
               It actually matches the 'either' function, but it is infix: let (or) a b = either b a
               Also, design a special if-like construct for optionals: when e1 is x then e2 ~~~> match e1 with None -> () | Some x -> e2 x
+
+(-)     UP: support type scheme annotations on binding sites. This should disable automatic generalization of the WHOLE type, while plain type annotations disables quantification
+            only of type variables which are in scope [http://research.microsoft.com/pubs/67012/scoped.pdf]
                 
 (-)     FEAT: resolution can be suspended indeterminately until explicit val construct is used; e.g. double-ticked
               identifiers could do that
