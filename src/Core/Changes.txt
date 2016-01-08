@@ -1,4 +1,13 @@
 ﻿
+8/01/2015:
+* TODO.txt file reworked
+* looking for a serious test suite: OCaml test suite could do, with a little 
+
+
+7/01/2015:
+* FIX: scoped type variables implemented and seems to work in general. Needs more testing though.
+
+
 22/12/2015:
 * REFACT: var printer greatly redesigned and rewritten: now it deals with named vars more consistently, and new names are generated if already allocated by
           named vars; it also renames named vars which are accidentally equal to generated names for anonymous vars.

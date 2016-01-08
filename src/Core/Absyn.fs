@@ -398,7 +398,7 @@ and [< NoComparison; NoEquality >] ty_uexpr =
     | Te_Row of (id * ty_expr) list * ty_expr option
 with
     interface annotable with
-        member __.annot_sep = Config.Printing.kind_annotation_sep
+        member __.annot_sep = Config.Printing.kind_annotation_sep   // TODO: redesign this annot_sep thing
 
 and [< NoComparison; NoEquality >] ty_udecl =
     | Td_Bind of ty_binding list
