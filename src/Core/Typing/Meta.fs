@@ -114,6 +114,10 @@ module private Eval =
             | Te_Annot (τ, _) ->
                 yield! E τ
 
+            | Te_Scheme (ids, τ) ->
+                let! t = E τ
+                yield T_Scheme (List.map var.fresh_named ids, t)
+
             | Te_Let (d, τ1) ->
                 yield! M.fork_Δ <| M {
                     do! eval_ty_decl ctx d

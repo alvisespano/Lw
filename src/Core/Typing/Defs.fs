@@ -35,6 +35,7 @@ and [< NoComparison; CustomEquality >] ty =
     | T_Var of var * kind
     | T_HTuple of ty list * kind
     | T_App of (ty * ty)
+    | T_Scheme of var list * ty
     | T_Closure of id * tenv ref * ty_expr * kind
 with
     static member binding_separator = Config.Printing.type_annotation_sep
@@ -45,6 +46,7 @@ with
         | T_Var (_, k)
         | T_HTuple (_, k)
         | T_Closure (_, _, _, k) -> k
+        | T_Scheme (_, t)        -> t.kind
         | T_App (t1, _) ->
             match t1.kind with
             | K_Arrow (_, k) -> k
@@ -58,6 +60,7 @@ with
         | T_Var (α, k)              -> (α, k).GetHashCode ()
         | T_HTuple (ts, k)          -> (ts, k).GetHashCode ()
         | T_App (t1, t2)            -> (t1, t2).GetHashCode ()
+        | T_Scheme (αs, t)          -> (αs, t).GetHashCode ()
         | T_Closure (_, _, _, _)    -> unexpected "hashing type closure: %O" __SOURCE_FILE__ __LINE__ this
 
     interface IEquatable<ty> with
@@ -363,7 +366,7 @@ let (|Vi_T_Nodes|Vi_T_Var|Vi_T_Leaf|) = function
     | T_Cons _ as t    -> Vi_T_Leaf t
     | T_App (t1, t2)   -> Vi_T_Nodes [t1; t2]
     | T_HTuple (ts, _) -> Vi_T_Nodes ts
-
+    | T_Scheme (_, t)  -> Vi_T_Nodes [t]
     | T_Row (bs, αo) ->
         let bs = [ for x, t in bs -> x, t]
 //        let f ts = List.map2 (fun (x, _) t -> x, t) bs ts
@@ -427,41 +430,34 @@ type kind with
         in
             k.apply_to_vars (fun α -> match θ.search α with Some β -> K_Var β | None -> k) R
     
+    member k.subst (Θ : ksubst) =
+        let Sk (k : kind) = k.subst Θ
+        in
+            k.apply_to_vars (fun α -> match Θ.search α with Some k -> k | None -> K_Var α) Sk
+
 type ty with
-    member t.apply_to_vars f R S =
+    member private t.apply_to_vars f S Sk =
         match t with
         | T_Var (α, k)                  -> f (α, k)
-        | T_Cons (x, k)                 -> T_Cons (x, S k)
-        | T_App (t1, t2)                -> T_App (R t1, R t2)
-        | T_HTuple (ts, k)              -> T_HTuple (List.map R ts, S k)
-        | T_Closure (x, Δ, τ, k)        -> T_Closure (x, Δ, τ, S k)
+        | T_Cons (x, k)                 -> T_Cons (x, Sk k)
+        | T_App (t1, t2)                -> T_App (S t1, S t2)
+        | T_HTuple (ts, k)              -> T_HTuple (List.map S ts, Sk k)
+        | T_Scheme (αs, t)              -> if Set.intersect αs T_Scheme (αs, S t)
+        | T_Closure (x, Δ, τ, k)        -> T_Closure (x, Δ, τ, Sk k)
 
     member t.subst_vars (θ : vasubst) =
-        let R (t : ty) = t.subst_vars θ
-        let S (k : kind) = k.subst_vars θ
+        let S (t : ty) = t.subst_vars θ
+        let Sk (k : kind) = k.subst_vars θ
         in
-            t.apply_to_vars (fun (α, k) -> match θ.search α with Some β -> T_Var (β, k) | None -> T_Var (α, S k)) R S
+            t.apply_to_vars (fun (α, k) -> match θ.search α with Some β -> T_Var (β, k) | None -> T_Var (α, Sk k)) S Sk
 
-let rec subst_kind (Θ : ksubst) (k : kind) =
-    let R = subst_kind Θ
-    in
-        k.apply_to_vars (fun α -> match Θ.search α with Some k -> k | None -> K_Var α) R
+    member t.subst (θ : tsubst, Θ : ksubst) =
+        let S (t : ty) = t.subst (θ, Θ)
+        let Sk (k : kind) = k.subst Θ
+        in
+            t.apply_to_vars (fun (α, k) -> match θ.search α with Some t -> t | None -> T_Var (α, Sk k)) S Sk
 
-let rec subst_ty (θ : tsubst, Θ : ksubst) (t : ty) =
-    let R = subst_ty (θ, Θ)
-    let S = subst_kind Θ
-    in
-        t.apply_to_vars (fun (α, k) -> match θ.search α with Some t -> t | None -> T_Var (α, S k)) R S
-
-//// first argument is the NEW subst, second argument is the OLD one
-let compose_ksubst (θ1 : ksubst) θ2 = θ1.compose subst_kind θ2
-
-let compose_tksubst (θ1 : tsubst, Θ1) (θ2, Θ2) =
-    let Θ = compose_ksubst Θ1 Θ2
-    let θ = θ1.compose (fun θ -> subst_ty (θ, Θ)) θ2
-    in
-        θ, Θ
-        
+       
 
 // augmentations for kinds
 //
@@ -579,6 +575,30 @@ type scheme with
 // substitution applications
 //
 
+//let rec subst_kind (Θ : ksubst) (k : kind) = 
+//    let R = subst_kind Θ
+//    in
+//        k.apply_to_vars (fun α -> match Θ.search α with Some k -> k | None -> K_Var α) R
+//
+//let rec subst_ty (θ : tsubst, Θ : ksubst) (t : ty) =
+//    let R = subst_ty (θ, Θ)
+//    let S = subst_kind Θ
+//    in
+//        t.apply_to_vars (fun (α, k) -> match θ.search α with Some t -> t | None -> T_Var (α, S k)) R S
+
+let subst_kind θ (k : kind) = k.subst θ
+
+let subst_ty Σ (t : ty) = t.subst Σ
+
+//// first argument is the NEW subst, second argument is the OLD one
+let compose_ksubst (θ1 : ksubst) θ2 = θ1.compose subst_kind θ2
+
+let compose_tksubst (θ1 : tsubst, Θ1) (θ2, Θ2) =
+    let Θ = compose_ksubst Θ1 Θ2
+    let θ = θ1.compose (fun θ -> subst_ty (θ, Θ)) θ2
+    in
+        θ, Θ
+
 // TODO: implement actual substitution of type constraints for GADTs
 let subst_type_constraints _ tcs = tcs
 
@@ -604,7 +624,7 @@ let subst_tenv Σ (env : tenv) = env.map (fun _ -> subst_ty Σ)
 
 // type primitives
 
-let fv_env fv (env : Env.t<_, _>) = env.fold (fun αs _ v -> Set.union αs (fv v)) Set.empty
+let internal fv_env fv (env : Env.t<_, _>) = env.fold (fun αs _ v -> Set.union αs (fv v)) Set.empty
 
 let fv_Γ (Γ : jenv) = fv_env (fun { scheme = σ } -> σ.fv) Γ
 
