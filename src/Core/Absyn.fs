@@ -396,7 +396,7 @@ and [< NoComparison; NoEquality >] ty_uexpr =
     | Te_Match of ty_expr * ty_case list
     | Te_Annot of ty_expr * kind
     | Te_Row of (id * ty_expr) list * ty_expr option
-    | Te_Scheme of id list * ty_expr
+    | Te_Forall of id list * ty_expr
 with
     interface annotable with
         member __.annot_sep = Config.Printing.kind_annotation_sep   // TODO: redesign this annot_sep thing
@@ -526,7 +526,7 @@ type ty_uexpr with
             | Te_Let (d, e)            -> sprintf "let %O in %O" d e
             | Te_Match (e, cases)      -> sprintf "match %O with\n| %s" e (pretty_cases cases)
             | Te_Row (bs, o)           -> sprintf "(| %s |)" (pretty_row " | " Config.Printing.type_annotation_sep (bs, o))
-            | Te_Scheme (ids, t)       -> sprintf "forall %s. %O" (flatten_strings Config.Printing.sep_in_forall ids) t
+            | Te_Forall (ids, t)       -> sprintf "forall %s. %O" (flatten_strings Config.Printing.sep_in_forall ids) t
 
 type ty_udecl with       
     override this.ToString () = this.pretty

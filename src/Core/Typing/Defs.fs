@@ -35,7 +35,7 @@ and [< NoComparison; CustomEquality >] ty =
     | T_Var of var * kind
     | T_HTuple of ty list * kind
     | T_App of (ty * ty)
-    | T_Scheme of var list * ty
+    | T_Forall of var Set * ty
     | T_Closure of id * tenv ref * ty_expr * kind
 with
     static member binding_separator = Config.Printing.type_annotation_sep
@@ -46,7 +46,7 @@ with
         | T_Var (_, k)
         | T_HTuple (_, k)
         | T_Closure (_, _, _, k) -> k
-        | T_Scheme (_, t)        -> t.kind
+        | T_Forall (_, t)        -> t.kind
         | T_App (t1, _) ->
             match t1.kind with
             | K_Arrow (_, k) -> k
@@ -60,7 +60,7 @@ with
         | T_Var (α, k)              -> (α, k).GetHashCode ()
         | T_HTuple (ts, k)          -> (ts, k).GetHashCode ()
         | T_App (t1, t2)            -> (t1, t2).GetHashCode ()
-        | T_Scheme (αs, t)          -> (αs, t).GetHashCode ()
+        | T_Forall (αs, t)          -> (αs, t).GetHashCode ()
         | T_Closure (_, _, _, _)    -> unexpected "hashing type closure: %O" __SOURCE_FILE__ __LINE__ this
 
     interface IEquatable<ty> with
@@ -366,7 +366,7 @@ let (|Vi_T_Nodes|Vi_T_Var|Vi_T_Leaf|) = function
     | T_Cons _ as t    -> Vi_T_Leaf t
     | T_App (t1, t2)   -> Vi_T_Nodes [t1; t2]
     | T_HTuple (ts, _) -> Vi_T_Nodes ts
-    | T_Scheme (_, t)  -> Vi_T_Nodes [t]
+    | T_Forall (_, t)  -> Vi_T_Nodes [t]
     | T_Row (bs, αo) ->
         let bs = [ for x, t in bs -> x, t]
 //        let f ts = List.map2 (fun (x, _) t -> x, t) bs ts
@@ -436,26 +436,31 @@ type kind with
             k.apply_to_vars (fun α -> match Θ.search α with Some k -> k | None -> K_Var α) Sk
 
 type ty with
-    member private t.apply_to_vars f S Sk =
+    member private t.apply_to_vars f (θ : subst<_>) S Sk =
         match t with
-        | T_Var (α, k)                  -> f (α, k)
-        | T_Cons (x, k)                 -> T_Cons (x, Sk k)
-        | T_App (t1, t2)                -> T_App (S t1, S t2)
-        | T_HTuple (ts, k)              -> T_HTuple (List.map S ts, Sk k)
-        | T_Scheme (αs, t)              -> if Set.intersect αs T_Scheme (αs, S t)
-        | T_Closure (x, Δ, τ, k)        -> T_Closure (x, Δ, τ, Sk k)
+        | T_Var (α, k) ->
+            match θ.search α with
+            | Some x -> f x k
+            | None   -> T_Var (α, Sk k)
+
+        | T_Cons (x, k)             -> T_Cons (x, Sk k)
+        | T_App (t1, t2)            -> T_App (S t1, S t2)
+        | T_HTuple (ts, k)          -> T_HTuple (List.map S ts, Sk k)
+        | T_Forall (αs, t)          -> if not <| Set.isEmpty (Set.intersect αs θ.dom) then unexpected "some quantified variables in %O appear in domain of substituion %O" __SOURCE_FILE__ __LINE__ t θ // TODO: can this check be removed?
+                                       T_Forall (αs, S t)
+        | T_Closure (x, Δ, τ, k)    -> T_Closure (x, Δ, τ, Sk k)
 
     member t.subst_vars (θ : vasubst) =
         let S (t : ty) = t.subst_vars θ
         let Sk (k : kind) = k.subst_vars θ
         in
-            t.apply_to_vars (fun (α, k) -> match θ.search α with Some β -> T_Var (β, k) | None -> T_Var (α, Sk k)) S Sk
+            t.apply_to_vars (fun β k -> T_Var (β, Sk k)) θ S Sk
 
     member t.subst (θ : tsubst, Θ : ksubst) =
         let S (t : ty) = t.subst (θ, Θ)
         let Sk (k : kind) = k.subst Θ
         in
-            t.apply_to_vars (fun (α, k) -> match θ.search α with Some t -> t | None -> T_Var (α, Sk k)) S Sk
+            t.apply_to_vars (fun t _ -> t) θ S Sk
 
        
 
@@ -492,7 +497,7 @@ type ty with
     member this.pretty =
         let (|T_Sym_Cons|_|) = (|Sym|_|) (function T_Cons (x, k) -> Some (x, (x, k)) | _ -> None)
         let (|A|_|) = function
-            | T_Tuple _ -> None // NOTE: tuples are encoded via records, so they must be matched before
+            | T_Tuple _ -> None // NOTE: tuples are encoded using records (i.e. row types with integer labels), so they must be matched before
             | T_Var _ | T_Record _ | T_Variant _ | T_Cons _ | T_Closure _ | T_Row _ as e -> Some e
             | _ -> None
         let (|App|) = (|Application|) (function T_App (t1, t2) -> Some (t1, t2) | _ -> None) (|A|_|)
@@ -518,8 +523,8 @@ type ty with
             | T_Arrow (T_Arrow _ as t1, t2) -> sprintf "(%s) -> %s" (R t1) (R t2)
             | T_Arrow (t1, t2)              -> sprintf "%s -> %s" (R t1) (R t2)
 
-            | T_App (App s) -> s
-
+            | T_App (App s)          -> s
+            | T_Forall (αs, t)       -> sprintf "forall %s. %O" (flatten_stringables Config.Printing.sep_in_forall αs) t
             | T_Closure (x, _, τ, k) -> sprintf "<[%O] :: %O>" (Te_Lambda ((x, None), τ)) k
         in
             R this

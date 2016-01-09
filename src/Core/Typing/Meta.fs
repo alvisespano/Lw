@@ -114,9 +114,9 @@ module private Eval =
             | Te_Annot (τ, _) ->
                 yield! E τ
 
-            | Te_Scheme (ids, τ) ->
+            | Te_Forall (ids, τ) ->
                 let! t = E τ
-                yield T_Scheme (List.map var.fresh_named ids, t)
+                yield T_Forall (Computation.set { for id in ids do yield var.fresh_named id }, t)
 
             | Te_Let (d, τ1) ->
                 yield! M.fork_Δ <| M {
@@ -276,7 +276,6 @@ and pk_ty_expr' (ctx : context) (τ0 : ty_expr) =
                     let! _ = K.bind_γ x { forall = Set.empty; kind = α }
                     yield α
 
-//            | Te_Var x
         | Te_Id x ->
             let! ς = K.lookup_γ x
             yield kinstantiate ς
@@ -300,6 +299,10 @@ and pk_ty_expr' (ctx : context) (τ0 : ty_expr) =
             let α = kind.fresh_var
             do! K.kunify τ1.loc (K_Arrow (k2, α)) k1
             yield α
+
+        | Te_Forall (ids, τ) ->
+            let! t = E τ
+            yield T_Forall (Computation.set { for id in ids do yield var.fresh_named id }, t)
 
         | Te_Annot (τ, k) ->
             let! kτ = R τ
