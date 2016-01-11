@@ -2,6 +2,8 @@
 namespace Test
 
 
+let f (x : 'a :: 'b -> 'c) = x, y
+
 // check type variable scoping
 //
 

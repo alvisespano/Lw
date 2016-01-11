@@ -1,10 +1,15 @@
 ﻿
-8/01/2015:
+11/01/2016:
+* REFACT: Foralls active patterns and virtual constructor; support for universal quantifier in type expressions and type
+* REFACT: support for work on first-class polymorphism started
+
+
+8/01/2016:
 * TODO.txt file reworked
 * looking for a serious test suite: OCaml test suite could do, with a little 
 
 
-7/01/2015:
+7/01/2016:
 * FIX: scoped type variables implemented and seems to work in general. Needs more testing though.
 
 

@@ -35,7 +35,7 @@ and [< NoComparison; CustomEquality >] ty =
     | T_Var of var * kind
     | T_HTuple of ty list * kind
     | T_App of (ty * ty)
-    | T_Forall of var Set * ty
+    | T_Forall of var * ty
     | T_Closure of id * tenv ref * ty_expr * kind
 with
     static member binding_separator = Config.Printing.type_annotation_sep
@@ -303,6 +303,9 @@ let (|T_Star_Var|_|) = function
 let T_Apps = Apps T_App
 let (|T_Apps|_|) = (|Apps|_|) (function T_App (t1, t2) -> Some (t1, t2) | _ -> None)
 
+let T_Foralls = Foralls T_Forall
+let (|T_Foralls|_|) = (|Foralls|_|) (function T_Forall (αs, t) -> Some (αs, t) | _ -> None)
+
 let T_ConsApps ((x, k), ts) = T_Apps (T_Cons (x, k) :: ts)
 let (|T_ConsApps|_|) = function
     | T_Apps (T_Cons (x, k) :: ts) -> Some ((x, k), ts)
@@ -446,8 +449,8 @@ type ty with
         | T_Cons (x, k)             -> T_Cons (x, Sk k)
         | T_App (t1, t2)            -> T_App (S t1, S t2)
         | T_HTuple (ts, k)          -> T_HTuple (List.map S ts, Sk k)
-        | T_Forall (αs, t)          -> if not <| Set.isEmpty (Set.intersect αs θ.dom) then unexpected "some quantified variables in %O appear in domain of substituion %O" __SOURCE_FILE__ __LINE__ t θ // TODO: can this check be removed?
-                                       T_Forall (αs, S t)
+        | T_Forall (α, t)           -> if Set.exists ((=) α) θ.dom then unexpected "some quantified variables in %O appear in domain of substituion %O" __SOURCE_FILE__ __LINE__ t θ // TODO: can this check be removed?
+                                       T_Forall (α, S t)
         | T_Closure (x, Δ, τ, k)    -> T_Closure (x, Δ, τ, Sk k)
 
     member t.subst_vars (θ : vasubst) =
@@ -524,8 +527,11 @@ type ty with
             | T_Arrow (t1, t2)              -> sprintf "%s -> %s" (R t1) (R t2)
 
             | T_App (App s)          -> s
-            | T_Forall (αs, t)       -> sprintf "forall %s. %O" (flatten_stringables Config.Printing.sep_in_forall αs) t
+            | T_Foralls (αs, t)      -> sprintf "forall %s. %O" (flatten_stringables Config.Printing.sep_in_forall αs) t
             | T_Closure (x, _, τ, k) -> sprintf "<[%O] :: %O>" (Te_Lambda ((x, None), τ)) k
+
+            // these are not supposed to be matched because active patterns should stand in place of them above
+            | T_Forall _ as t -> unexpected "term %O in type" __SOURCE_FILE__ __LINE__ t
         in
             R this
 

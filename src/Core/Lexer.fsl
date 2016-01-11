@@ -80,6 +80,7 @@ and tokenize = parse
     | "data"        { DATA }
     | "val"         { VAL } 
 	| "type"		{ TYPE }
+    | "forall"      { FORALL }
 	| "if"			{ IF }
 	| "then"        { THEN }
 	| "else"		{ ELSE }

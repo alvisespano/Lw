@@ -15,7 +15,7 @@ let parse_error_rich = Some (fun ctx -> raise (ParseErrorContextException ctx))
 %token <System.Double> FLOAT
 %token <System.Char> CHAR
 %token <System.String> STRING UID LID INFIX TICK_ID BACKTICK_ID AT_ID
-%token TYPE EQ STAR ARROW VAL OVER BRAGT LTKET BRALT GTKET HASH DO INJECT EJECT IMPLIES DATATYPE DATA
+%token TYPE EQ STAR ARROW VAL OVER BRAGT LTKET BRALT GTKET HASH DO INJECT EJECT IMPLIES DATATYPE DATA FORALL
        LET REC IN IF THEN ELSE FUN MATCH WHEN WITH FUNCTION TRUE FALSE AS OF NAMESPACE OPEN WHERE OVERLOAD
 	   DOUBLEAMP DOUBLEPIPE UNDERSCORE BACKSLASH KIND QUESTION
 	   BRA KET CURBRA CURKET SQBRA SQKET 
@@ -99,7 +99,7 @@ top_decls:
 
 top_decl:								
   | LET let_or_letrec_decl              { $2 }
-  | nested_decl                    { $1 }
+  | nested_decl                         { $1 }
 
 
 
@@ -265,12 +265,21 @@ kinded_param:
     id                                 { ($1, None) }
   | id COLON2 kind_annotation          { ($1, Some $3) }
 
+ty_forall_param:
+    TICK_ID                            { ($1, None) }
+  | TICK_ID COLON2 kind_annotation     { ($1, Some $3) }
+    
+ty_forall_params:
+    ty_forall_param                    { [$1] }
+  | ty_forall_param ty_forall_params   { $1 :: $2 }
+
 
 
 /*
  * kinds
  */
 
+// TODO: how can this not produce reduce/reduce conflict? annotation should be kind_arrow_atom
 kind_annotation:
     kind                                        { $1 }
 
@@ -307,6 +316,7 @@ kind_args:
  * type expressions
  */
 
+// TODO: how can this not produce reduce/reduce conflict? annotation should be arrow atom or something
 ty_expr_annotation:
     ty_expr                                 { $1 }
 
@@ -324,6 +334,7 @@ ty_expr_app_atom:
 
 ty_expr_:
   | FUN ty_fun_param_cases                          { (Te_LambdaCases $2).value }
+  | FORALL ty_forall_params DOT ty_expr             { Te_Foralls ($2, $4) }
   | FUNCTION ty_cases                               { (Te_LambdaFunction $2).value }
   | MATCH ty_expr WITH ty_cases			            { Te_Match ($2, $4) }
   | LET let_ty_decls IN ty_expr                     { (Te_Lets ($2, $4)).value }

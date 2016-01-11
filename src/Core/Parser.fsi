@@ -19,6 +19,7 @@ type token =
   | IMPLIES
   | DATATYPE
   | DATA
+  | FORALL
   | LET
   | REC
   | IN
@@ -103,6 +104,7 @@ type tokenId =
     | TOKEN_IMPLIES
     | TOKEN_DATATYPE
     | TOKEN_DATA
+    | TOKEN_FORALL
     | TOKEN_LET
     | TOKEN_REC
     | TOKEN_IN
@@ -218,6 +220,8 @@ type nonTerminalId =
     | NONTERM_id
     | NONTERM_typed_param
     | NONTERM_kinded_param
+    | NONTERM_ty_forall_param
+    | NONTERM_ty_forall_params
     | NONTERM_kind_annotation
     | NONTERM_kind
     | NONTERM_kind_arrow_atom

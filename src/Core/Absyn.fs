@@ -103,15 +103,24 @@ let rec (|Apps|_|) (|App|_|) = function
     | App (x1, x2)               -> Some [x1; x2]
     | _                          -> None
 
+let Foralls forall (αs, t) = List.foldBack (fun α t -> forall (α, t)) αs t
+
+let rec (|Foralls|_|) (|Forall|_|) = function
+    | Forall (α, Foralls (|Forall|_|) (αs, t)) -> Some (α :: αs, t)
+    | Forall (α, t)                            -> Some ([α], t)
+    | _                                        -> None
+
 type annotable =
     abstract annot_sep : string
 
-type 'n param = id * 'n option
+type param<'id, 'n>  = 'id * 'n option
+
+type 'n id_param = param<id, 'n>
 
 let pretty_param sep (id, tyo) =
     match tyo with
-        | None   -> id
-        | Some a -> sprintf "%s %s %O" id sep a
+        | None   -> sprintf "%O" id
+        | Some a -> sprintf "%O %s %O" id sep a
 
 
 // variables
@@ -299,8 +308,9 @@ type kind with
 
     static member fresh_var = K_Var var.fresh
 
-type kinded_param = kind param
+type kinded_param = kind id_param
 
+type kinded_var_param = param<var, kind>
 
 // bindings and cases
 //
@@ -312,7 +322,7 @@ with
     override this.ToString () = this.pretty
     member this.pretty = sprintf "%O%O = %O" this.qual this.patt this.expr
 
-type [< NoComparison; NoEquality >] rec_qbinding<'q, 'par, 'e, 'a when 'e :> annotable> = { qual : 'q; par : 'par param; expr : node<'e, 'a> }
+type [< NoComparison; NoEquality >] rec_qbinding<'q, 'par, 'e, 'a when 'e :> annotable> = { qual : 'q; par : 'par id_param; expr : node<'e, 'a> }
 with
     override this.ToString () = this.pretty
     member this.pretty = sprintf "%O%O = %O" this.qual (pretty_param this.expr.value.annot_sep this.par) this.expr
@@ -396,7 +406,7 @@ and [< NoComparison; NoEquality >] ty_uexpr =
     | Te_Match of ty_expr * ty_case list
     | Te_Annot of ty_expr * kind
     | Te_Row of (id * ty_expr) list * ty_expr option
-    | Te_Forall of id list * ty_expr
+    | Te_Forall of kinded_param * ty_expr
 with
     interface annotable with
         member __.annot_sep = Config.Printing.kind_annotation_sep   // TODO: redesign this annot_sep thing
@@ -414,7 +424,7 @@ and ty_patt = node<ty_upatt, kind>
 and ty_decl = node<ty_udecl, unit>
 and ty_case = case<ty_upatt, ty_uexpr, kind>
 
-and typed_param = ty_expr param
+and typed_param = ty_expr id_param
 
 let private Te_Primitive name = Te_Id name
 let Te_Unit = Te_Primitive "unit"
@@ -423,6 +433,9 @@ let Te_Unit = Te_Primitive "unit"
 
 let Te_Apps τs = (Apps (fun (τ1, τ2) -> Lo τ1.loc <| Te_App (τ1, τ2)) τs).value
 let (|Te_Apps|_|) = (|Apps|_|) (function Te_App (ULo τ1, ULo τ2) -> Some (τ1, τ2) | _ -> None)
+
+let Te_Foralls (αs, τ) = (Foralls (fun (α, τ) -> Lo τ.loc <| Te_Forall (α, τ)) (αs, τ)).value
+let (|Te_Foralls|_|) = (|Foralls|_|) (function Te_Forall (α, ULo τ) -> Some (α, τ) | _ -> None)
 
 let Te_Arrow_Cons = Te_Id "->"
 let (|Te_Arrow_Cons|_|) = function
@@ -516,17 +529,17 @@ type ty_uexpr with
             | Te_HTuple ([] | [_])     -> unexpected "empty or unary tupled type expression" __SOURCE_FILE__ __LINE__
             | Te_HTuple es             -> sprintf "(%s)" (flatten_stringables ", " es)
 
-            // NOTE: arrow must be matched BEFORE app 
+            // arrow must be matched BEFORE app 
             | Te_Arrow (Te_Arrow _ as t1, t2) -> sprintf "(%O) -> %Os" t1 t2
             | Te_Arrow (t1, t2)               -> sprintf "%O -> %O" t1 t2
 
             | Te_App (App s)           -> s
-            | Te_Lambda (ka, e)        -> sprintf "fun %s -> %O" (pretty_param Config.Printing.kind_annotation_sep ka) e
+            | Te_Lambda (kpar, τ)      -> sprintf "fun %s -> %O" (pretty_param Config.Printing.kind_annotation_sep kpar) τ
             | Te_Annot (e, ty)         -> sprintf "(%O : %O)" e ty
             | Te_Let (d, e)            -> sprintf "let %O in %O" d e
             | Te_Match (e, cases)      -> sprintf "match %O with\n| %s" e (pretty_cases cases)
             | Te_Row (bs, o)           -> sprintf "(| %s |)" (pretty_row " | " Config.Printing.type_annotation_sep (bs, o))
-            | Te_Forall (ids, t)       -> sprintf "forall %s. %O" (flatten_strings Config.Printing.sep_in_forall ids) t
+            | Te_Forall ((x, ko), τ)   -> sprintf "forall %s. %O" (pretty_param Config.Printing.kind_annotation_sep (var.fresh_named x, ko)) τ
 
 type ty_udecl with       
     override this.ToString () = this.pretty
@@ -727,7 +740,7 @@ type uexpr with
             | FreeVar x             -> sprintf Config.Printing.freevar_fmt x
             | PolyCons x            -> sprintf Config.Printing.polycons_fmt x
             | App (A s)             -> s
-            | Lambda (ta, e)        -> sprintf "fun %s -> %O" (pretty_param Config.Printing.type_annotation_sep ta) e
+            | Lambda (tpar, e)      -> sprintf "fun %s -> %O" (pretty_param Config.Printing.type_annotation_sep tpar) e
             | Select (e, id)        -> sprintf "%O.%s" e id
             | Restrict (e, id)      -> sprintf "%O \ %s" e id
             | If (e1, e2, e3)       -> sprintf "if %O then %O else %O" e1 e2 e3
