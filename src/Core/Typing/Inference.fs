@@ -68,6 +68,42 @@ let rec pt_expr (ctx : context) (e0 : expr) =
         return t
     } 
 
+
+//infer :: (Q, Γ, e) → (Q, θ, ϕ)
+//
+//infer(Q, Γ, x ) =
+//return (Q, [], Γ(x))
+//
+//infer(Q, Γ, let x = e1 in e2)
+//let (Q1, θ1, ϕ1) = infer(Q, Γ, e1)
+//let (Q2, θ2, ϕ2) = infer(Q1,(θ1Γ, x : ϕ1), e2)
+//return (Q2, θ2 ◦ θ1, ϕ2)
+//
+//infer(Q, Γ, λx . e) =
+//assume α, β are fresh
+//let (Q1, θ1, ϕ1) = infer((Q, α > ⊥),(Γ, x : α), e)
+//fail if not (θ1α = τ ) for some τ
+//let (Q2, Q3) = split(Q1, dom(Q))
+//let (Q03, θ03) = extend(Q3, β > ϕ1)
+//return (Q2, θ1, ∀Q03. θ1α → θ03β)
+//
+//infer(Q, Γ, λ(x :: σ). e) =
+//assume β is fresh, σ is closed
+//let (Q1, θ1, ϕ1) = infer(Q,(Γ, x : σ), e)
+//let (Q2, Q3) = split(Q1, dom(Q))
+//let (Q03, θ03) = extend(Q3, β > ϕ1)
+//return (Q2, θ1, ∀Q03. σ → θ03β)
+//
+//infer(Q, Γ, e1 e2) =
+//assume α1, α2, β are fresh
+//let (Q1, ϕ1, θ1) = infer(Q, Γ, e1)
+//let (Q2, ϕ2, θ2) = infer(Q1, θ1Γ, e2)
+//let (Q02, θ02) = extend(Q2, α1 > θ2ϕ1, α2 > ϕ2, β > ⊥)
+//let (Q3, θ3) = unify(Q02, θ02α1, θ02α2 → β)
+//let (Q4, Q5) = split(Q3, dom(Q))
+//return (Q4, θ3 ◦ θ2 ◦ θ1, ∀Q5. θ3β)
+
+
 and pt_expr' ctx e0 =
     let Lo x = Lo e0.loc x
     let M = new translator_typing_builder<_, _> (e0)
@@ -146,14 +182,42 @@ and pt_expr' ctx e0 =
             let ρ = var.fresh
             yield T_Variant ([x, T_Arrow (α, β)], Some ρ)
 
+
+//infer(Q, Γ, λx . e) =
+//assume α, β are fresh
+//let (Q1, θ1, ϕ1) = infer((Q, α > ⊥),(Γ, x : α), e)
+//fail if not (θ1α = τ ) for some τ
+//let (Q2, Q3) = split(Q1, dom(Q))
+//let (Q03, θ03) = extend(Q3, β > ϕ1)
+//return (Q2, θ1, ∀Q03. θ1α → θ03β)
+
+//infer(Q, Γ, λ(x :: σ). e) =
+//assume β is fresh, σ is closed
+//let (Q1, θ1, ϕ1) = infer(Q,(Γ, x : σ), e)
+//let (Q2, Q3) = split(Q1, dom(Q))
+//let (Q03, θ03) = extend(Q3, β > ϕ1)
+//return (Q2, θ1, ∀Q03. σ → θ03β)
+
         | Lambda ((x, τo), e) ->
             let! tx = pt_typed_param ctx (x, τo)
+            match τo with
+            | Some _ -> 
             yield! M.fork_Γ <| M {
                 let! _ = M.bind_var_Γ x tx
                 let! t = pt_expr ctx e
                 yield T_Arrow (tx, t)
             }
                     
+
+
+//        | Lambda ((x, τo), e) ->
+//            let! tx = pt_typed_param ctx (x, τo)
+//            yield! M.fork_Γ <| M {
+//                let! _ = M.bind_var_Γ x tx
+//                let! t = pt_expr ctx e
+//                yield T_Arrow (tx, t)
+//            }
+
         | App (e1, e2) -> 
             let! t1 = pt_expr ctx e1
             let! t2 = pt_expr ctx e2

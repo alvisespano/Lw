@@ -237,9 +237,9 @@ module private Eval =
                                 return b && b'
                             }) true xps
                 match po, αo with
-                    | Some p, Some α -> let! b' = R p (T_Row_Var α) in return b' && b
-                    | None, None     -> return b
-                    | _              -> return false
+                | Some p, Some α -> let! b' = R p (T_Row_Var α) in return b' && b
+                | None, None     -> return b
+                | _              -> return false
 
             | _ ->
                 return false 
@@ -268,13 +268,13 @@ and pk_ty_expr' (ctx : context) (τ0 : ty_expr) =
         | Te_PolyVar x ->
             let! o = K.search_γ x
             match o with
-                | Some (KUngeneralized k) ->
-                    yield k
+            | Some (KUngeneralized k) ->
+                yield k
 
-                | None ->
-                    let α = K_Var var.fresh
-                    let! _ = K.bind_γ x (KUngeneralized α)
-                    yield α
+            | None ->
+                let α = K_Var var.fresh
+                let! _ = K.bind_γ x (KUngeneralized α)
+                yield α
 
         | Te_Id x ->
             let! ς = K.lookup_γ x
@@ -291,7 +291,7 @@ and pk_ty_expr' (ctx : context) (τ0 : ty_expr) =
         | Te_HTuple ([] | [_]) -> return unexpected "empty or unary tupled type expression" __SOURCE_FILE__ __LINE__
         | Te_HTuple τs ->
             let! ks = K.List.map (fun τ -> K { yield! R τ }) τs
-            yield K_HTuple ks   
+            yield K_HTuple ks
                                 
         | Te_App (τ1, τ2) ->
             let! k1 = R τ1
@@ -444,10 +444,10 @@ and pk_ty_patt ctx (p0 : ty_patt) =
                 let! k = R τ
                 do! K.kunify τ.loc K_Star k
             match po with
-                | None -> ()
-                | Some τ ->
-                    let! k = R τ
-                    do! K.kunify τ.loc K_Row k
+            | None -> ()
+            | Some τ ->
+                let! k = R τ
+                do! K.kunify τ.loc K_Row k
             yield K_Row
 
         | Tp_As (p, x) ->
