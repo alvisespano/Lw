@@ -159,7 +159,7 @@ type constraints (set : Set<constraintt>) =
 
     static member empty = new constraints (Set.empty)
 
-let constr = new Computation.Builder.itemized_collection<_, _> (empty = constraints.empty, plus1 = (fun c (cs : constraints) -> let r = cs.add c in L.debug Normal "constr = %O" r; r), plus = (+))
+let constr = new Computation.Builder.itemized_collection<_, _> (empty = constraints.empty, plus1 = (fun c (cs : constraints) -> cs.add c), plus = (+))
 
 
 
@@ -206,6 +206,8 @@ with
 // schemes and predicates
 //
 
+type prefix<'s> = Env.t<var, 's>
+
 type [< NoComparison; NoEquality >] predicate =
     {
         constraints      : constraints
@@ -214,14 +216,26 @@ type [< NoComparison; NoEquality >] predicate =
 with
     static member empty = { constraints = constraints.empty; type_constraints = C_Empty }
     
-type [< NoComparison; NoEquality >] scheme =
+type [< NoComparison; NoEquality >] forall_scheme<'scheme> =
     {
-        forall  : Set<var>
+        forall  : prefix<'scheme>
         π       : predicate
         ty      : ty
     }
+
+and [< NoComparison; NoEquality >] scheme =
+    | S_Forall of forall_scheme<scheme>
+    | S_Ty of ty
+    | S_Bottom
 with
     static member binding_separator = ty.binding_separator
+
+type [< NoComparison; NoEquality >] qscheme =
+    | QS_Forall of forall_scheme<qscheme>
+    | QS_Bottom
+with
+    static member binding_separator = scheme.binding_separator
+
 
 
 // judice environment
