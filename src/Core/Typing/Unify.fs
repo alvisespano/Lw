@@ -289,3 +289,34 @@ let is_instance_of ctx pt t =
     let t = subst_ty Σ t
     in
         is_principal_type_of ctx pt t   // TODO: unification is not enough: unifier must be SMALLER - that would tell whether it is actually an instance
+
+//splitQuants :: Type -> ([Quant],Type)
+//splitQuants tp
+//  = split [] tp
+//  where
+//    split qs tp
+//      = case tp of
+//          Forall q t  -> split (q:qs) t
+//          _           -> (reverse qs,tp)
+
+let split =
+    let rec R Q αs =
+        match Q, αs with
+        | [], _ -> [], []
+        | (α, t : ty) :: Q, αs ->
+            if Set.contains α αs then
+                let Q1, Q2 = R Q (Set.remove α αs + t.fv)
+                in
+                    (α, t) :: Q1, Q2
+            else
+                let Q1, Q2 = R Q αs
+                in
+                    Q1, (α, t) :: Q2
+    in
+        R
+
+let extend (Q : prefix) α (t : ty) =
+    let t' = t.nf
+    in
+        if t'.is_monomorphic then Q, new tsubst (α, t')
+        else (α, t) :: Q, tsubst.empty

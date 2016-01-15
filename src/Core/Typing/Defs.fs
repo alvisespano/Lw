@@ -33,15 +33,17 @@ type tenv = Env.t<id, ty>
 and [< NoComparison; CustomEquality >] ty =
     | T_Cons of id * kind
     | T_Var of var * kind
-    | T_HTuple of ty list * kind
+    | T_HTuple of ty list * kind    // this is for higher-order tuples (i.e. tuples of types, not to be confused with the type of tuples in the value language), and it's not encoded using rows because rows elements must have kind star
     | T_App of (ty * ty)
-    | T_Forall of var * ty
+    | T_Forall of (var * ty) * ty
     | T_Closure of id * tenv ref * ty_expr * kind
+    | T_Bottom
 with
     static member binding_separator = Config.Printing.type_annotation_sep
 
     member this.kind =
         match this with
+        | T_Bottom -> kind.fresh_var
         | T_Cons (_, k)
         | T_Var (_, k)
         | T_HTuple (_, k)
@@ -56,11 +58,12 @@ with
 
     override this.GetHashCode () =
         match this with
-        | T_Cons (x, k)             -> (x, k).GetHashCode ()
-        | T_Var (α, k)              -> (α, k).GetHashCode ()
-        | T_HTuple (ts, k)          -> (ts, k).GetHashCode ()
-        | T_App (t1, t2)            -> (t1, t2).GetHashCode ()
-        | T_Forall (αs, t)          -> (αs, t).GetHashCode ()
+        | T_Bottom                  -> 0
+        | T_Cons (x, k)             -> 1 + (x, k).GetHashCode ()
+        | T_Var (α, k)              -> 1 + (α, k).GetHashCode ()
+        | T_HTuple (ts, k)          -> 1 + (ts, k).GetHashCode ()
+        | T_App (t1, t2)            -> 1 + (t1, t2).GetHashCode ()
+        | T_Forall ((α, t1), t2)    -> 1 + (α, t1, t2).GetHashCode ()
         | T_Closure (_, _, _, _)    -> unexpected "hashing type closure: %O" __SOURCE_FILE__ __LINE__ this
 
     interface IEquatable<ty> with
@@ -206,8 +209,6 @@ with
 // schemes and predicates
 //
 
-type prefix<'s> = Env.t<var, 's>
-
 type [< NoComparison; NoEquality >] predicate =
     {
         constraints      : constraints
@@ -216,26 +217,13 @@ type [< NoComparison; NoEquality >] predicate =
 with
     static member empty = { constraints = constraints.empty; type_constraints = C_Empty }
     
-type [< NoComparison; NoEquality >] forall_scheme<'scheme> =
+type [< NoComparison; NoEquality >] scheme =
     {
-        forall  : prefix<'scheme>
-        π       : predicate
-        ty      : ty
+        π   : predicate
+        ty  : ty
     }
 
-and [< NoComparison; NoEquality >] scheme =
-    | S_Forall of forall_scheme<scheme>
-    | S_Ty of ty
-    | S_Bottom
-with
-    static member binding_separator = ty.binding_separator
-
-type [< NoComparison; NoEquality >] qscheme =
-    | QS_Forall of forall_scheme<qscheme>
-    | QS_Bottom
-with
-    static member binding_separator = scheme.binding_separator
-
+type prefix = (var * ty) list
 
 
 // judice environment
@@ -268,7 +256,7 @@ with
             
     member this.pretty =
         match this with
-            | Jm_Overloadable -> "(overloadable) "
+            | Jm_Overloadable -> "(overloadable) "  // TODO: this trailing space is ugly
             | Jm_Normal       -> ""
 
 type [< NoComparison; NoEquality >] jenv_value =
@@ -318,7 +306,7 @@ let T_Apps = Apps T_App
 let (|T_Apps|_|) = (|Apps|_|) (function T_App (t1, t2) -> Some (t1, t2) | _ -> None)
 
 let T_Foralls = Foralls T_Forall
-let (|T_Foralls|_|) = (|Foralls|_|) (function T_Forall (αs, t) -> Some (αs, t) | _ -> None)
+let (|T_Foralls|) = (|Foralls|) (function T_Forall ((α, t1), t2) -> Some ((α, t1), t2) | _ -> None)
 
 let T_ConsApps ((x, k), ts) = T_Apps (T_Cons (x, k) :: ts)
 let (|T_ConsApps|_|) = function
@@ -377,22 +365,22 @@ let private (|T_Rowed|_|) name = function
 let T_Record, T_Variant, T_Tuple, (|T_Record|_|), (|T_Variant|_|), (|T_Tuple|_|) = make_rows T_Rowed (|T_Rowed|_|)
 let T_Tailed_Record xts = T_Record (xts, Some var.fresh)
 
-let (|Vi_T_Nodes|Vi_T_Var|Vi_T_Leaf|) = function
-    | T_Var (α, k)     -> Vi_T_Var (α, k)
-    | T_Closure _
-    | T_Cons _ as t    -> Vi_T_Leaf t
-    | T_App (t1, t2)   -> Vi_T_Nodes [t1; t2]
-    | T_HTuple (ts, _) -> Vi_T_Nodes ts
-    | T_Forall (_, t)  -> Vi_T_Nodes [t]
-    | T_Row (bs, αo) ->
-        let bs = [ for x, t in bs -> x, t]
-//        let f ts = List.map2 (fun (x, _) t -> x, t) bs ts
-        let t0 =
-            match αo with
-                | Some ρ -> [T_Row_Var ρ]
-                | None   -> []
-        in
-            Vi_T_Nodes (t0 @ (List.map snd bs))
+//let (|Vi_T_Nodes|Vi_T_Var|Vi_T_Leaf|) = function
+//    | T_Var (α, k)     -> Vi_T_Var (α, k)
+//    | T_Closure _
+//    | T_Cons _ as t    -> Vi_T_Leaf t
+//    | T_App (t1, t2)   -> Vi_T_Nodes [t1; t2]
+//    | T_HTuple (ts, _) -> Vi_T_Nodes ts
+//    | T_Forall (_, t)  -> Vi_T_Nodes [t]
+//    | T_Row (bs, αo) ->
+//        let bs = [ for x, t in bs -> x, t]
+////        let f ts = List.map2 (fun (x, _) t -> x, t) bs ts
+//        let t0 =
+//            match αo with
+//                | Some ρ -> [T_Row_Var ρ]
+//                | None   -> []
+//        in
+//            Vi_T_Nodes (t0 @ (List.map snd bs))
 
 
 // substitutions
@@ -412,7 +400,7 @@ type [< NoComparison; NoEquality >] subst<'t> (env : Env.t<var, 't>) =
 
     member __.is_empty = env.is_empty
     member __.search = env.search
-    member __.dom = env.keys |> Set.ofSeq
+    member __.dom = env.dom
     member __.restrict αs = new subst<'t> (env.filter (fun α _ -> Set.contains α αs))
     member __.restrict αks = new subst<'t> (env.filter (fun α _ -> Set.exists (fun (α', _) -> α = α') αks))
     member __.remove αs = new subst<'t> (Seq.fold (fun env α -> env.remove α) env αs)
@@ -455,6 +443,7 @@ type kind with
 type ty with
     member private t.apply_to_vars f (θ : subst<_>) S Sk =
         match t with
+        | T_Bottom -> T_Bottom
         | T_Var (α, k) ->
             match θ.search α with
             | Some x -> f x k
@@ -463,8 +452,8 @@ type ty with
         | T_Cons (x, k)             -> T_Cons (x, Sk k)
         | T_App (t1, t2)            -> T_App (S t1, S t2)
         | T_HTuple (ts, k)          -> T_HTuple (List.map S ts, Sk k)
-        | T_Forall (α, t)           -> if Set.exists ((=) α) θ.dom then unexpected "some quantified variables in %O appear in domain of substituion %O" __SOURCE_FILE__ __LINE__ t θ // TODO: can this check be removed?
-                                       T_Forall (α, S t)
+        | T_Forall ((α, t1), t2)    -> if Set.contains α θ.dom then unexpected "some quantified variables in polymorphic type %O appear in domain of substituion %O" __SOURCE_FILE__ __LINE__ t θ // TODO: can this check be removed?
+                                       T_Forall ((α, S t1), S t2)
         | T_Closure (x, Δ, τ, k)    -> T_Closure (x, Δ, τ, Sk k)
 
     member t.subst_vars (θ : vasubst) =
@@ -553,11 +542,43 @@ type ty with
     
     static member fresh_var = T_Star_Var var.fresh
 
+    // free type variables
     member this.fv =
         match this with
-        | Vi_T_Var (α, k) -> Set.singleton α + k.fv
-        | Vi_T_Leaf t     -> t.kind.fv
-        | Vi_T_Nodes ts   -> List.fold (fun set (t : ty) -> set + t.fv) Set.empty ts
+        | T_Bottom                  -> Set.empty
+        | T_Var (α, k)              -> Set.singleton α + k.fv
+        | T_Cons (_, k)             -> k.fv
+        | T_HTuple (ts, k)          -> List.fold (fun r (t : ty) -> Set.union r t.fv) Set.empty ts + k.fv 
+        | T_App (t1, t2)            -> Set.union t1.fv t2.fv
+        | T_Forall ((α, t1), t2)    -> let r2 = t2.fv in if Set.contains α r2 then t1.fv + (Set.remove α r2) else r2
+        | T_Closure (_, _, _, k)    -> k.fv
+
+    member this.is_monomorphic =
+        match this with
+        | T_Bottom          
+        | T_Forall _        -> false
+        | T_Var _
+        | T_Cons _             
+        | T_Closure _       -> true
+        | T_App (t1, t2)    -> t1.is_monomorphic && t2.is_monomorphic
+        | T_HTuple (ts, _)  -> List.fold (fun r (t : ty) -> r && t.is_monomorphic) true ts
+
+    // normal form
+    member this.nf =
+        match this with
+        | T_Forall ((α, t1), t2) ->
+            if not <| Set.contains α t2.fv then t2.nf
+            elif match t2.nf with
+                 | T_Var (β, _) -> α = β
+                 | _            -> false
+            then t1.nf
+            else
+                let t' = t1.nf
+                in
+                    if t'.is_monomorphic then t2.subst (new tsubst (α, t'), ksubst.empty)
+                    else T_Forall ((α, t'), t2.nf)
+
+        | t -> t
 
 
 type predicate with
@@ -583,18 +604,20 @@ type scheme with
     override this.ToString () = this.pretty
 
     member σ.pretty =
-        match σ with
-            | { forall = αs; π = { constraints = cs } as π; ty = t } ->
-                use N = var.reset_normalization αs
-                let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.sep_in_forall αs)
-                let πpart = if cs.is_empty then "" else sprintf "%O => " π
-                in
-                    sprintf "%s%s%O" αspart πpart t
+        let { π = { constraints = cs } as π; ty = T_Foralls (Q, t) } = σ
+        let αs = Computation.set { for α, _ in Q do yield α }
+        use N = var.reset_normalization αs
+        let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.sep_in_forall αs)
+        let πpart = if cs.is_empty then "" else sprintf "%O => " π
+        in
+            sprintf "%s%s%O" αspart πpart t
                         
     member this.fv =
-        match this with
-            | { forall = αks; π = π; ty = t } -> (t.fv + π.fv) - αks
+        let { π = π; ty = t } = this
+        in
+            π.fv + t.fv
 
+    
 
 
 // substitution applications
@@ -632,10 +655,9 @@ let subst_predicate Σ π =
       type_constraints  = subst_type_constraints Σ π.type_constraints }
 
 let subst_scheme (θ : tsubst, Θ) σ =
-    let { forall = αs; π = π; ty = t } = σ
-    let θ = θ.remove αs
+    let { π = π; ty = t } = σ
     in
-        { forall = αs; π = subst_predicate (θ, Θ) π; ty = subst_ty (θ, Θ) t }
+        { π = subst_predicate (θ, Θ) π; ty = subst_ty (θ, Θ) t }
         
 let subst_kscheme (Θ : ksubst) σκ =
     let { forall = αs; kind = k } = σκ
@@ -647,7 +669,9 @@ let subst_jenv Σ (env : jenv) = env.map (fun _ ({ scheme = σ } as jv) -> { jv 
 let subst_kjenv Θ (env : kjenv) = env.map (fun _ -> subst_kscheme Θ)
 let subst_tenv Σ (env : tenv) = env.map (fun _ -> subst_ty Σ)
 
-// type primitives
+// some operations of types, schemes and prefixes
+
+let prefix_dom Q = Computation.set { for α, _ in Q do yield α }
 
 let internal fv_env fv (env : Env.t<_, _>) = env.fold (fun αs _ v -> Set.union αs (fv v)) Set.empty
 

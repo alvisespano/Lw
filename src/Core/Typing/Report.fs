@@ -124,6 +124,9 @@ module Error =
         // TODO: print a better message, hiding the mention to constraints and referring to closed-world overloading only
         E 22 loc "when generalizing symbol `%O : %O` the constraint `%s : %O` has not been resolved and was referring to a closed-world overloaded symbol" x t cx ct
 
+    let lambda_parameter_is_not_monomorphic loc x t =
+        E 23 loc "function parameter is used polymorphically: %s : %O" x t
+
 
 [< RequireQualifiedAccess >]
 module Warn =

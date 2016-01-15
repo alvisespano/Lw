@@ -103,12 +103,14 @@ let rec (|Apps|_|) (|App|_|) = function
     | App (x1, x2)               -> Some [x1; x2]
     | _                          -> None
 
-let Foralls forall (αs, t) = List.foldBack (fun α t -> forall (α, t)) αs t
+let Foralls forall = function
+    | [], t -> t
+    | αs, t -> List.foldBack (fun α t -> forall (α, t)) αs t
 
-let rec (|Foralls|_|) (|Forall|_|) = function
-    | Forall (α, Foralls (|Forall|_|) (αs, t)) -> Some (α :: αs, t)
-    | Forall (α, t)                            -> Some ([α], t)
-    | _                                        -> None
+let rec (|Foralls|) (|Forall|_|) = function
+    | Forall (α, Foralls (|Forall|_|) (αs, t)) -> (α :: αs, t)
+    | Forall (α, t)                            -> ([α], t)
+    | t                                        -> ([], t)
 
 type annotable =
     abstract annot_sep : string

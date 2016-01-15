@@ -40,7 +40,7 @@ let rec kmgu (ctx : mgu_context) k1_ k2_ =
 
         | K_Var α, k
         | k, K_Var α ->
-            if Set.exists (fun α' -> α' = α) k.fv then Report.Error.kind_circularity loc k1_ k2_ α k
+            if Set.contains α k.fv then Report.Error.kind_circularity loc k1_ k2_ α k
             else new ksubst (α, k)
 
         | _ ->

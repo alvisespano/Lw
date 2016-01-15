@@ -29,13 +29,20 @@ with
 
 type [< NoComparison; NoEquality >] state =
     {
+        // environments
         Γ   : jenv              // type judices
         γ   : kjenv             // kind judices
         δ   : tenv              // evaluated types
+
+        // substitutions
         θ   : tsubst            // type substitution
         Θ   : ksubst            // kind substitution
-        π   : predicate         // global predicate
 
+        // predicates
+        π   : predicate         // global predicate
+        Q   : prefix            // prefix for quantified type variables
+
+        // extras
         named_tyvars   : Env.t<id, int>    // named type variables
     }
 with
@@ -54,7 +61,7 @@ with
             δ   = tenv.empty
             Θ   = ksubst.empty
             π   = predicate.empty
-
+            Q   = []
             named_tyvars = Env.empty
         }
 
@@ -77,6 +84,7 @@ type basic_builder (loc : location) =
     member __.get_Δ st = st.δ, st
     member __.get_γ st = st.γ, st
     member __.get_θ st = st.θ, st
+    member __.get_Q st = st.Q, st
     member __.get_π st = st.π, st
     member M.get_Σ = M { let! s = M.get_state in return s.θ, s.Θ }
     member M.get_constraints = M { let! { constraints = cs } = M.get_π in return cs }
@@ -85,12 +93,14 @@ type basic_builder (loc : location) =
     member __.lift_Γ f st = (), { st with Γ = f st.Γ |> subst_jenv st.Σ }
     member __.lift_Δ f st = (), { st with δ = f st.δ }
     member __.lift_γ f st = (), { st with γ = f st.γ |> subst_kjenv st.Θ }
+    member __.lift_Q f st = (), { st with Q = f st.Q }
     member __.lift_π f (st : state) = (), { st with π = subst_predicate st.Σ (f st.π) }
     member __.lift_named_tyvars f (st : state) = (), { st with named_tyvars = f st.named_tyvars }
 
     member M.set_Γ x = M.lift_Γ (fun _ -> x)
     member M.set_Δ x = M.lift_Δ (fun _ -> x)
     member M.set_γ x = M.lift_γ (fun _ -> x)
+    member M.set_Q x = M.lift_Q (fun _ -> x)
     member M.set_π x = M.lift_π (fun _ -> x)
     member M.set_named_tyvars x = M.lift_named_tyvars (fun _ -> x)
 
@@ -107,6 +117,7 @@ type basic_builder (loc : location) =
                           Θ = Θ
                           Γ = subst_jenv Σ s.Γ
                           π = subst_predicate Σ s.π
+                          Q = subst_prefix Σ s.Q
                           named_tyvars = s.named_tyvars })
         }
 
@@ -202,6 +213,11 @@ type basic_builder (loc : location) =
         M {
             let! σ = M.gen t
             return! M.bind_Γ jk { mode = jm; scheme = σ }
+        }
+
+    member M.add_prefix α t =
+        M {
+            do! M.lift_Q (fun Q -> (α, t) :: Q)
         }
 
     member M.add_constraint c =

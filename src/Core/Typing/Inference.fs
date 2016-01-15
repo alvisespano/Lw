@@ -191,23 +191,32 @@ and pt_expr' ctx e0 =
 //let (Q03, θ03) = extend(Q3, β > ϕ1)
 //return (Q2, θ1, ∀Q03. θ1α → θ03β)
 
+        | Lambda ((x, None), e) ->
+            let α = var.fresh
+            let β = var.fresh
+            let! Q0 = M.get_Q
+            do! M.add_prefix α T_Bottom
+            let α = T_Star_Var α
+            let! t = M.fork_Γ <| M {
+                let! _ = M.bind_var_Γ x α   // TODO: extend quantifiable variables to kinds other than Star
+                return! pt_expr ctx e
+            }
+            // check that the type of parameter has been inferred as a monotype
+            if not t.is_monomorphic then Report.Error.lambda_parameter_is_not_monomorphic e0.loc x t
+            // TODO: the following code can be monadized
+            let! Q1 = M.get_Q
+            let Q2, Q3 = split Q1 (prefix_dom Q0)
+            let Q3', θ3' = extend Q3 β t
+            do! M.update_subst (θ3', ksubst.empty)
+            do! M.set_Q Q2
+            yield T_Foralls (Q3', T_Arrow (α, T_Star_Var β))
+                    
 //infer(Q, Γ, λ(x :: σ). e) =
 //assume β is fresh, σ is closed
 //let (Q1, θ1, ϕ1) = infer(Q,(Γ, x : σ), e)
 //let (Q2, Q3) = split(Q1, dom(Q))
 //let (Q03, θ03) = extend(Q3, β > ϕ1)
 //return (Q2, θ1, ∀Q03. σ → θ03β)
-
-        | Lambda ((x, τo), e) ->
-            let! tx = pt_typed_param ctx (x, τo)
-            match τo with
-            | Some _ -> 
-            yield! M.fork_Γ <| M {
-                let! _ = M.bind_var_Γ x tx
-                let! t = pt_expr ctx e
-                yield T_Arrow (tx, t)
-            }
-                    
 
 
 //        | Lambda ((x, τo), e) ->
