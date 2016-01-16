@@ -203,17 +203,38 @@ and pt_expr' ctx e0 =
             // TODO: the following code can be monadized
             let! Q1 = M.get_Q
             let Q2, Q3 = split_prefix Q1 (prefix_dom Q0)
-            let Q3', θ3' = extend_prefix Q3 β t
-            do! M.update_subst (θ3', ksubst.empty)
+            let Q3', Σ3' = extend_prefix Q3 β t
+            do! M.update_subst Σ3'
             do! M.set_Q Q2
             yield T_Foralls (Q3', T_Arrow (tx, T_Star_Var β))
 
         | App (e1, e2) -> 
+            let! Q0 = M.get_Q
             let! t1 = pt_expr ctx e1
             let! t2 = pt_expr ctx e2
-            let α = ty.fresh_var
-            do! M.unify e1.loc (T_Arrow (t2, α)) t1
-            yield α
+            let! Q2 = M.get_Q
+            let! Σ2 = M.get_Σ
+            let α1 = var.fresh
+            let α2 = var.fresh
+            let β = var.fresh
+            let Q2', Σ2' = extend_prefix_many Q2 [α1, subst_ty Σ2 t1; α2, t2; β, T_Bottom]
+            do! M.update_subst Σ2'
+            do! M.set_Q Q2'
+            let α1 = T_Star_Var α1
+            let α2 = T_Star_Var α2
+            let β = T_Star_Var β            
+            do! M.unify e1.loc (T_Arrow (α2, β)) α1
+            let! Q3 = M.get_Q
+            let Q4, Q5 = split_prefix Q3 (prefix_dom Q0)
+            do! M.set_Q Q4
+            yield T_Foralls (Q5, β)
+            
+//        | App (e1, e2) -> 
+//            let! t1 = pt_expr ctx e1
+//            let! t2 = pt_expr ctx e2
+//            let α = ty.fresh_var
+//            do! M.unify e1.loc (T_Arrow (t2, α)) t1
+//            yield α
 
         | Tuple ([] | [_]) as e ->
             return unexpected "empty or unary tuple: %O" __SOURCE_FILE__ __LINE__ e

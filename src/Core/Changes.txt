@@ -1,6 +1,9 @@
 ﻿
 16/1/2016:
 * REFACT: predicate is no more as it did not make much sense: every item schemes consist of is now inlined into the scheme record directly
+* REFACT: big refactor doe to new HML system
+* UP: new HML (APP) rule implemented and (ABS) finished
+* UP: lots of other minor upgrades to code: it now compiles but it crashes on something mysterious
 
 
 15/1/2016:

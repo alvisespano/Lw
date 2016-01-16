@@ -2,7 +2,7 @@
 namespace Test
 
 
-let f (x : 'a :: 'b -> 'c) = x, y
+let f (x : 'a :: 'b -> 'c) = x
 
 // check type variable scoping
 //

@@ -311,9 +311,13 @@ let split_prefix =
     in
         R
             
-
 let extend_prefix (Q : prefix) α (t : ty) =
     let t' = t.nf
     in
-        if t'.is_unquantified then Q, new tsubst (α, t')
-        else (α, t) :: Q, tsubst.empty
+        if t'.is_unquantified then Q, (new tsubst (α, t'), ksubst.empty)
+        else (α, t) :: Q, (tsubst.empty, ksubst.empty)
+
+let extend_prefix_many Q Q' =
+    List.fold (fun (Q, Σ) (α, t) -> let Q', Σ' = extend_prefix Q α t in Q', compose_tksubst Σ' Σ) (Q, (tsubst.empty, ksubst.empty)) Q'
+
+
