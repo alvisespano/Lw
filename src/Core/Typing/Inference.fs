@@ -63,8 +63,8 @@ let rec pt_expr (ctx : context) (e0 : expr) =
         let e = e0.value // NOTE: uexpr must be bound before translation, or printing will not work
         let! t = pt_expr' ctx e0
         do! resolve_constraints ctx e0
-        let! π = M.get_π
-        L.debug Min "[e:T] %O\n      : %O\n[P]   %O\n[e*]  %O" e t π e0
+        let! cs = M.get_constraints
+        L.debug Min "[e:T] %O\n      : %O\n[C]   %O\n[e*]  %O" e t cs e0
         return t
     } 
 
@@ -142,8 +142,7 @@ and pt_expr' ctx e0 =
                 yield α
 
             | Jb_Var σ ->
-                let! π, t = M.inst ctx σ
-                let cs = π.constraints
+                let! cs, _, t = M.instantiante_and_inherit_constraints ctx σ
                 if cs.is_empty then yield t
                 else
                     let e1 = Id x
@@ -152,7 +151,7 @@ and pt_expr' ctx e0 =
                     yield t
 
             | Jb_Data σ ->
-                let! _, t = M.inst ctx σ
+                let! _, _, t = M.instantiante_and_inherit_constraints ctx σ
                 M.translated <- Reserved_Cons x
                 yield t
                 
@@ -182,50 +181,32 @@ and pt_expr' ctx e0 =
             let ρ = var.fresh
             yield T_Variant ([x, T_Arrow (α, β)], Some ρ)
 
-
-//infer(Q, Γ, λx . e) =
-//assume α, β are fresh
-//let (Q1, θ1, ϕ1) = infer((Q, α > ⊥),(Γ, x : α), e)
-//fail if not (θ1α = τ ) for some τ
-//let (Q2, Q3) = split(Q1, dom(Q))
-//let (Q03, θ03) = extend(Q3, β > ϕ1)
-//return (Q2, θ1, ∀Q03. θ1α → θ03β)
-
-        | Lambda ((x, None), e) ->
+        | Lambda ((x, τo), e) ->
             let α = var.fresh
             let β = var.fresh
             let! Q0 = M.get_Q
-            do! M.add_prefix α T_Bottom
-            let α = T_Star_Var α
+            let! tx = M {
+                match τo with
+                | None ->
+                    do! M.add_prefix α T_Bottom
+                    return T_Star_Var α         // TODO: return T_Var (α, kind.fresh_var) instead and support quantifiable variables to kinds other than Star
+                | Some τ ->
+                    let! t, _ = pk_and_eval_ty_expr ctx τ
+                    return t
+            }
             let! t = M.fork_Γ <| M {
-                let! _ = M.bind_var_Γ x α   // TODO: extend quantifiable variables to kinds other than Star
+                let! _ = M.bind_var_Γ x tx
                 return! pt_expr ctx e
             }
-            // check that the type of parameter has been inferred as a monotype
-            if not t.is_monomorphic then Report.Error.lambda_parameter_is_not_monomorphic e0.loc x t
+            // check that the type of parameter has been inferred as a monotype in case no annotation was provided
+            if τo.IsNone && not t.is_monomorphic then Report.Error.lambda_parameter_is_not_monomorphic e0.loc x t
             // TODO: the following code can be monadized
             let! Q1 = M.get_Q
-            let Q2, Q3 = split Q1 (prefix_dom Q0)
-            let Q3', θ3' = extend Q3 β t
+            let Q2, Q3 = split_prefix Q1 (prefix_dom Q0)
+            let Q3', θ3' = extend_prefix Q3 β t
             do! M.update_subst (θ3', ksubst.empty)
             do! M.set_Q Q2
-            yield T_Foralls (Q3', T_Arrow (α, T_Star_Var β))
-                    
-//infer(Q, Γ, λ(x :: σ). e) =
-//assume β is fresh, σ is closed
-//let (Q1, θ1, ϕ1) = infer(Q,(Γ, x : σ), e)
-//let (Q2, Q3) = split(Q1, dom(Q))
-//let (Q03, θ03) = extend(Q3, β > ϕ1)
-//return (Q2, θ1, ∀Q03. σ → θ03β)
-
-
-//        | Lambda ((x, τo), e) ->
-//            let! tx = pt_typed_param ctx (x, τo)
-//            yield! M.fork_Γ <| M {
-//                let! _ = M.bind_var_Γ x tx
-//                let! t = pt_expr ctx e
-//                yield T_Arrow (tx, t)
-//            }
+            yield T_Foralls (Q3', T_Arrow (tx, T_Star_Var β))
 
         | App (e1, e2) -> 
             let! t1 = pt_expr ctx e1
@@ -326,7 +307,7 @@ and pt_expr' ctx e0 =
             yield t
 
         | Inject e ->
-            let! cs = M.fork_π <| M {
+            let! cs = M.fork_constraints <| M {
                 do! M.clear_constraints
                 let! _ = pt_expr ctx e
                 return! M.get_constraints
@@ -413,7 +394,7 @@ and pt_decl' (ctx : context) (d0 : decl) =
         let loc = e0.loc
         let Lo x = Lo loc x
         M {
-            let! { γ = γ; π = { constraints = cs } } = M.get_state
+            let! { γ = γ; constraints = cs } = M.get_state
             // check shadowing and relation with previous bindings
             let! jb = M.search_binding_by_name_Γ x
             if q.over then
@@ -474,7 +455,7 @@ and pt_decl' (ctx : context) (d0 : decl) =
                 Report.prompt ctx Config.Printing.Prompt.overload_decl_prefixes x t None
 
         | D_Bind bs ->
-            do! M.fork_π <| M {
+            do! M.fork_constraints <| M {
                 let! l =
                     M.List.collect (fun ({ patt = p; expr = e } as b) -> M {
                                 do! M.clear_constraints
@@ -482,16 +463,16 @@ and pt_decl' (ctx : context) (d0 : decl) =
                                 return! M.fork_Γ <| M {
                                     let! tp = pt_patt ctx p
                                     do! unify_and_resolve ctx e tp te
-                                    let! π = M.get_π
-                                    return! vars_in_patt p |> Set.toList |> M.List.map (fun x -> M { let! { scheme = Ungeneralized t } = M.lookup_Γ (Jk_Var x) in return b, x, π, t })
+                                    let! cs = M.get_constraints
+                                    return! vars_in_patt p |> Set.toList |> M.List.map (fun x -> M { let! { scheme = Ungeneralized t } = M.lookup_Γ (Jk_Var x) in return b, x, cs, t })
                                 }
                             }) bs
-                let! bs' = M.List.map (fun (b : binding, x, π, t) -> M { let! () = M.set_π π in return! gen_bind Config.Printing.Prompt.value_decl_prefixes b.qual b.expr x t }) l
+                let! bs' = M.List.map (fun (b : binding, x, cs, t) -> M { let! () = M.set_constraints cs in return! gen_bind Config.Printing.Prompt.value_decl_prefixes b.qual b.expr x t }) l
                 M.translated <- D_Bind [for jk, e in bs' -> { qual = decl_qual.none; patt = Lo e.loc (P_Jk jk); expr = e }]
             }
 
         | D_Rec bs ->
-            do! M.fork_π <| M {
+            do! M.fork_constraints <| M {
                 let! l =
                     M.fork_Γ <| M {
                         do! M.clear_constraints
@@ -577,7 +558,7 @@ and pt_patt ctx (p0 : patt) =
                     return Report.Error.unbound_data_constructor loc0 x
                     
                 | Jb_Data σ ->
-                    let! _, t = M.inst ctx σ
+                    let! _, _, t = M.instantiante_and_inherit_constraints ctx σ
                     yield t
 
                 | Jb_Overload t ->

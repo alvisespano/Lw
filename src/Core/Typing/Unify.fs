@@ -14,6 +14,7 @@ open Lw.Core.Globals
 open Lw.Core.Typing.Defs
 open Lw.Core.Typing.StateMonad
 open Lw.Core.Typing.Meta
+open Lw.Core.Typing.Utils
 open System.Diagnostics
 
 
@@ -249,7 +250,7 @@ module internal Mgu =
             ret r1
 
 
-    // TODO: debug multiple mgus and remove this
+    // TODO: debug multiple mgus and remove this crap
     let multi =
         [ "pure", Pure.mgu
           "func", Computational.Functional.mgu
@@ -290,20 +291,15 @@ let is_instance_of ctx pt t =
     in
         is_principal_type_of ctx pt t   // TODO: unification is not enough: unifier must be SMALLER - that would tell whether it is actually an instance
 
-//splitQuants :: Type -> ([Quant],Type)
-//splitQuants tp
-//  = split [] tp
-//  where
-//    split qs tp
-//      = case tp of
-//          Forall q t  -> split (q:qs) t
-//          _           -> (reverse qs,tp)
 
-let split =
+// other utils for unification
+//
+
+let split_prefix =
     let rec R Q αs =
-        match Q, αs with
-        | [], _ -> [], []
-        | (α, t : ty) :: Q, αs ->
+        match Q with
+        | [] -> [], []
+        | (α, t : ty) :: Q->
             if Set.contains α αs then
                 let Q1, Q2 = R Q (Set.remove α αs + t.fv)
                 in
@@ -314,9 +310,10 @@ let split =
                     Q1, (α, t) :: Q2
     in
         R
+            
 
-let extend (Q : prefix) α (t : ty) =
+let extend_prefix (Q : prefix) α (t : ty) =
     let t' = t.nf
     in
-        if t'.is_monomorphic then Q, new tsubst (α, t')
+        if t'.is_unquantified then Q, new tsubst (α, t')
         else (α, t) :: Q, tsubst.empty

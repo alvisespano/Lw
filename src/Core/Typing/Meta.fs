@@ -114,9 +114,11 @@ module private Eval =
             | Te_Annot (τ, _) ->
                 yield! E τ
 
-            | Te_Forall ((x, _), τ) ->
-                let! t = E τ
-                yield T_Forall (var.fresh_named x, t)
+            | Te_Forall (((x, _), τo1), τ2) ->
+                let! t1 = M.Option.something (fun τ1 -> M { return! E τ1 }) T_Bottom τo1
+                let! α = M.add_named_tyvar x
+                let! t2 = E τ2                
+                yield T_Forall ((α, t1), t2)
 
             | Te_Let (d, τ1) ->
                 yield! M.fork_Δ <| M {
@@ -136,7 +138,7 @@ module private Eval =
             | Te_HTuple ([] | [_]) -> return unexpected "empty or unary htuple type expression" __SOURCE_FILE__ __LINE__
             | Te_HTuple τs ->
                 let! ts = M.List.map (fun τ -> M { yield! E τ }) τs
-                yield T_HTuple (ts, k0)
+                yield T_HTuple ts
 
             | Te_Match (τ1, cases) ->
                 let! t1 = E τ1
@@ -224,7 +226,7 @@ module private Eval =
                 let! b2 = R p2 t2
                 return b1 && b2
 
-            | Tp_HTuple ps, T_HTuple (ts, _) when ps.Length = ts.Length ->
+            | Tp_HTuple ps, T_HTuple ts when ps.Length = ts.Length ->
                 return! M.List.fold2 (fun b p t -> M {
                                 let! b' = R p t
                                 return b && b'
@@ -300,12 +302,15 @@ and pk_ty_expr' (ctx : context) (τ0 : ty_expr) =
             do! K.kunify τ1.loc (K_Arrow (k2, α)) k1
             yield α
 
-        // TODO: this might be wrong
-        | Te_Forall ((α, ko), τ) ->
+        // TODO: design the kind inference of forall term more carefully
+        | Te_Forall (((x, ko), τo1), τ2) ->
             let kx = either kind.fresh_var ko
+            match τo1 with
+            | None -> ()
+            | Some τ1 -> do! K.ignore <| R τ1  // nothing to do with k1?
             return! K.fork_γ <| K {
-                let! _ = K.bind_γ α (KUngeneralized kx)
-                yield! R τ
+                let! _ = K.bind_γ x (KUngeneralized kx)
+                yield! R τ2
             }
 
         | Te_Annot (τ, k) ->

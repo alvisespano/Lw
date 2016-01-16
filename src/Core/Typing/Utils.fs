@@ -106,3 +106,21 @@ let possibly_tuple L0 e tuple cs =
     | []  -> unexpected "empty tuple" __SOURCE_FILE__ __LINE__
     | [p] -> p
     | ps  -> L0 (tuple ps)
+
+type ty with
+    // normal form
+    member this.nf =
+        match this with
+        | T_Forall ((α, t1), t2) ->
+            if not <| Set.contains α t2.fv then t2.nf
+            elif match t2.nf with
+                 | T_Var (β, _) -> α = β
+                 | _            -> false
+            then t1.nf
+            else
+                let t' = t1.nf
+                in
+                    if t'.is_unquantified then subst_ty (new tsubst (α, t'), ksubst.empty) t2
+                    else T_Forall ((α, t'), t2.nf)
+
+        | t -> t

@@ -408,7 +408,7 @@ and [< NoComparison; NoEquality >] ty_uexpr =
     | Te_Match of ty_expr * ty_case list
     | Te_Annot of ty_expr * kind
     | Te_Row of (id * ty_expr) list * ty_expr option
-    | Te_Forall of kinded_param * ty_expr
+    | Te_Forall of (kinded_param * ty_expr option) * ty_expr
 with
     interface annotable with
         member __.annot_sep = Config.Printing.kind_annotation_sep   // TODO: redesign this annot_sep thing
@@ -437,7 +437,7 @@ let Te_Apps τs = (Apps (fun (τ1, τ2) -> Lo τ1.loc <| Te_App (τ1, τ2)) τs)
 let (|Te_Apps|_|) = (|Apps|_|) (function Te_App (ULo τ1, ULo τ2) -> Some (τ1, τ2) | _ -> None)
 
 let Te_Foralls (αs, τ) = (Foralls (fun (α, τ) -> Lo τ.loc <| Te_Forall (α, τ)) (αs, τ)).value
-let (|Te_Foralls|_|) = (|Foralls|_|) (function Te_Forall (α, ULo τ) -> Some (α, τ) | _ -> None)
+let (|Te_Foralls|) = (|Foralls|) (function Te_Forall (α, ULo τ) -> Some (α, τ) | _ -> None)
 
 let Te_Arrow_Cons = Te_Id "->"
 let (|Te_Arrow_Cons|_|) = function
@@ -541,7 +541,8 @@ type ty_uexpr with
             | Te_Let (d, e)            -> sprintf "let %O in %O" d e
             | Te_Match (e, cases)      -> sprintf "match %O with\n| %s" e (pretty_cases cases)
             | Te_Row (bs, o)           -> sprintf "(| %s |)" (pretty_row " | " Config.Printing.type_annotation_sep (bs, o))
-            | Te_Forall ((x, ko), τ)   -> sprintf "forall %s. %O" (pretty_param Config.Printing.kind_annotation_sep (var.fresh_named x, ko)) τ
+            | Te_Forall (((x, ko), None), τ2)    -> sprintf "forall %s. %O" (pretty_param Config.Printing.kind_annotation_sep (var.fresh_named x, ko)) τ2
+            | Te_Forall (((x, ko), Some τ1), τ2) -> sprintf "forall (%s >= %O). %O" (pretty_param Config.Printing.kind_annotation_sep (var.fresh_named x, ko)) τ1 τ2
 
 type ty_udecl with       
     override this.ToString () = this.pretty

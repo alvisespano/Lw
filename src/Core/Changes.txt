@@ -1,4 +1,22 @@
 ﻿
+16/1/2016:
+* REFACT: predicate is no more as it did not make much sense: every item schemes consist of is now inlined into the scheme record directly
+
+
+15/1/2016:
+* REFACT: lots of work in understanding, implementing and integrating HML
+* REFACT: all type definitions for HML has been refactorized into types: scheme, quantified schemes etc are no more
+* UP: primal unannotated lamba inference written; split and extend prefix utilities written as well
+* REFACT: prefixes are not simple lists and no more Env.t
+* REFACT: the bottom type has been lifted to ty: consider that even if bottom = forall 'a. 'a, there is the need to define it as a native type term because in HML quantified variables have bounds, and
+          therefore forall 'a. 'a = forall 'a >= bottom. 'a which would result in a recursive value
+* REFACT: type visitors (Vi_T active patterns) deprecated
+
+
+14/1/2016:
+* UP: new data type definitions for HML: schemes, quantified schemes and types; prefixes are implemented using Env.t
+
+
 11/01/2016:
 * REFACT: Foralls active patterns and virtual constructor; support for universal quantifier in type expressions and type
 * REFACT: support for work on first-class polymorphism started

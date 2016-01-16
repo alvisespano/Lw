@@ -82,7 +82,7 @@ module Error =
         E 8 loc "variables %s are bound multiple times in pattern %O" (flatten_stringables ", " xs) p
         
     let value_not_resolved loc cs =
-        E 9 loc "expression will not evaluate to a ground value because some constraints are unresolved: %O" (predicate.pretty_constraints cs)
+        E 9 loc "expression will not evaluate to a ground value because some constraints are unresolved: %O" cs
 
     let duplicate_label loc l what =
         E 10 loc "multiple occurrences of label %s in %s" l what

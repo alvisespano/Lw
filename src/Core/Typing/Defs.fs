@@ -33,7 +33,10 @@ type tenv = Env.t<id, ty>
 and [< NoComparison; CustomEquality >] ty =
     | T_Cons of id * kind
     | T_Var of var * kind
-    | T_HTuple of ty list * kind    // this is for higher-order tuples (i.e. tuples of types, not to be confused with the type of tuples in the value language), and it's not encoded using rows because rows elements must have kind star
+    // TODO: T_Huple stands for higher-order tuples (i.e. tuples of types, not to be confused with the type of tuples in the value language), and it's not encoded
+    // using rows because rows elements must have kind star, at the moment. Try to design a more general Rowed type which does not need stars on labels, and which would
+    // allow for a non-native definition of HTuple
+    | T_HTuple of ty list
     | T_App of (ty * ty)
     | T_Forall of (var * ty) * ty
     | T_Closure of id * tenv ref * ty_expr * kind
@@ -43,16 +46,15 @@ with
 
     member this.kind =
         match this with
-        | T_Bottom -> kind.fresh_var
         | T_Cons (_, k)
         | T_Var (_, k)
-        | T_HTuple (_, k)
         | T_Closure (_, _, _, k) -> k
+        | T_Bottom               -> kind.fresh_var
+        | T_HTuple ts            -> K_HTuple [for t in ts do yield t.kind]
         | T_Forall (_, t)        -> t.kind
-        | T_App (t1, _) ->
-            match t1.kind with
-            | K_Arrow (_, k) -> k
-            | k              -> unexpected "non-arrow kind %O in left hand of type application: %O" __SOURCE_FILE__ __LINE__ k this
+        | T_App (t1, _)          -> match t1.kind with
+                                    | K_Arrow (_, k) -> k
+                                    | k              -> unexpected "non-arrow kind %O in left hand of type application: %O" __SOURCE_FILE__ __LINE__ k this
 
     override x.Equals y = CustomCompare.equals_with (fun x y -> (x :> IEquatable<ty>).Equals y) x y
 
@@ -61,7 +63,7 @@ with
         | T_Bottom                  -> 0
         | T_Cons (x, k)             -> 1 + (x, k).GetHashCode ()
         | T_Var (α, k)              -> 1 + (α, k).GetHashCode ()
-        | T_HTuple (ts, k)          -> 1 + (ts, k).GetHashCode ()
+        | T_HTuple ts               -> 1 + ts.GetHashCode ()
         | T_App (t1, t2)            -> 1 + (t1, t2).GetHashCode ()
         | T_Forall ((α, t1), t2)    -> 1 + (α, t1, t2).GetHashCode ()
         | T_Closure (_, _, _, _)    -> unexpected "hashing type closure: %O" __SOURCE_FILE__ __LINE__ this
@@ -206,24 +208,32 @@ with
             | Ic_And (ic1, ic2)         -> sprintf "%O & %O" ic1 ic2
 
 
+
 // schemes and predicates
 //
 
-type [< NoComparison; NoEquality >] predicate =
-    {
-        constraints      : constraints
-        type_constraints : type_constraints
-    }
-with
-    static member empty = { constraints = constraints.empty; type_constraints = C_Empty }
+//type [< NoComparison; NoEquality >] predicate =
+//    {
+//        constraints      : constraints
+//        type_constraints : type_constraints
+//    }
+//with
+//    static member empty = { constraints = constraints.empty; type_constraints = C_Empty }
     
 type [< NoComparison; NoEquality >] scheme =
     {
-        π   : predicate
-        ty  : ty
+        constraints      : constraints
+//        type_constraints : type_constraints
+        ty               : ty
     }
 
 type prefix = (var * ty) list
+
+let prefix_dom Q = Computation.set { for α, _ in Q do yield α }
+
+let pretty_prefix_item (α, t) = sprintf "(%O >= %O)" α t
+let pretty_prefix Q = mappen_strings pretty_prefix_item Config.Printing.sep_in_forall Q
+
 
 
 // judice environment
@@ -365,23 +375,6 @@ let private (|T_Rowed|_|) name = function
 let T_Record, T_Variant, T_Tuple, (|T_Record|_|), (|T_Variant|_|), (|T_Tuple|_|) = make_rows T_Rowed (|T_Rowed|_|)
 let T_Tailed_Record xts = T_Record (xts, Some var.fresh)
 
-//let (|Vi_T_Nodes|Vi_T_Var|Vi_T_Leaf|) = function
-//    | T_Var (α, k)     -> Vi_T_Var (α, k)
-//    | T_Closure _
-//    | T_Cons _ as t    -> Vi_T_Leaf t
-//    | T_App (t1, t2)   -> Vi_T_Nodes [t1; t2]
-//    | T_HTuple (ts, _) -> Vi_T_Nodes ts
-//    | T_Forall (_, t)  -> Vi_T_Nodes [t]
-//    | T_Row (bs, αo) ->
-//        let bs = [ for x, t in bs -> x, t]
-////        let f ts = List.map2 (fun (x, _) t -> x, t) bs ts
-//        let t0 =
-//            match αo with
-//                | Some ρ -> [T_Row_Var ρ]
-//                | None   -> []
-//        in
-//            Vi_T_Nodes (t0 @ (List.map snd bs))
-
 
 // substitutions
 //
@@ -425,7 +418,7 @@ type tksubst = tsubst * ksubst
 
 
 type kind with
-    member k.apply_to_vars f R =
+    member internal k.apply_to_vars f R =
         match k with
         | K_Var α          -> f α
         | K_Cons (x, ks)   -> K_Cons (x, List.map R ks)
@@ -434,14 +427,9 @@ type kind with
         let R (k : kind) = k.subst_vars θ
         in
             k.apply_to_vars (fun α -> match θ.search α with Some β -> K_Var β | None -> k) R
-    
-    member k.subst (Θ : ksubst) =
-        let Sk (k : kind) = k.subst Θ
-        in
-            k.apply_to_vars (fun α -> match Θ.search α with Some k -> k | None -> K_Var α) Sk
 
 type ty with
-    member private t.apply_to_vars f (θ : subst<_>) S Sk =
+    member internal t.apply_to_vars f (θ : subst<_>) S Sk =
         match t with
         | T_Bottom -> T_Bottom
         | T_Var (α, k) ->
@@ -451,9 +439,9 @@ type ty with
 
         | T_Cons (x, k)             -> T_Cons (x, Sk k)
         | T_App (t1, t2)            -> T_App (S t1, S t2)
-        | T_HTuple (ts, k)          -> T_HTuple (List.map S ts, Sk k)
+        | T_HTuple ts               -> T_HTuple (List.map S ts)
         | T_Forall ((α, t1), t2)    -> if Set.contains α θ.dom then unexpected "some quantified variables in polymorphic type %O appear in domain of substituion %O" __SOURCE_FILE__ __LINE__ t θ // TODO: can this check be removed?
-                                       T_Forall ((α, S t1), S t2)
+                                       else T_Forall ((α, S t1), S t2)
         | T_Closure (x, Δ, τ, k)    -> T_Closure (x, Δ, τ, Sk k)
 
     member t.subst_vars (θ : vasubst) =
@@ -461,12 +449,6 @@ type ty with
         let Sk (k : kind) = k.subst_vars θ
         in
             t.apply_to_vars (fun β k -> T_Var (β, Sk k)) θ S Sk
-
-    member t.subst (θ : tsubst, Θ : ksubst) =
-        let S (t : ty) = t.subst (θ, Θ)
-        let Sk (k : kind) = k.subst Θ
-        in
-            t.apply_to_vars (fun t _ -> t) θ S Sk
 
        
 
@@ -503,7 +485,7 @@ type ty with
     member this.pretty =
         let (|T_Sym_Cons|_|) = (|Sym|_|) (function T_Cons (x, k) -> Some (x, (x, k)) | _ -> None)
         let (|A|_|) = function
-            | T_Tuple _ -> None // NOTE: tuples are encoded using records (i.e. row types with integer labels), so they must be matched before
+            | T_Tuple _ -> None // NOTE: tuples are encoded using row types with integer labels, so they must be matched before
             | T_Var _ | T_Record _ | T_Variant _ | T_Cons _ | T_Closure _ | T_Row _ as e -> Some e
             | _ -> None
         let (|App|) = (|Application|) (function T_App (t1, t2) -> Some (t1, t2) | _ -> None) (|A|_|)
@@ -518,8 +500,8 @@ type ty with
             | T_Variant row -> sprintf "< %s >" (pretty_row " | " Config.Printing.type_annotation_sep row)
             | T_Row row     -> sprintf "(| %s |)" (pretty_row " | " Config.Printing.type_annotation_sep row)
 
-            | T_HTuple (([] | [_]), _) as t -> unexpected "empty or unary htuple: %O" __SOURCE_FILE__ __LINE__ t
-            | T_HTuple (ts, _)              -> mappen_strings (fun t -> (match t with A _ -> sprintf "%s" | _ -> sprintf "(%s)") (R t))  ", " ts
+            | T_HTuple ([] | [_]) as t -> unexpected "empty or unary htuple: %O" __SOURCE_FILE__ __LINE__ t
+            | T_HTuple ts              -> mappen_strings (fun t -> (match t with A _ -> sprintf "%s" | _ -> sprintf "(%s)") (R t))  ", " ts
 
             | T_Sym_Cons (x, K_Star) -> sprintf "(%s)" x
             | T_Sym_Cons (x, k)      -> sprintf "((%s) :: %O)" x k
@@ -530,7 +512,7 @@ type ty with
             | T_Arrow (t1, t2)              -> sprintf "%s -> %s" (R t1) (R t2)
 
             | T_App (App s)          -> s
-            | T_Foralls (αs, t)      -> sprintf "forall %s. %O" (flatten_stringables Config.Printing.sep_in_forall αs) t
+            | T_Foralls (Q, t)       -> sprintf "forall %s. %O" (pretty_prefix Q) t
             | T_Closure (x, _, τ, k) -> sprintf "<[%O] :: %O>" (Te_Lambda ((x, None), τ)) k
 
             // these are not supposed to be matched because active patterns should stand in place of them above
@@ -548,7 +530,7 @@ type ty with
         | T_Bottom                  -> Set.empty
         | T_Var (α, k)              -> Set.singleton α + k.fv
         | T_Cons (_, k)             -> k.fv
-        | T_HTuple (ts, k)          -> List.fold (fun r (t : ty) -> Set.union r t.fv) Set.empty ts + k.fv 
+        | T_HTuple ts               -> List.fold (fun r (t : ty) -> Set.union r t.fv) Set.empty ts
         | T_App (t1, t2)            -> Set.union t1.fv t2.fv
         | T_Forall ((α, t1), t2)    -> let r2 = t2.fv in if Set.contains α r2 then t1.fv + (Set.remove α r2) else r2
         | T_Closure (_, _, _, k)    -> k.fv
@@ -561,103 +543,92 @@ type ty with
         | T_Cons _             
         | T_Closure _       -> true
         | T_App (t1, t2)    -> t1.is_monomorphic && t2.is_monomorphic
-        | T_HTuple (ts, _)  -> List.fold (fun r (t : ty) -> r && t.is_monomorphic) true ts
+        | T_HTuple ts       -> List.fold (fun r (t : ty) -> r && t.is_monomorphic) true ts
 
-    // normal form
-    member this.nf =
+    member this.is_unquantified =
         match this with
-        | T_Forall ((α, t1), t2) ->
-            if not <| Set.contains α t2.fv then t2.nf
-            elif match t2.nf with
-                 | T_Var (β, _) -> α = β
-                 | _            -> false
-            then t1.nf
-            else
-                let t' = t1.nf
-                in
-                    if t'.is_monomorphic then t2.subst (new tsubst (α, t'), ksubst.empty)
-                    else T_Forall ((α, t'), t2.nf)
-
-        | t -> t
+        | T_Bottom          
+        | T_Forall _        -> false
+        | _                 -> true
 
 
-type predicate with
-    override π.ToString () = π.pretty
+// TODO: refactor this predicate thingie and put constraints and whatever else directly inside the scheme
+//type predicate with
+//    override π.ToString () = π.pretty
+//
+//    member π.pretty =
+//        let cs = π.constraints
+//        let tcs = π.type_constraints
+//        let cspart = if cs.is_empty then "" else predicate.pretty_constraints cs
+//        let tcspart = if tcs.is_empty then "" else predicate.pretty_type_constraints tcs
+//        in
+//            if not cs.is_empty && not tcs.is_empty then sprintf "%s /\\ %s" tcspart cspart
+//            else tcspart + cspart
+//
+//    static member pretty_constraints cs = sprintf "{ %O }" cs
+//
+//    static member pretty_type_constraints tcs = sprintf "(%O)" tcs
 
-    member π.pretty =
-        let cs = π.constraints
-        let tcs = π.type_constraints
-        let cspart = if cs.is_empty then "" else predicate.pretty_constraints cs
-        let tcspart = if tcs.is_empty then "" else predicate.pretty_type_constraints tcs
-        in
-            if not cs.is_empty && not tcs.is_empty then sprintf "%s /\\ %s" tcspart cspart
-            else tcspart + cspart
+type constraints with
 
-    static member pretty_constraints cs = sprintf "{ %O }" cs
-
-    static member pretty_type_constraints tcs = sprintf "(%O)" tcs
-
-    member π.fv = Computation.set { for c in π.constraints do yield! c.ty.fv }
+    member this.fv = Computation.set { for c in this do yield! c.ty.fv }
 
 
 type scheme with    
     override this.ToString () = this.pretty
 
     member σ.pretty =
-        let { π = { constraints = cs } as π; ty = T_Foralls (Q, t) } = σ
-        let αs = Computation.set { for α, _ in Q do yield α }
+        let { constraints = cs; ty = T_Foralls (Q, t) } = σ
+        let αs = prefix_dom Q
         use N = var.reset_normalization αs
         let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.sep_in_forall αs)
-        let πpart = if cs.is_empty then "" else sprintf "%O => " π
+        let cspart = if cs.is_empty then "" else sprintf "{ %O } => " cs
         in
-            sprintf "%s%s%O" αspart πpart t
+            sprintf "%s%s%O" αspart cspart t
                         
     member this.fv =
-        let { π = π; ty = t } = this
+        let { constraints = cs; ty = t } = this
         in
-            π.fv + t.fv
+            cs.fv + t.fv
 
-    
+    static member binding_separator = ty.binding_separator
 
 
 // substitution applications
 //
 
-//let rec subst_kind (Θ : ksubst) (k : kind) = 
-//    let R = subst_kind Θ
-//    in
-//        k.apply_to_vars (fun α -> match Θ.search α with Some k -> k | None -> K_Var α) R
-//
-//let rec subst_ty (θ : tsubst, Θ : ksubst) (t : ty) =
-//    let R = subst_ty (θ, Θ)
-//    let S = subst_kind Θ
-//    in
-//        t.apply_to_vars (fun (α, k) -> match θ.search α with Some t -> t | None -> T_Var (α, S k)) R S
+let rec subst_kind (Θ : ksubst) (k : kind) = 
+    let Sk = subst_kind Θ
+    in
+        k.apply_to_vars (fun α -> match Θ.search α with Some k -> k | None -> K_Var α) Sk
 
-let subst_kind θ (k : kind) = k.subst θ
 
-let subst_ty Σ (t : ty) = t.subst Σ
+let rec subst_ty (θ : tsubst, Θ : ksubst) (t :ty) =
+    let S = subst_ty (θ, Θ)
+    let Sk = subst_kind Θ
+    in
+        t.apply_to_vars (fun t _ -> t) θ S Sk
 
 //// first argument is the NEW subst, second argument is the OLD one
-let compose_ksubst (θ1 : ksubst) θ2 = θ1.compose subst_kind θ2
+let compose_ksubst (θ' : ksubst) θ = θ'.compose subst_kind θ
 
-let compose_tksubst (θ1 : tsubst, Θ1) (θ2, Θ2) =
-    let Θ = compose_ksubst Θ1 Θ2
-    let θ = θ1.compose (fun θ -> subst_ty (θ, Θ)) θ2
+let compose_tksubst (θ' : tsubst, Θ') (θ, Θ) =
+    let Θ = compose_ksubst Θ' Θ
+    let θ = θ'.compose (fun θ -> subst_ty (θ, Θ)) θ
     in
         θ, Θ
+
+let subst_prefix Σ Q = [ for α, t in Q do yield α, subst_ty Σ t ]
 
 // TODO: implement actual substitution of type constraints for GADTs
 let subst_type_constraints _ tcs = tcs
 
-let subst_predicate Σ π =
-    { constraints       = π.constraints.map (fun c -> { c with ty = subst_ty Σ c.ty })
-      type_constraints  = subst_type_constraints Σ π.type_constraints }
+let subst_constraints Σ (cs : constraints) = cs.map (fun c -> { c with ty = subst_ty Σ c.ty })
 
-let subst_scheme (θ : tsubst, Θ) σ =
-    let { π = π; ty = t } = σ
+let subst_scheme Σ σ =
+    let { constraints = cs; ty = t } = σ
     in
-        { π = subst_predicate (θ, Θ) π; ty = subst_ty (θ, Θ) t }
+        { constraints = subst_constraints Σ cs; ty = subst_ty Σ t }
         
 let subst_kscheme (Θ : ksubst) σκ =
     let { forall = αs; kind = k } = σκ
@@ -669,9 +640,7 @@ let subst_jenv Σ (env : jenv) = env.map (fun _ ({ scheme = σ } as jv) -> { jv 
 let subst_kjenv Θ (env : kjenv) = env.map (fun _ -> subst_kscheme Θ)
 let subst_tenv Σ (env : tenv) = env.map (fun _ -> subst_ty Σ)
 
-// some operations of types, schemes and prefixes
-
-let prefix_dom Q = Computation.set { for α, _ in Q do yield α }
+// operations over types, schemes and prefixes
 
 let internal fv_env fv (env : Env.t<_, _>) = env.fold (fun αs _ v -> Set.union αs (fv v)) Set.empty
 
@@ -679,27 +648,33 @@ let fv_Γ (Γ : jenv) = fv_env (fun { scheme = σ } -> σ.fv) Γ
 
 let private var_refresher αs = new vasubst (Set.fold (fun (env : Env.t<_, _>) (α : var) -> env.bind α α.refresh) Env.empty αs)
 
-let instantiate { forall = αs; π = π; ty = t } =
+let instantiate { constraints = cs; ty = T_Foralls (Q, t) } =
+    let αs = prefix_dom Q
     let θ = var_refresher αs
-    let cs = constr { for c in π.constraints do yield { c.refresh with ty = c.ty.subst_vars θ } }
+    let cs = constr { for c in cs do yield { c.refresh with ty = c.ty.subst_vars θ } }
     in
-        { π with constraints = cs }, t.subst_vars θ
-         
+        cs, Q, t.subst_vars θ
+          
+let generalize (cs : constraints, Q, t : ty) Γ restricted_vars =
+    let αs = (t.fv + cs.fv) - (fv_Γ Γ) - restricted_vars
+    let Q = [ for α, t in Q do if Set.contains α αs then yield α, t ]
+    in
+        { constraints = cs; ty = T_Foralls (Q, t) }
+
+// TODO: refresh_ty and Ungeneralized may not be of use anymore in HML
 let refresh_ty (t : ty) =
-    instantiate { forall = t.fv; π = predicate.empty; ty = t } |> snd
-   
-let generalize (π : predicate, t : ty) Γ restricted_vars =
-    let αks = (t.fv + π.fv) - (fv_Γ Γ) - restricted_vars
+    let _, _, t = instantiate { constraints = constraints.empty; ty = t }
     in
-        { forall = αks; π = π; ty = t }
+        t
+
+let Ungeneralized t = { constraints = constraints.empty; ty = t }
 
 let (|Ungeneralized|) = function
-    | { forall = αks; π = _; ty = t } when αks.Count = 0 -> t
+    | { constraints = _; ty = T_Foralls ([], t) } -> t
     | σ -> unexpected "expected an ungeneralized type scheme but got: %O" __SOURCE_FILE__ __LINE__ σ
 
-let Ungeneralized t = { forall = Set.empty; π = predicate.empty; ty = t }
 
-// kind primitives
+// operations over kinds
 
 let fv_γ (γ : kjenv) = fv_env (fun (ς : kscheme) -> ς.fv) γ
 

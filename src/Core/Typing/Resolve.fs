@@ -35,10 +35,10 @@ with
 
 let private search_best_candidate ctx p cx ct jkσs =
     [ for jk, σ in jkσs do
-            let π, ti = instantiate σ
+            let csi, _, ti = instantiate σ
             match try_principal_type_of ctx ti ct with
             | Some (θ : tsubst, Θ) ->
-                yield { constraints = π.constraints
+                yield { constraints = csi
                         jk          = jk
                         σ           = σ
                         δ           = (θ.restrict ti.fv).dom.Count
@@ -68,7 +68,7 @@ let rec resolve_constraints (ctx : context) e0 =
     let L0 x = Lo loc x
     M {
         if ctx.resolution <> Res_No then
-            let! { γ = γ; Γ = Γ; π = { constraints = cs } } = M.get_state
+            let! { γ = γ; Γ = Γ; constraints = cs } = M.get_state
             #if DEBUG_RESOLVE
             L.debug Low "resolving constraints: %O" cs
             #endif

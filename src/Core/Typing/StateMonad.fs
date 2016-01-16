@@ -38,12 +38,10 @@ type [< NoComparison; NoEquality >] state =
         θ   : tsubst            // type substitution
         Θ   : ksubst            // kind substitution
 
-        // predicates
-        π   : predicate         // global predicate
-        Q   : prefix            // prefix for quantified type variables
-
         // extras
-        named_tyvars   : Env.t<id, int>    // named type variables
+        Q               : prefix            // prefix for quantified type variables
+        constraints     : constraints       // global constraints
+        named_tyvars    : Env.t<id, int>    // named type variables
     }
 with
     override this.ToString () = this.pretty
@@ -60,9 +58,10 @@ with
             θ   = tsubst.empty
             δ   = tenv.empty
             Θ   = ksubst.empty
-            π   = predicate.empty
             Q   = []
-            named_tyvars = Env.empty
+
+            constraints     = constraints.empty
+            named_tyvars    = Env.empty
         }
 
     member this.Σ = this.θ, this.Θ
@@ -85,26 +84,25 @@ type basic_builder (loc : location) =
     member __.get_γ st = st.γ, st
     member __.get_θ st = st.θ, st
     member __.get_Q st = st.Q, st
-    member __.get_π st = st.π, st
+    member __.get_constraints st = st.constraints, st
     member M.get_Σ = M { let! s = M.get_state in return s.θ, s.Θ }
-    member M.get_constraints = M { let! { constraints = cs } = M.get_π in return cs }
     member __.get_named_tyvars st = st.named_tyvars, st
 
     member __.lift_Γ f st = (), { st with Γ = f st.Γ |> subst_jenv st.Σ }
     member __.lift_Δ f st = (), { st with δ = f st.δ }
     member __.lift_γ f st = (), { st with γ = f st.γ |> subst_kjenv st.Θ }
     member __.lift_Q f st = (), { st with Q = f st.Q }
-    member __.lift_π f (st : state) = (), { st with π = subst_predicate st.Σ (f st.π) }
+    member __.lift_constraints f (st : state) = (), { st with constraints = subst_constraints st.Σ (f st.constraints) }
     member __.lift_named_tyvars f (st : state) = (), { st with named_tyvars = f st.named_tyvars }
 
     member M.set_Γ x = M.lift_Γ (fun _ -> x)
     member M.set_Δ x = M.lift_Δ (fun _ -> x)
     member M.set_γ x = M.lift_γ (fun _ -> x)
     member M.set_Q x = M.lift_Q (fun _ -> x)
-    member M.set_π x = M.lift_π (fun _ -> x)
+    member M.set_constraints x = M.lift_constraints (fun _ -> x)
     member M.set_named_tyvars x = M.lift_named_tyvars (fun _ -> x)
 
-    member M.clear_constraints = M.set_π predicate.empty
+    member M.clear_constraints = M.set_constraints constraints.empty
 
     member M.update_subst Σ =
         M {
@@ -116,16 +114,16 @@ type basic_builder (loc : location) =
                           θ = θ
                           Θ = Θ
                           Γ = subst_jenv Σ s.Γ
-                          π = subst_predicate Σ s.π
                           Q = subst_prefix Σ s.Q
+                          constraints = subst_constraints Σ s.constraints
                           named_tyvars = s.named_tyvars })
         }
 
     member private M.gen t =
         M {
-            let! { Γ = Γ; π = π; θ = θ; Θ = Θ } as st = M.get_state
+            let! { Γ = Γ; constraints = cs; Q = Q; θ = θ; Θ = Θ } as st = M.get_state
             let vas = Computation.set { for x, n in st.named_tyvars do yield Va (n, Some x) }
-            return generalize (π, subst_ty (θ, Θ) t) Γ vas
+            return generalize (cs, Q, subst_ty (θ, Θ) t) Γ vas
         }
 
     member private M.kgen k =
@@ -222,24 +220,24 @@ type basic_builder (loc : location) =
 
     member M.add_constraint c =
         M {
-            do! M.lift_π (fun π -> { π with constraints = π.constraints.add c })
+            do! M.lift_constraints (fun cs -> cs.add c)
         }
 
     member M.add_constraints cs =
         M {
-            do! M.lift_π (fun π -> { π with constraints = π.constraints + cs })
+            do! M.lift_constraints (fun cs0 -> cs0 + cs)
         }
 
     member M.remove_constraint c =
         M {
-            do! M.lift_π (fun π -> { π with constraints = π.constraints.remove c })
+            do! M.lift_constraints (fun cs -> cs.remove c)
         }
 
-    member M.inst (ctx : context) σ =
+    member M.instantiante_and_inherit_constraints (ctx : context) σ =
         M {
-            let π, t = instantiate σ
-            do! M.add_constraints π.constraints
-            return π, t
+            let cs, Q, t = instantiate σ
+            do! M.add_constraints cs
+            return cs, Q, t
         }
 
     member M.fork_named_tyvars f =
@@ -266,11 +264,11 @@ type basic_builder (loc : location) =
             return r
         }
 
-    member M.fork_π f =
+    member M.fork_constraints f =
         M {
-            let! π = M.get_π
+            let! π = M.get_constraints
             let! r = f
-            do! M.set_π π
+            do! M.set_constraints π
             return r
         }
 
