@@ -35,8 +35,8 @@ type [< NoComparison; NoEquality >] state =
         δ   : tenv              // evaluated types
 
         // substitutions
-        θ   : tsubst            // type substitution
-        Θ   : ksubst            // kind substitution
+        tθ   : tsubst            // type substitution
+        kθ   : ksubst            // kind substitution
 
         // extras
         Q               : prefix            // prefix for quantified type variables
@@ -49,22 +49,22 @@ with
     member this.pretty =
         let p (env : Env.t<_, _>) = env.pretty Config.Printing.type_annotation_sep "\n"
         in
-            sprintf "Γ:\n%s\n\nθ:\n%O\n" (p this.Γ) this.θ
+            sprintf "Γ:\n%s\n\ntθ:\n%O\n" (p this.Γ) this.tθ
 
     static member empty =
         {
             Γ   = Env.empty
             γ   = Env.empty
-            θ   = tsubst.empty
+            tθ   = tsubst.empty
             δ   = tenv.empty
-            Θ   = ksubst.empty
+            kθ   = ksubst.empty
             Q   = []
 
             constraints     = constraints.empty
             named_tyvars    = Env.empty
         }
 
-    member this.Σ = this.θ, this.Θ
+    member this.θ = this.tθ, this.kθ
         
 type K<'a> = Monad.M<'a, state>
 
@@ -82,17 +82,17 @@ type basic_builder (loc : location) =
     member __.get_Γ st = st.Γ, st
     member __.get_Δ st = st.δ, st
     member __.get_γ st = st.γ, st
-    member __.get_θ st = st.θ, st
+//    member __.get_tθ st = st.tθ, st
     member __.get_Q st = st.Q, st
     member __.get_constraints st = st.constraints, st
-    member M.get_Σ = M { let! s = M.get_state in return s.θ, s.Θ }
+    member M.get_θ = M { let! s = M.get_state in return s.tθ, s.kθ }
     member __.get_named_tyvars st = st.named_tyvars, st
 
-    member __.lift_Γ f st = (), { st with Γ = f st.Γ |> subst_jenv st.Σ }
+    member __.lift_Γ f st = (), { st with Γ = f st.Γ |> subst_jenv st.θ }
     member __.lift_Δ f st = (), { st with δ = f st.δ }
-    member __.lift_γ f st = (), { st with γ = f st.γ |> subst_kjenv st.Θ }
+    member __.lift_γ f st = (), { st with γ = f st.γ |> subst_kjenv st.kθ }
     member __.lift_Q f st = (), { st with Q = f st.Q }
-    member __.lift_constraints f (st : state) = (), { st with constraints = subst_constraints st.Σ (f st.constraints) }
+    member __.lift_constraints f (st : state) = (), { st with constraints = subst_constraints st.θ (f st.constraints) }
     member __.lift_named_tyvars f (st : state) = (), { st with named_tyvars = f st.named_tyvars }
 
     member M.set_Γ x = M.lift_Γ (fun _ -> x)
@@ -104,32 +104,32 @@ type basic_builder (loc : location) =
 
     member M.clear_constraints = M.set_constraints constraints.empty
 
-    member M.update_subst Σ =
+    member M.update_subst θ =
         M {
             do! M.lift_state (fun s ->
-                    let θ, Θ as Σ = compose_tksubst Σ s.Σ
+                    let tθ, kθ as θ = compose_tksubst θ s.θ
                     in
-                        { γ = subst_kjenv Θ s.γ
-                          δ = subst_tenv Σ s.δ
-                          θ = θ
-                          Θ = Θ
-                          Γ = subst_jenv Σ s.Γ
-                          Q = subst_prefix Σ s.Q
-                          constraints = subst_constraints Σ s.constraints
+                        { γ = subst_kjenv kθ s.γ
+                          δ = subst_tenv θ s.δ
+                          tθ = tθ
+                          kθ = kθ
+                          Γ = subst_jenv θ s.Γ
+                          Q = subst_prefix θ s.Q
+                          constraints = subst_constraints θ s.constraints
                           named_tyvars = s.named_tyvars })
         }
 
     member private M.gen t =
         M {
-            let! { Γ = Γ; constraints = cs; Q = Q; θ = θ; Θ = Θ } as st = M.get_state
+            let! { Γ = Γ; constraints = cs; Q = Q; tθ = tθ; kθ = kθ } as st = M.get_state
             let vas = Computation.set { for x, n in st.named_tyvars do yield Va (n, Some x) }
-            return generalize (cs, Q, subst_ty (θ, Θ) t) Γ vas
+            return generalize (cs, Q, subst_ty (tθ, kθ) t) Γ vas
         }
 
     member private M.kgen k =
         M {
-            let! { γ = γ; Θ = Θ } = M.get_state
-            return kgeneralize (subst_kind Θ k) γ
+            let! { γ = γ; kθ = kθ } = M.get_state
+            return kgeneralize (subst_kind kθ k) γ
         }
 
     member private __.lookup report (env : Env.t<_, _>) x =
@@ -148,8 +148,8 @@ type basic_builder (loc : location) =
 
     member M.bind_γ x ς =
         M {
-            let! _, Θ = M.get_Σ
-            let ς = subst_kscheme Θ ς
+            let! _, kθ = M.get_θ
+            let ς = subst_kscheme kθ ς
             do! M.lift_γ (fun γ -> γ.bind x ς)
             return ς
         }
@@ -196,8 +196,8 @@ type basic_builder (loc : location) =
 
     member M.bind_Γ jk ({ scheme = σ } as jv) =
         M {
-            let! Σ = M.get_Σ
-            let σ = subst_scheme Σ σ
+            let! θ = M.get_θ
+            let σ = subst_scheme θ σ
             do! M.lift_Γ (fun Γ -> Γ.bind jk jv)
             return σ
         }
@@ -283,7 +283,7 @@ type basic_builder (loc : location) =
 
 type typing_builder (loc) =
     inherit basic_builder (loc)
-    member __.Yield ((x, t : ty)) = fun (s : state) -> (x, subst_ty s.Σ t), s
+    member __.Yield ((x, t : ty)) = fun (s : state) -> (x, subst_ty s.θ t), s
     member M.Yield (t : ty) = M { let! (), r = M { yield (), t } in return r }
     member M.YieldFrom f = M { let! (r : ty) = f in yield r }
 
@@ -293,6 +293,6 @@ type translator_typing_builder<'u, 'a> (e : node<'u, 'a>) =
 
 type kinding_builder<'u> (τ : node<'u, kind>) =
     inherit basic_builder (τ.loc)
-    member __.Yield ((x, k : kind)) = fun s -> let k = subst_kind s.Θ k in τ.typed <- k; (x, k), s
+    member __.Yield ((x, k : kind)) = fun s -> let k = subst_kind s.kθ k in τ.typed <- k; (x, k), s
     member M.Yield (k : kind) = M { let! (), r = M { yield (), k } in return r }
     member M.YieldFrom f = M { let! (r : kind) = f in yield r }

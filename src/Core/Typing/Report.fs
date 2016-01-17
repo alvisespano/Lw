@@ -69,8 +69,8 @@ module Error =
     
     let type_mismatch x = mismatch E 4 "expression" "type" x
 
-    let row_tail_circularity loc ρ θ =
-        E 5 loc "unification fails because row type variable type variable %O occurs in the domain of substituion %O" ρ θ
+    let row_tail_circularity loc ρ tθ =
+        E 5 loc "unification fails because row type variable type variable %O occurs in the domain of substituion %O" ρ tθ
 
     let cannot_rewrite_row loc l r1 r2 =
         E 6 loc "row type %O cannot be rewritten with label %s in order to match row type %O" r1 l r2
@@ -126,6 +126,10 @@ module Error =
 
     let lambda_parameter_is_not_monomorphic loc x t =
         E 23 loc "function parameter is used polymorphically: %s : %O" x t
+
+    let skolemized_type_variable_escaped loc tsk =
+        E 24 loc "skolem type variable %O escaped" tsk
+
 
 
 [< RequireQualifiedAccess >]

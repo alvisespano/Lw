@@ -27,7 +27,7 @@ type [< NoComparison; NoEquality >] candidate =
         constraints : constraints
         σ           : scheme
         δ           : int
-        Σ           : tsubst * ksubst
+        θ           : tsubst * ksubst
     }
 with
     override this.ToString () = this.pretty
@@ -37,12 +37,12 @@ let private search_best_candidate ctx p cx ct jkσs =
     [ for jk, σ in jkσs do
             let csi, _, ti = instantiate σ
             match try_principal_type_of ctx ti ct with
-            | Some (θ : tsubst, Θ) ->
+            | Some (tθ : tsubst, kθ) ->
                 yield { constraints = csi
                         jk          = jk
                         σ           = σ
-                        δ           = (θ.restrict ti.fv).dom.Count
-                        Σ           = θ, Θ }
+                        δ           = (tθ.restrict ti.fv).dom.Count
+                        θ           = tθ, kθ }
             | _ -> ()
       ] |> List.sortBy (fun cand -> cand.δ)
         |> function
@@ -83,7 +83,7 @@ let rec resolve_constraints (ctx : context) e0 =
                         | Some cand ->
                             L.resolve Normal "%s : %O\n ~~> %O" x t cand
                             do! M.remove_constraint c
-                            do! M.update_subst cand.Σ
+                            do! M.update_subst cand.θ
                             let p = P_CId c
                             let e1 = E_Jk cand.jk
                             let e2 = e0.value

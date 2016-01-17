@@ -1,5 +1,12 @@
 ﻿
-16/1/2016:
+17/1/2015:
+* REFACT: substitution renamed: now tθ stands for tsubst and kθ for ksubst, leading to a very natural θ for both. Symbols Σ and Θ are not used anymore
+* UP: unification for HML implemented roughly: needs completion and testing of course
+* UP: skolemification of type variables implemented via T_Cons; kinds are a problem though. Probably T_Forall should carry kinds along with quantified variables
+
+
+16/1/2016: [v0.9.0]
+* version bump due to new HML system integration
 * REFACT: predicate is no more as it did not make much sense: every item schemes consist of is now inlined into the scheme record directly
 * REFACT: big refactor doe to new HML system
 * UP: new HML (APP) rule implemented and (ABS) finished
@@ -580,7 +587,7 @@
 * NEW: performance measure tools implemented in Globals for measuring cpu time
 * OPT: substitution composition is 
 * OPT: custom state monad redesigned: now Bind is not overridden: no more overhead given by constantly composing substitutions and constant applying to Γ and π.
-       Now composition of θ and update of Γ and π is done specifically when unification occurs (x3 speed increase)
+       Now composition of tθ and update of Γ and π is done specifically when unification occurs (x3 speed increase)
 * FIX: named type variables led to bad substitutions: now the numeric unique identifier is computed as the hash code of the name and refresh is sound
 * FIX: refreshing of ungeneralized schemes bound by overload-bindings
 * NEW: ambiguous overloading resolution check implemented

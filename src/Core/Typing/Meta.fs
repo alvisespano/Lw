@@ -36,7 +36,7 @@ let rec kmgu (ctx : mgu_context) k1_ k2_ =
             ksubst.empty
                                      
         | K_Cons (x1, ks1), K_Cons (x2, ks2) when x1 = x2 && ks1.Length = ks2.Length ->
-            List.fold2 (fun θ t t' -> let θ' = R t t' in θ' ** θ) ksubst.empty ks1 ks2
+            List.fold2 (fun tθ t t' -> let tθ' = R t t' in tθ' ** tθ) ksubst.empty ks1 ks2
 
         | K_Var α, k
         | k, K_Var α ->
@@ -51,10 +51,10 @@ let rec kmgu (ctx : mgu_context) k1_ k2_ =
 type basic_builder with
     member M.kunify loc (k1 : kind) (k2 : kind) =
         M {
-            let! { Θ = Θ; γ = γ } = M.get_state
-            let Θ = kmgu { loc = loc; γ = γ } (subst_kind Θ k1) (subst_kind Θ k2)
-            L.mgu "[kU] %O == %O [%O]" k1 k2 Θ
-            do! M.update_subst (tsubst.empty, Θ)
+            let! { kθ = kθ; γ = γ } = M.get_state
+            let kθ = kmgu { loc = loc; γ = γ } (subst_kind kθ k1) (subst_kind kθ k2)
+            L.mgu "[kU] %O == %O [%O]" k1 k2 kθ
+            do! M.update_subst (tsubst.empty, kθ)
         }
 
 let private prompt_inferred_kind, prompt_evaluated_type = 
@@ -73,8 +73,8 @@ module private Eval =
     let rec eval_ty_expr (ctx : context) (τ : ty_expr) =
         let M = new translator_typing_builder<_, _> (τ)
         M {            
-            let! _, Θ = M.get_Σ
-            τ.typed <- subst_kind Θ τ.typed // apply latest subst to each typed node
+            let! _, kθ = M.get_θ
+            τ.typed <- subst_kind kθ τ.typed // apply latest subst to each typed node
             let! t = eval_ty_expr' ctx τ
             L.debug Min "[t::K] %O\n :: %O\n[T*]   %O" τ τ.typed t
             return t

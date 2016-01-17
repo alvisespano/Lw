@@ -398,18 +398,17 @@ type [< NoComparison; NoEquality >] subst<'t> (env : Env.t<var, 't>) =
     member __.restrict αks = new subst<'t> (env.filter (fun α _ -> Set.exists (fun (α', _) -> α = α') αks))
     member __.remove αs = new subst<'t> (Seq.fold (fun env α -> env.remove α) env αs)
     member __.map f = new subst<'t> (env.map f)
+    member __.search_by f = env.search_by f
 
     member __.pretty_sep sep = env.pretty_by_binding (fun α t -> sprintf "%O = %O" α t) sep
     member this.pretty = this.pretty_sep "; "
     override this.ToString () = this.pretty
       
-    static member (-) (θ1 : subst<'a>, θ2 : subst<'a>) = new subst<'a> (θ1.env - θ2.env)
-    static member (+) (θ1 : subst<'a>, θ2 : subst<'a>) = new subst<'a> (θ1.env + θ2.env)
+    member private tθ1.append (tθ2 : subst<_>) = new subst<'t> (tθ1.env + tθ2.env)
 
     static member empty = new subst<'t> ()
 
-    member θ1.compose apply_subst (θ2 : subst<'t>) = θ1.map (fun _ t -> apply_subst θ2 t) + θ2.restrict (θ2.dom - θ1.dom)
-
+    member tθ1.compose apply_subst (tθ2 : subst<'t>) = (tθ1.map (fun _ t -> apply_subst tθ2 t)).append (tθ2.restrict (tθ2.dom - tθ1.dom))
 
 type ksubst = subst<kind>
 type tsubst = subst<ty>
@@ -417,38 +416,42 @@ type vasubst = subst<var>
 type tksubst = tsubst * ksubst
 
 
+
+// type and kind augmentations for substituting variables
+//
+
 type kind with
     member internal k.apply_to_vars f R =
         match k with
         | K_Var α          -> f α
         | K_Cons (x, ks)   -> K_Cons (x, List.map R ks)
 
-    member k.subst_vars (θ : vasubst) =
-        let R (k : kind) = k.subst_vars θ
+    member k.subst_vars (tθ : vasubst) =
+        let R (k : kind) = k.subst_vars tθ
         in
-            k.apply_to_vars (fun α -> match θ.search α with Some β -> K_Var β | None -> k) R
+            k.apply_to_vars (fun α -> match tθ.search α with Some β -> K_Var β | None -> k) R
 
 type ty with
-    member internal t.apply_to_vars f (θ : subst<_>) S Sk =
+    member internal t.apply_to_vars f (tθ : subst<_>) S Sk =
         match t with
         | T_Bottom -> T_Bottom
         | T_Var (α, k) ->
-            match θ.search α with
+            match tθ.search α with
             | Some x -> f x k
             | None   -> T_Var (α, Sk k)
 
         | T_Cons (x, k)             -> T_Cons (x, Sk k)
         | T_App (t1, t2)            -> T_App (S t1, S t2)
         | T_HTuple ts               -> T_HTuple (List.map S ts)
-        | T_Forall ((α, t1), t2)    -> if Set.contains α θ.dom then unexpected "some quantified variables in polymorphic type %O appear in domain of substituion %O" __SOURCE_FILE__ __LINE__ t θ // TODO: can this check be removed?
+        | T_Forall ((α, t1), t2)    -> if Set.contains α tθ.dom then unexpected "some quantified variables in polymorphic type %O appear in domain of substituion %O" __SOURCE_FILE__ __LINE__ t tθ // TODO: can this check be removed?
                                        else T_Forall ((α, S t1), S t2)
         | T_Closure (x, Δ, τ, k)    -> T_Closure (x, Δ, τ, Sk k)
 
-    member t.subst_vars (θ : vasubst) =
-        let S (t : ty) = t.subst_vars θ
-        let Sk (k : kind) = k.subst_vars θ
+    member t.subst_vars (tθ : vasubst) =
+        let S (t : ty) = t.subst_vars tθ
+        let Sk (k : kind) = k.subst_vars tθ
         in
-            t.apply_to_vars (fun β k -> T_Var (β, Sk k)) θ S Sk
+            t.apply_to_vars (fun β k -> T_Var (β, Sk k)) tθ S Sk
 
        
 
@@ -592,105 +595,3 @@ type scheme with
             cs.fv + t.fv
 
     static member binding_separator = ty.binding_separator
-
-
-// substitution applications
-//
-
-let rec subst_kind (Θ : ksubst) (k : kind) = 
-    let Sk = subst_kind Θ
-    in
-        k.apply_to_vars (fun α -> match Θ.search α with Some k -> k | None -> K_Var α) Sk
-
-
-let rec subst_ty (θ : tsubst, Θ : ksubst) (t :ty) =
-    let S = subst_ty (θ, Θ)
-    let Sk = subst_kind Θ
-    in
-        t.apply_to_vars (fun t _ -> t) θ S Sk
-
-//// first argument is the NEW subst, second argument is the OLD one
-let compose_ksubst (θ' : ksubst) θ = θ'.compose subst_kind θ
-
-let compose_tksubst (θ' : tsubst, Θ') (θ, Θ) =
-    let Θ = compose_ksubst Θ' Θ
-    let θ = θ'.compose (fun θ -> subst_ty (θ, Θ)) θ
-    in
-        θ, Θ
-
-let subst_prefix Σ Q = [ for α, t in Q do yield α, subst_ty Σ t ]
-
-// TODO: implement actual substitution of type constraints for GADTs
-let subst_type_constraints _ tcs = tcs
-
-let subst_constraints Σ (cs : constraints) = cs.map (fun c -> { c with ty = subst_ty Σ c.ty })
-
-let subst_scheme Σ σ =
-    let { constraints = cs; ty = t } = σ
-    in
-        { constraints = subst_constraints Σ cs; ty = subst_ty Σ t }
-        
-let subst_kscheme (Θ : ksubst) σκ =
-    let { forall = αs; kind = k } = σκ
-    let Θ = Θ.remove αs
-    in
-        { forall = αs; kind = subst_kind Θ k }
-
-let subst_jenv Σ (env : jenv) = env.map (fun _ ({ scheme = σ } as jv) -> { jv with scheme = subst_scheme Σ σ })
-let subst_kjenv Θ (env : kjenv) = env.map (fun _ -> subst_kscheme Θ)
-let subst_tenv Σ (env : tenv) = env.map (fun _ -> subst_ty Σ)
-
-// operations over types, schemes and prefixes
-
-let internal fv_env fv (env : Env.t<_, _>) = env.fold (fun αs _ v -> Set.union αs (fv v)) Set.empty
-
-let fv_Γ (Γ : jenv) = fv_env (fun { scheme = σ } -> σ.fv) Γ
-
-let private var_refresher αs = new vasubst (Set.fold (fun (env : Env.t<_, _>) (α : var) -> env.bind α α.refresh) Env.empty αs)
-
-let instantiate { constraints = cs; ty = T_Foralls (Q, t) } =
-    let αs = prefix_dom Q
-    let θ = var_refresher αs
-    let cs = constr { for c in cs do yield { c.refresh with ty = c.ty.subst_vars θ } }
-    in
-        cs, Q, t.subst_vars θ
-          
-let generalize (cs : constraints, Q, t : ty) Γ restricted_vars =
-    let αs = (t.fv + cs.fv) - (fv_Γ Γ) - restricted_vars
-    let Q = [ for α, t in Q do if Set.contains α αs then yield α, t ]
-    in
-        { constraints = cs; ty = T_Foralls (Q, t) }
-
-// TODO: refresh_ty and Ungeneralized may not be of use anymore in HML
-let refresh_ty (t : ty) =
-    let _, _, t = instantiate { constraints = constraints.empty; ty = t }
-    in
-        t
-
-let Ungeneralized t = { constraints = constraints.empty; ty = t }
-
-let (|Ungeneralized|) = function
-    | { constraints = _; ty = T_Foralls ([], t) } -> t
-    | σ -> unexpected "expected an ungeneralized type scheme but got: %O" __SOURCE_FILE__ __LINE__ σ
-
-
-// operations over kinds
-
-let fv_γ (γ : kjenv) = fv_env (fun (ς : kscheme) -> ς.fv) γ
-
-let kinstantiate { forall = αs; kind = k } =
-    let θ = var_refresher αs
-    in
-        k.subst_vars θ
-
-// TODO: restricted named vars should be taken into account also for kind generalization?
-let kgeneralize (k : kind) γ =
-    let αs = k.fv - (fv_γ γ)
-    in
-        { forall = αs; kind = k }
-
-let (|KUngeneralized|) = function
-    | { forall = αs; kind = k } when αs.Count = 0 -> k
-    | ς -> unexpected "expected an ungeneralized kind scheme but got: %O" __SOURCE_FILE__ __LINE__ ς
-
-let KUngeneralized k = { forall = Set.empty; kind = k }

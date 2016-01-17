@@ -39,6 +39,8 @@ module Typing =
         let row = "Row"
         let htuple = "HTuple"
 
+    let skolemized_tyvar_fmt : StringFormat<string -> string> = "^%O"
+
 module Printing =
 
     // dynamic configuration

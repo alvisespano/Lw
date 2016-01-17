@@ -69,39 +69,39 @@ let rec pt_expr (ctx : context) (e0 : expr) =
     } 
 
 
-//infer :: (Q, Γ, e) → (Q, θ, ϕ)
+//infer :: (Q, Γ, e) → (Q, tθ, ϕ)
 //
 //infer(Q, Γ, x ) =
 //return (Q, [], Γ(x))
 //
 //infer(Q, Γ, let x = e1 in e2)
-//let (Q1, θ1, ϕ1) = infer(Q, Γ, e1)
-//let (Q2, θ2, ϕ2) = infer(Q1,(θ1Γ, x : ϕ1), e2)
-//return (Q2, θ2 ◦ θ1, ϕ2)
+//let (Q1, tθ1, ϕ1) = infer(Q, Γ, e1)
+//let (Q2, tθ2, ϕ2) = infer(Q1,(tθ1Γ, x : ϕ1), e2)
+//return (Q2, tθ2 ◦ tθ1, ϕ2)
 //
 //infer(Q, Γ, λx . e) =
 //assume α, β are fresh
-//let (Q1, θ1, ϕ1) = infer((Q, α > ⊥),(Γ, x : α), e)
-//fail if not (θ1α = τ ) for some τ
+//let (Q1, tθ1, ϕ1) = infer((Q, α > ⊥),(Γ, x : α), e)
+//fail if not (tθ1α = τ ) for some τ
 //let (Q2, Q3) = split(Q1, dom(Q))
-//let (Q03, θ03) = extend(Q3, β > ϕ1)
-//return (Q2, θ1, ∀Q03. θ1α → θ03β)
+//let (Q03, tθ03) = extend(Q3, β > ϕ1)
+//return (Q2, tθ1, ∀Q03. tθ1α → tθ03β)
 //
 //infer(Q, Γ, λ(x :: σ). e) =
 //assume β is fresh, σ is closed
-//let (Q1, θ1, ϕ1) = infer(Q,(Γ, x : σ), e)
+//let (Q1, tθ1, ϕ1) = infer(Q,(Γ, x : σ), e)
 //let (Q2, Q3) = split(Q1, dom(Q))
-//let (Q03, θ03) = extend(Q3, β > ϕ1)
-//return (Q2, θ1, ∀Q03. σ → θ03β)
+//let (Q03, tθ03) = extend(Q3, β > ϕ1)
+//return (Q2, tθ1, ∀Q03. σ → tθ03β)
 //
 //infer(Q, Γ, e1 e2) =
 //assume α1, α2, β are fresh
-//let (Q1, ϕ1, θ1) = infer(Q, Γ, e1)
-//let (Q2, ϕ2, θ2) = infer(Q1, θ1Γ, e2)
-//let (Q02, θ02) = extend(Q2, α1 > θ2ϕ1, α2 > ϕ2, β > ⊥)
-//let (Q3, θ3) = unify(Q02, θ02α1, θ02α2 → β)
+//let (Q1, ϕ1, tθ1) = infer(Q, Γ, e1)
+//let (Q2, ϕ2, tθ2) = infer(Q1, tθ1Γ, e2)
+//let (Q02, tθ02) = extend(Q2, α1 > tθ2ϕ1, α2 > ϕ2, β > ⊥)
+//let (Q3, tθ3) = unify(Q02, tθ02α1, tθ02α2 → β)
 //let (Q4, Q5) = split(Q3, dom(Q))
-//return (Q4, θ3 ◦ θ2 ◦ θ1, ∀Q5. θ3β)
+//return (Q4, tθ3 ◦ tθ2 ◦ tθ1, ∀Q5. tθ3β)
 
 
 and pt_expr' ctx e0 =
@@ -203,8 +203,8 @@ and pt_expr' ctx e0 =
             // TODO: the following code can be monadized
             let! Q1 = M.get_Q
             let Q2, Q3 = split_prefix Q1 (prefix_dom Q0)
-            let Q3', Σ3' = extend_prefix Q3 β t
-            do! M.update_subst Σ3'
+            let Q3', θ3' = extend_prefix Q3 β t
+            do! M.update_subst θ3'
             do! M.set_Q Q2
             yield T_Foralls (Q3', T_Arrow (tx, T_Star_Var β))
 
@@ -213,16 +213,16 @@ and pt_expr' ctx e0 =
             let! t1 = pt_expr ctx e1
             let! t2 = pt_expr ctx e2
             let! Q2 = M.get_Q
-            let! Σ2 = M.get_Σ
+            let! θ2 = M.get_θ
             let α1 = var.fresh
             let α2 = var.fresh
             let β = var.fresh
-            let Q2', Σ2' = extend_prefix_many Q2 [α1, subst_ty Σ2 t1; α2, t2; β, T_Bottom]
-            do! M.update_subst Σ2'
-            do! M.set_Q Q2'
+            let Q2', θ2' = extend_prefix_many Q2 [α1, subst_ty θ2 t1; α2, t2; β, T_Bottom]
+            do! M.update_subst θ2'
             let α1 = T_Star_Var α1
             let α2 = T_Star_Var α2
-            let β = T_Star_Var β            
+            let β = T_Star_Var β
+            do! M.set_Q Q2'
             do! M.unify e1.loc (T_Arrow (α2, β)) α1
             let! Q3 = M.get_Q
             let Q4, Q5 = split_prefix Q3 (prefix_dom Q0)
@@ -384,7 +384,7 @@ and pt_expr' ctx e0 =
                 let! cs = M.get_constraints
                 do! M.ignore <| M.List.tryFind (fun c -> M {
                                             match c.name = x, try_mgu mgu_ctx c.ty t with
-                                            | true, Some Σ -> do! M.update_subst Σ
+                                            | true, Some θ -> do! M.update_subst θ
                                                               return true
                                             | _            -> return false
                             }) cs.toList
