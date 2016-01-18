@@ -11,6 +11,7 @@ open FSharp.Common
 open Lw.Core
 open Lw.Core.Absyn
 open Lw.Core.Typing.Defs
+open Lw.Core.Typing.Utils
 
 type resolution = Res_Strict | Res_Loose | Res_No
 

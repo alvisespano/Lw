@@ -114,7 +114,7 @@ let possibly_tuple L0 e tuple cs =
 let rec subst_kind (kθ : ksubst) (k : kind) = 
     let Sk = subst_kind kθ
     in
-        k.apply_to_vars (fun α -> match kθ.search α with Some k -> k | None -> K_Var α) Sk
+        k.map_vars (fun α -> match kθ.search α with Some k -> k | None -> K_Var α) Sk
 
 
 let rec subst_ty (tθ : tsubst, kθ : ksubst) (t :ty) =
@@ -250,11 +250,59 @@ let split_prefix =
     in
         R
             
-let extend_prefix (Q : prefix) α (t : ty) =
+let extend_prefix (Q : prefix) (α, t : ty) =
     let t' = t.nf
     in
         if t'.is_unquantified then Q, (new tsubst (α, t'), ksubst.empty)
         else (α, t) :: Q, (tsubst.empty, ksubst.empty)
 
 let extend_prefix_many Q Q' =
-    List.fold (fun (Q, θ) (α, t) -> let Q', θ' = extend_prefix Q α t in Q', compose_tksubst θ' θ) (Q, (tsubst.empty, ksubst.empty)) Q'
+    List.fold (fun (Q, θ) (α, t) -> let Q', θ' = extend_prefix Q (α, t) in Q', compose_tksubst θ' θ) (Q, (tsubst.empty, ksubst.empty)) Q'
+
+let slice f =
+    let rec R l1 = function
+        | []      -> None
+        | x :: xs -> if f x then Some (l1, x, xs) else R (x :: l1) xs
+    in
+        R []
+
+let (|Prefix_Slice|_|) α = slice (fst >> (=) α) 
+    
+
+let private update_prefix f Q (α, t : ty) =
+    match split_prefix Q t.fv with
+    | Q0, Prefix_Slice α (Q1, _, Q2) -> f (α, t, Q0, Q1, Q2)
+    | _                              -> unexpected "item (%O : %O) is not in prefix: %O" __SOURCE_FILE__ __LINE__ α t (pretty_prefix Q)
+
+let private update_prefix__reusable_part (α, t, Q0, Q1, Q2) =
+    let θ = new tsubst (α, t), ksubst.empty
+    in
+        Q0 @ Q1 @ subst_prefix θ Q2, θ
+
+let update_prefix_with_bound =
+    update_prefix <| fun (α, t, Q0, Q1, Q2 as args) ->
+        let t' = t.nf
+        in
+            if t'.is_unquantified then update_prefix__reusable_part args
+            else Q0 @ Q1 @ [α, t] @ Q2, (tsubst.empty, ksubst.empty)
+
+let update_prefix_with_subst = update_prefix update_prefix__reusable_part
+
+
+let (|T_ForallsK|) = function
+    | T_Foralls (Q, t) ->
+        let rec R t =
+          [ match t with
+            | T_Bottom _      
+            | T_Closure _
+            | T_Cons _                  -> ()
+            | T_Var (α, k)              -> match List.tryFind (fst >> (=) α) Q with Some (_, t') -> yield (α, t', k) | None -> ()
+            | T_HTuple ts               -> for t in ts do yield! R t
+            | T_App (t1, t2)     
+            | T_Forall ((_, t1), t2)    -> yield! R t1; yield! R t2 ]
+        in
+            R t, t
+
+let (|T_ForallK|_|) = function
+    | T_Foralls ([α, t1, k], t2) -> Some ((α, t1, k), t2)
+    | _                          -> None

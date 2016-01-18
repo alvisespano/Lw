@@ -56,31 +56,24 @@ let dom_wrt Q (t : ty) =
 
 // match System-F quantifiers
 let (|T_Foralls_F|_|) = function
-    | T_Foralls (Q, t) when List.forall (function _, T_Bottom -> true | _ -> false) Q -> Some (List.map fst Q, t)
+    | T_Foralls (Q, t) when List.forall (function _, T_Bottom _ -> true | _ -> false) Q -> Some (List.map fst Q, t)
     | _ -> None
 
 
 [< RequireQualifiedAccess >]
 module internal Mgu =
 
-
-    let (|T_NamedVar|_|) = function
-        | T_Var (Va (_, Some _) as α, k) -> Some (α, k)
-        | _ -> None
-
     module Pure =
+        type var with
+            member α.skolemized k = T_Cons (sprintf Config.Typing.skolemized_tyvar_fmt α.pretty, k)
 
-//        type ty with
-//            static member skolemize_var α = T_Cons (sprintf Config.Typing.skolemized_tyvar_fmt α, )
-
-        // TODO: [continue] probably T_Forall needs to carry kinds along with quantified vars: this would also make sense to kind inference, which currently discards the kind inferred for quantified vars
         let skolemized = function
-            | T_Foralls (Q, t) when not Q.IsEmpty ->
-                let t = t.apply_to_vars (fun α k -> if List.exists (fun (β, _) -> α = β) Q then T_Cons (sprintf Config.Typing.skolemized_tyvar_fmt α.pretty, k) else T_Var (α, k))
+            | T_ForallsK ([], t) -> [], t
+            | T_ForallsK (Qk, t) ->
+                let tsks = [ for α, _, k in Qk do yield α, α.skolemized k ]
+                let θ = new tsubst (Env.t.ofSeq tsks), ksubst.empty
                 in
-                    Seq.map snd m.toSeq, t
-
-            | t -> [], t
+                    List.map snd tsks, subst_ty θ t
 
 
         let rec subsume ctx Q (t1 : ty) (t2 : ty) =
@@ -103,6 +96,26 @@ module internal Mgu =
 
             | _ -> Q, (tsubst.empty, ksubst.empty)
 
+
+        and mgu_scheme ctx Q (t1_ : ty)  (t2_ : ty) =
+            assert (t1_.is_nf && t2_.is_nf)
+            match t1_, t2_ with
+            | (T_Bottom _, (_ as t))
+            | (_ as t, T_Bottom _) -> Q, (tsubst.empty, ksubst.empty), t
+
+            | T_Foralls (Q1, t1), T_Foralls (Q2, t2) ->
+                assert (let p a b = Set.intersect a b = Set.empty
+                        let d = prefix_dom Q
+                        let d1 = prefix_dom Q1
+                        let d2 = prefix_dom Q2
+                        in
+                            p d d1 && p d1 d2 && p d d2)
+                let Q3, θ3 = mgu ctx (Q @ Q1 @ Q2) t1 t2
+                let Q4, Q5 = split_prefix Q3 (prefix_dom Q)
+                in
+                    Q4, θ3, T_Foralls (Q5, subst_ty θ3 t1)
+
+
         and mgu (ctx : mgu_context) Q t1_ t2_ =
             let ( ** ) = compose_tksubst
             let S = subst_ty
@@ -120,9 +133,32 @@ module internal Mgu =
                     let Q3, θ3 = let θ = θ2 ** θ1 in R Q2 (S θ r) (S θ s')
                     in
                         Q3, θ3 ** θ2 ** θ1
+
+                | T_ForallK ((α, _, k1), t1), T_ForallK ((β, _, k2), t2) ->
+                    let c1 = α.skolemized k1
+                    let c2 = β.skolemized k2
+                    let Q1, θ1 =
+                        let θ1 = new tsubst (α, c1), ksubst.empty
+                        let θ2 = new tsubst (β, c2), ksubst.empty
+                        in
+                            R Q0 (S θ1 t1) (S θ2 t2)
+                    if c1 // [continua] è meglio rifare il T_ForallK singolo in modo che usi un metodo 'ty.on_var f' che fa qualcosa alle variabili
                     
-                | T_Var (α, k), (T_NamedVar _ as t) // prefer named tyvars over anonymous tyvars when unifying tyvar against tyvar
-                | (T_NamedVar _ as t), T_Var (α, k)
+                | T_Var (α1, k1), T_NamedVar (α2, k2) // prefer named tyvars over anonymous tyvars when unifying tyvar against tyvar
+                | T_NamedVar (α2, k2), T_Var (α1, k1)
+                | T_Var (α1, k1), T_Var (α2, k2) ->
+                    let αt1 = List.find (fst >> (=) α1) Q0 |> snd
+                    let αt2 = List.find (fst >> (=) α2) Q0 |> snd
+                    // occurs check between one var into the other type bound
+                    let check α t = if Set.contains α (dom_wrt Q0 t) then Report.Error.circularity loc t1 t2 (T_Var (α, t)) t2
+                    check α1 t2
+                    check α2 t1
+                    let Q1, θ1, t = mgu_scheme ctx Q αt1 αt2
+                    let Q2, θ2 = update_prefix_with_subst Q1 (α1, t2)
+                    let Q3, θ3 = update_prefix_with_bound Q2 (α2, t)
+                    in
+                        Q3, θ3 ** θ2 ** θ1
+
                 | T_Var (α, k), t
                 | t, T_Var (α, k) ->
                     let αt =
@@ -133,7 +169,7 @@ module internal Mgu =
                     // occurs check
                     if Set.contains α (dom_wrt Q t) then let S = S θ0 in Report.Error.circularity loc (S t1_) (S t2_) (S (T_Var (α, k))) (S t)
                     let Q1, θ1 = subsume ctx Q t αt
-                    let Q2, θ2 = update_prefix Q1 (new tsubst (α, S θ1 t))
+                    let Q2, θ2 = update_prefix_with_subst Q1 (α, S θ1 t)
                     in
                         Q2, θ2 ** θ1
 
@@ -151,162 +187,6 @@ module internal Mgu =
             with Mismatch (t1, t2) -> Report.Error.type_mismatch loc t1_ t2_ t1 t2
 
 
-    module Computational =
-       
-        let private __tYield _Yield (tθ : tsubst) = _Yield ((tθ, ksubst.empty))
-        let private __kYield _Yield (kθ : ksubst) = _Yield ((tsubst.empty, kθ))
-        let private __YieldFrom _Bind _Yield f = _Bind (f, _Yield)
-
-        module StateMonad =
-
-           type [< NoEquality; NoComparison >] state = { θ : tksubst }
-
-           type mgu_builder () =
-                inherit Monad.state_builder<state> ()
-                member __.Zero () = fun s -> s.θ, s
-                member __.Yield (θ : tksubst) = fun s -> let θ = compose_tksubst θ s.θ in θ, { θ = θ }
-                member this.YieldFrom f = __YieldFrom this.Bind (fun (θ : tksubst) -> this.Yield θ) f
-                member this.Yield x = __tYield this.Yield x
-                member this.Yield x = __kYield this.Yield x
-                member __.get = fun s -> s.θ, s
-       
-           let mgu (ctx : mgu_context) t1_ t2_ =
-                let loc = ctx.loc
-                let U = new mgu_builder ()
-                let S = subst_ty
-                let rec R t1 t2 =
-                    U {                    
-                        let! θ = U.get
-                        let S = S θ
-                        match t1, t2 with
-                        | T_Cons (x, k1), T_Cons (y, k2) when x = y ->
-                            yield kmgu ctx k1 k2
-
-                        | T_Var (α, k1), T_Var (β, k2) when α = β ->
-                            yield kmgu ctx k1 k2
-                                      
-                        | T_Row _ as s, T_Row_Ext (l, t, (T_Row (_, ρo) as r)) ->
-                            let t', s', tθ1 = rewrite_row loc t1 t2 s l
-                            match ρo with
-                            | None -> ()
-                            | Some ρ ->                            
-                                if Set.contains ρ tθ1.dom then Report.Error.row_tail_circularity loc ρ tθ1
-                                yield! R t t'
-                                yield! R r s'
-
-                        | T_Var (α, k) as tα, (T_NamedVar _ as t)
-                        | (T_NamedVar _ as t), (T_Var (α, k) as tα)
-                        | (T_Var (α, k) as tα), t
-                        | t, (T_Var (α, k) as tα) ->
-                            yield kmgu ctx k t.kind
-                            if Set.contains α t.fv then Report.Error.circularity loc (S t1) (S t2) (S tα) (S t)
-                            yield new tsubst (α, t) |> check_circularity
-
-                        | T_App (t1, t2), T_App (t1', t2') ->
-                            yield! R t1 t1'
-                            yield! R t2 t2'
-                                                           
-                        | t1, t2 ->
-                            return Report.Error.type_mismatch loc (S t1_) (S t2_) (S t1) (S t2)
-                    }
-                in
-                    R t1_ t2_ { θ = tsubst.empty, ksubst.empty } |> fst
-        
-
-        module Functional =
-
-            type mgu_builder () =
-                inherit Computation.Builder.collection<tksubst> ((tsubst.empty, ksubst.empty), fun θ1 θ2 -> compose_tksubst θ2 θ1)
-                member this.YieldFrom (tθ : tsubst) = this.YieldFrom ((tθ, ksubst.empty))
-                member this.YieldFrom (kθ : ksubst) = this.YieldFrom ((tsubst.empty, kθ))
-
-            let mgu (ctx : mgu_context) t1_ t2_ =
-                let loc = ctx.loc
-                let U = new mgu_builder ()
-                let S = subst_ty
-                let rec R t1 t2 =
-                    U {                    
-                        let! θ = U.get
-                        let S = S θ
-                        match t1, t2 with
-                        | T_Cons (x, k1), T_Cons (y, k2) when x = y ->
-                            yield! kmgu ctx k1 k2
-
-                        | T_Var (α, k1), T_Var (β, k2) when α = β ->
-                            yield! kmgu ctx k1 k2
-                                      
-                        | T_Row _ as s, T_Row_Ext (l, t, (T_Row (_, ρo) as r)) ->
-                            let t', s', tθ1 = rewrite_row loc t1 t2 s l
-                            match ρo with
-                            | None -> ()
-                            | Some ρ ->
-                                if Set.contains ρ tθ1.dom then Report.Error.row_tail_circularity loc ρ tθ1
-                                yield! R t t'
-                                yield! R r s'
-
-                        | T_Var (α, k) as tα, (T_NamedVar _ as t)
-                        | (T_NamedVar _ as t), (T_Var (α, k) as tα)
-                        | (T_Var (α, k) as tα), t
-                        | t, (T_Var (α, k) as tα) ->
-                            yield! kmgu ctx k t.kind
-                            if Set.contains α t.fv then Report.Error.circularity loc (S t1) (S t2) (S tα) (S t)
-                            yield! new tsubst (α, t) |> check_circularity
-
-                        | T_App (t1, t2), T_App (t1', t2') ->
-                            yield! R t1 t1'
-                            yield! R t2 t2'
-                                                           
-                        | t1, t2 ->
-                            Report.Error.type_mismatch loc (S t1_) (S t2_) (S t1) (S t2)
-                    }
-                in
-                    R t1_ t2_
-
-
-    let private multi_comparison equals fs x =
-        let ret = function
-            | Choice1Of2 r  -> r
-            | Choice2Of2 ex -> raise ex
-        let rs = [ for name, f in fs do yield name, (try Choice1Of2 (f x) with ex -> Choice2Of2 ex) ]
-        let rs' = List.fold (fun z (_, r) ->        
-                        let occurs name = z |> List.map snd |> List.concat |> Seq.exists ((=) name)
-                        in
-                            match [ for name', r' in rs do if not (occurs name') && equals r r' then yield name' ] with
-                            | [] -> z
-                            | names ->  (r, names) :: z)
-                    [] rs
-        match rs' with
-        | [] -> unexpected "empty function list" __SOURCE_FILE__ __LINE__
-        | [r, _] -> ret r
-        | _ ->
-            let r1, names1 = List.maxBy (fun (_, names) -> List.length names) rs'
-            L.debug High "functions behaved differently: picking most common result: %s. Results are:\n%s" names1.[0]
-                (mappen_strings (fun (r, names) ->
-                        sprintf "%s:\n\t%s\n"
-                            (flatten_strings ", " names)
-                            (match r with Choice1Of2 (Q, (tθ, kθ)) -> sprintf "Q = %s\n\ttsubst = %O\n\tksubst = %O" (pretty_prefix Q) tθ kθ | Choice2Of2 ex -> pretty_exn_and_inners ex))
-                    "\n" rs')
-            #if DEBUG_MGU
-            System.Diagnostics.Debugger.Break ()
-            #endif
-            ret r1
-
-
-    // TODO: debug multiple mgus and remove this crap
-    let multi =
-        [ "pure", Pure.mgu
-//          "func", Computational.Functional.mgu
-//          "monad", Computational.StateMonad.mgu
-          ]
-        |> List.map (fun (a, b) -> a, uncurry4 b)
-        |> multi_comparison
-                (fun r1 r2 ->
-                    match r1, r2 with
-                    | Choice1Of2 (Q1, (tθ1, kθ1)), Choice1Of2 (Q2, (tθ2, kθ2)) -> let p x = sprintf "%O" x in p Q1 = p Q2 && p tθ1 = p tθ2 && p kθ1 = p kθ2
-                    | Choice2Of2 ex1, Choice2Of2 ex2                           -> let p = pretty_exn_and_inners in p ex1 = p ex2
-                    | _ -> false)
-        |> curry4
-
 let mgu = Mgu.Pure.mgu
 
 let try_mgu ctx Q t1 t2 =
@@ -318,11 +198,18 @@ type basic_builder with
         M {
             let! { tθ = tθ; kθ = kθ; γ = γ } = M.get_state
             let θ = tθ, kθ
-            let Q = M.get_Q
+            let! Q = M.get_Q
             let Q, (tθ, kθ as θ) = mgu { loc = loc; γ = γ } Q (subst_ty θ t1) (subst_ty θ t2)
-            L.mgu "[U] %O == %O\n    [%O] --- [%O]" t1 t2 tθ kθ
+            L.mgu "[U] %O == %O\n    [%O] --- [%O]\n    Q = %O" t1 t2 tθ kθ Q
             do! M.set_Q Q
             do! M.update_subst θ
+        }
+
+    member M.attempt_unify loc t1 t2 =
+        M {
+            let! st = M.get_state
+            try do! M.unify loc t1 t2
+            with :? Report.type_error -> do! M.set_state st          
         }
 
 let try_principal_type_of ctx pt t =

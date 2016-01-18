@@ -115,9 +115,30 @@ module private Eval =
                 yield! E τ
 
             | Te_Forall (((x, _), τo1), τ2) ->
-                let! t1 = M.Option.something (fun τ1 -> M { return! E τ1 }) T_Bottom τo1
                 let! α = M.add_named_tyvar x
                 let! t2 = E τ2                
+                let! t1 = M {
+                    match τo1 with
+                    | Some τ1 -> return! E τ1
+                    | None ->
+                        // look for kind of quantified type variable (needed by T_Bottom) into the type just evaluated for t2, whose kind has just been inferred
+                        let k =
+                            let rec l ts = List.fold (function None -> R | Some _ as r -> fun _ -> r) None ts
+                            and R = function
+                                | T_Var (β, k) when α = β   -> Some k
+                                | T_HTuple ts               -> l ts
+                                | T_Forall ((_, t1), t2)
+                                | T_App (t1, t2)            -> l [t1; t2]
+                                | T_Bottom _      
+                                | T_Closure _
+                                | T_Var _
+                                | T_Cons _                  -> None
+                            in
+                                match R t2 with
+                                | None -> unexpected "quantified type variable does not appear in %O" __SOURCE_FILE__ __LINE__ τ0
+                                | Some k -> k
+                        return T_Bottom k
+                    }
                 yield T_Forall ((α, t1), t2)
 
             | Te_Let (d, τ1) ->

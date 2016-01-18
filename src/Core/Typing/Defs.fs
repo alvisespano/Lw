@@ -40,7 +40,7 @@ and [< NoComparison; CustomEquality >] ty =
     | T_App of (ty * ty)
     | T_Forall of (var * ty) * ty
     | T_Closure of id * tenv ref * ty_expr * kind
-    | T_Bottom
+    | T_Bottom of kind
 with
     static member binding_separator = Config.Printing.type_annotation_sep
 
@@ -48,8 +48,8 @@ with
         match this with
         | T_Cons (_, k)
         | T_Var (_, k)
-        | T_Closure (_, _, _, k) -> k
-        | T_Bottom               -> kind.fresh_var
+        | T_Closure (_, _, _, k)
+        | T_Bottom k             -> k
         | T_HTuple ts            -> K_HTuple [for t in ts do yield t.kind]
         | T_Forall (_, t)        -> t.kind
         | T_App (t1, _)          -> match t1.kind with
@@ -60,12 +60,12 @@ with
 
     override this.GetHashCode () =
         match this with
-        | T_Bottom                  -> 0
-        | T_Cons (x, k)             -> 1 + (x, k).GetHashCode ()
-        | T_Var (α, k)              -> 1 + (α, k).GetHashCode ()
-        | T_HTuple ts               -> 1 + ts.GetHashCode ()
-        | T_App (t1, t2)            -> 1 + (t1, t2).GetHashCode ()
-        | T_Forall ((α, t1), t2)    -> 1 + (α, t1, t2).GetHashCode ()
+        | T_Bottom k                -> k.GetHashCode ()
+        | T_Cons (x, k)             -> (x, k).GetHashCode ()
+        | T_Var (α, k)              -> (α, k).GetHashCode ()
+        | T_HTuple ts               -> ts.GetHashCode ()
+        | T_App (t1, t2)            -> (t1, t2).GetHashCode ()
+        | T_Forall ((α, t1), t2)    -> (α, t1, t2).GetHashCode ()
         | T_Closure (_, _, _, _)    -> unexpected "hashing type closure: %O" __SOURCE_FILE__ __LINE__ this
 
     interface IEquatable<ty> with
@@ -312,6 +312,10 @@ let (|T_Star_Var|_|) = function
     | T_Var (α, K_Star) -> Some α
     | _ -> None
 
+let (|T_NamedVar|_|) = function
+    | T_Var (Va (_, Some _) as α, k) -> Some (α, k)
+    | _ -> None
+
 let T_Apps = Apps T_App
 let (|T_Apps|_|) = (|Apps|_|) (function T_App (t1, t2) -> Some (t1, t2) | _ -> None)
 
@@ -421,7 +425,7 @@ type tksubst = tsubst * ksubst
 //
 
 type kind with
-    member internal k.apply_to_vars f R =
+    member internal k.map_vars f R =
         match k with
         | K_Var α          -> f α
         | K_Cons (x, ks)   -> K_Cons (x, List.map R ks)
@@ -429,22 +433,32 @@ type kind with
     member k.subst_vars (tθ : vasubst) =
         let R (k : kind) = k.subst_vars tθ
         in
-            k.apply_to_vars (fun α -> match tθ.search α with Some β -> K_Var β | None -> k) R
+            k.map_vars (fun α -> match tθ.search α with Some β -> K_Var β | None -> k) R
 
 type ty with
+//    member internal t.collect (|P|_|) =
+//        List.fold (fun z -> function
+//            | P as t -> t
+//            | T_Var (α, k)              -> []
+//            | T_Bottom _                -> t
+//            | T_Cons (x, k)             -> T_Cons (x, Sk k)
+//            | T_App (t1, t2)            -> T_App (S t1, S t2)
+//            | T_HTuple ts               -> T_HTuple (List.map S ts)
+//            | T_Forall ((α, t1), t2)    -> assert Set.contains α tθ.dom; T_Forall ((α, S t1), S t2)
+//            | T_Closure (x, Δ, τ, k)    -> T_Closure (x, Δ, τ, Sk k)
+
     member internal t.apply_to_vars f (tθ : subst<_>) S Sk =
         match t with
-        | T_Bottom -> T_Bottom
         | T_Var (α, k) ->
             match tθ.search α with
             | Some x -> f x k
             | None   -> T_Var (α, Sk k)
 
+        | T_Bottom _                -> t
         | T_Cons (x, k)             -> T_Cons (x, Sk k)
         | T_App (t1, t2)            -> T_App (S t1, S t2)
         | T_HTuple ts               -> T_HTuple (List.map S ts)
-        | T_Forall ((α, t1), t2)    -> if Set.contains α tθ.dom then unexpected "some quantified variables in polymorphic type %O appear in domain of substituion %O" __SOURCE_FILE__ __LINE__ t tθ // TODO: can this check be removed?
-                                       else T_Forall ((α, S t1), S t2)
+        | T_Forall ((α, t1), t2)    -> assert Set.contains α tθ.dom; T_Forall ((α, S t1), S t2)
         | T_Closure (x, Δ, τ, k)    -> T_Closure (x, Δ, τ, Sk k)
 
     member t.subst_vars (tθ : vasubst) =
@@ -527,10 +541,10 @@ type ty with
     
     static member fresh_var = T_Star_Var var.fresh
 
-    // free type variables
+    // free type and kind variables
     member this.fv =
         match this with
-        | T_Bottom                  -> Set.empty
+        | T_Bottom k                -> k.fv
         | T_Var (α, k)              -> Set.singleton α + k.fv
         | T_Cons (_, k)             -> k.fv
         | T_HTuple ts               -> List.fold (fun r (t : ty) -> Set.union r t.fv) Set.empty ts
@@ -538,9 +552,10 @@ type ty with
         | T_Forall ((α, t1), t2)    -> let r2 = t2.fv in if Set.contains α r2 then t1.fv + (Set.remove α r2) else r2
         | T_Closure (_, _, _, k)    -> k.fv
 
+
     member this.is_monomorphic =
         match this with
-        | T_Bottom          
+        | T_Bottom _          
         | T_Forall _        -> false
         | T_Var _
         | T_Cons _             
@@ -550,9 +565,11 @@ type ty with
 
     member this.is_unquantified =
         match this with
-        | T_Bottom          
+        | T_Bottom _         
         | T_Forall _        -> false
         | _                 -> true
+
+
 
 
 // TODO: refactor this predicate thingie and put constraints and whatever else directly inside the scheme

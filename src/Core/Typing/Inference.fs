@@ -188,8 +188,9 @@ and pt_expr' ctx e0 =
             let! tx = M {
                 match τo with
                 | None ->
-                    do! M.add_prefix α T_Bottom
-                    return T_Star_Var α         // TODO: return T_Var (α, kind.fresh_var) instead and support quantifiable variables to kinds other than Star
+                    let k = K_Star
+                    do! M.add_prefix α (T_Bottom k)
+                    return T_Var (α, k)
                 | Some τ ->
                     let! t, _ = pk_and_eval_ty_expr ctx τ
                     return t
@@ -203,7 +204,7 @@ and pt_expr' ctx e0 =
             // TODO: the following code can be monadized
             let! Q1 = M.get_Q
             let Q2, Q3 = split_prefix Q1 (prefix_dom Q0)
-            let Q3', θ3' = extend_prefix Q3 β t
+            let Q3', θ3' = extend_prefix Q3 (β, t)
             do! M.update_subst θ3'
             do! M.set_Q Q2
             yield T_Foralls (Q3', T_Arrow (tx, T_Star_Var β))
@@ -217,7 +218,7 @@ and pt_expr' ctx e0 =
             let α1 = var.fresh
             let α2 = var.fresh
             let β = var.fresh
-            let Q2', θ2' = extend_prefix_many Q2 [α1, subst_ty θ2 t1; α2, t2; β, T_Bottom]
+            let Q2', θ2' = extend_prefix_many Q2 [α1, subst_ty θ2 t1; α2, t2; β, T_Bottom K_Star]
             do! M.update_subst θ2'
             let α1 = T_Star_Var α1
             let α2 = T_Star_Var α2
@@ -378,16 +379,11 @@ and pt_expr' ctx e0 =
                 }) xts
                                 
             // unify user-defined types to constraints in order of appearence
-            let! γ = M.get_γ
-            let mgu_ctx = { loc = e.loc; γ = γ }
             for x, t in xts do
                 let! cs = M.get_constraints
-                do! M.ignore <| M.List.tryFind (fun c -> M {
-                                            match c.name = x, try_mgu mgu_ctx c.ty t with
-                                            | true, Some θ -> do! M.update_subst θ
-                                                              return true
-                                            | _            -> return false
-                            }) cs.toList
+                for c in cs do
+                    if c.name = x then
+                        do! M.attempt_unify e.loc c.ty t
             M.translated <- e.value
             yield te
 
