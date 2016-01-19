@@ -173,7 +173,8 @@ with
 
 
 // this module is needed and cannot be turn into static members of the var class because static members are unit closures and cannot be constants
-module private VarNormalizerState =
+[< CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix) >]
+module private var =
     // TODO: add thread-safe support with a mutex or something
     let cnt = ref 0
     let env : Env.t<int, string> option ref = ref None
@@ -183,17 +184,17 @@ module private VarNormalizerState =
 type var with
     static member reset_normalization ?quantified_vars =
         let quantified_vars = defaultArg quantified_vars Set.empty
-        VarNormalizerState.cnt := 0
-        VarNormalizerState.env := Some Env.empty
-        VarNormalizerState.forall := Set.map (fun (α : var) -> α.uid) quantified_vars
+        var.cnt := 0
+        var.env := Some Env.empty
+        var.forall := Set.map (fun (α : var) -> α.uid) quantified_vars
         { new IDisposable with
-            member __.Dispose () = VarNormalizerState.env := None
+            member __.Dispose () = var.env := None
         }
 
     override this.ToString () = this.pretty
 
     member this.pretty =
-        match !VarNormalizerState.env with
+        match !var.env with
         | None     -> this.pretty_quantified  // when env is None it means normalization is disabled, so tyvars are printed as quantified by default
         | Some env ->
             let name =
@@ -202,8 +203,8 @@ type var with
                 | None ->
                     let name_exists s = env.exists (fun _ s' -> s' = s)
                     let next_fresh_name () =
-                        let r = var.auto_name "%s" !VarNormalizerState.cnt
-                        VarNormalizerState.cnt := !VarNormalizerState.cnt + 1
+                        let r = var.auto_name "%s" !var.cnt
+                        var.cnt := !var.cnt + 1
                         r
                     match this with
                     | Va (_, None) ->
@@ -220,7 +221,7 @@ type var with
                         in
                             R s 0
 
-            VarNormalizerState.env := Some (env.bind this.uid name)
+            var.env := Some (env.bind this.uid name)
             #if DEBUG_TYVARS
             let fmt = 
                 match this with
@@ -230,24 +231,8 @@ type var with
             #else
             name
             #endif
-            |> sprintf (if Set.contains this.uid !VarNormalizerState.forall then Config.Printing.dynamic.tyvar_quantified_fmt else Config.Printing.dynamic.tyvar_unquantified_fmt)
+            |> sprintf (if Set.contains this.uid !var.forall then Config.Printing.dynamic.tyvar_quantified_fmt else Config.Printing.dynamic.tyvar_unquantified_fmt)
 
-// TODO: [continue] explore lexically-scoped type variables. The SHARED approach (Ocaml and Haskell) should be ours
-//let h () =
-//    let f x =
-//        let g z =
-//            let h (x : 'pippo) = if x = () then "caz" else "pip"
-//            1
-//        1
-//    let g (y : 'pippo) = if y then 'a' else 'b'
-//    1
-//    
-//let f (x : 'pippo) = if x = 1 then "caz" else "pip"
-//let g (y : 'pippo) = if y then 'a' else 'b'
-//
-//let k x =
-//    let i (y : 'baudo) = x = y
-//    x
 
 
 // kinds

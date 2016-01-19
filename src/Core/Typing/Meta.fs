@@ -121,24 +121,14 @@ module private Eval =
                     match τo1 with
                     | Some τ1 -> return! E τ1
                     | None ->
-                        // look for kind of quantified type variable (needed by T_Bottom) into the type just evaluated for t2, whose kind has just been inferred
+                        // check for unused quantified variable is here because it's done on types rather than on type expressions, which would not allows for easy controlling scoping of the var itself
                         let k =
-                            let rec l ts = List.fold (function None -> R | Some _ as r -> fun _ -> r) None ts
-                            and R = function
-                                | T_Var (β, k) when α = β   -> Some k
-                                | T_HTuple ts               -> l ts
-                                | T_Forall ((_, t1), t2)
-                                | T_App (t1, t2)            -> l [t1; t2]
-                                | T_Bottom _      
-                                | T_Closure _
-                                | T_Var _
-                                | T_Cons _                  -> None
-                            in
-                                match R t2 with
-                                | None -> unexpected "quantified type variable does not appear in %O" __SOURCE_FILE__ __LINE__ τ0
-                                | Some k -> k
-                        return T_Bottom k
-                    }
+                            match t2.on_given_var identity α with
+                            | Some k -> k
+                            | None   -> Report.Warn.unused_quantified_type_variable τ1.loc α t2; kind.fresh_var
+                        in
+                            return T_Bottom k
+                }
                 yield T_Forall ((α, t1), t2)
 
             | Te_Let (d, τ1) ->
@@ -323,12 +313,13 @@ and pk_ty_expr' (ctx : context) (τ0 : ty_expr) =
             do! K.kunify τ1.loc (K_Arrow (k2, α)) k1
             yield α
 
-        // TODO: design the kind inference of forall term more carefully
         | Te_Forall (((x, ko), τo1), τ2) ->
             let kx = either kind.fresh_var ko
             match τo1 with
-            | None -> ()
-            | Some τ1 -> do! K.ignore <| R τ1  // nothing to do with k1?
+            | None    -> ()
+            | Some τ1 ->
+                let! k1 = R τ1
+                do! K.kunify τ1.loc k1 kx
             return! K.fork_γ <| K {
                 let! _ = K.bind_γ x (KUngeneralized kx)
                 yield! R τ2
@@ -400,6 +391,7 @@ and pk_ty_bindings (ctx : context) loc bs =
             prompt_inferred_kind ctx Config.Printing.Prompt.type_decl_prefixes x ς
     }   
 
+
 and pk_ty_rec_bindings (ctx : context) loc bs  =
     let M = new basic_builder (loc)
     M {
@@ -419,6 +411,7 @@ and pk_ty_rec_bindings (ctx : context) loc bs  =
             // TODO: all type definitions should be implicitly recursive
             prompt_inferred_kind ctx Config.Printing.Prompt.rec_type_decl_prefixes x ς
     }
+
 
 and pk_ty_patt ctx (p0 : ty_patt) =
     let K = new kinding_builder<_> (p0)

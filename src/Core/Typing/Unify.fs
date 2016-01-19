@@ -8,6 +8,7 @@ module Lw.Core.Typing.Unify
 
 open FSharp.Common.Prelude
 open FSharp.Common.Log
+open FSharp.Common.Computation
 open FSharp.Common
 open Lw.Core.Absyn
 open Lw.Core.Globals
@@ -52,7 +53,7 @@ let rec rewrite_row loc t1 t2 r0 l =
 let dom_wrt Q (t : ty) = 
     let αs = t.fv
     in
-        Computation.set { for α, t : ty in Q do if Set.contains α αs then yield! t.fv }
+        B.set { for α, t : ty in Q do if Set.contains α αs then yield! t.fv }
 
 // match System-F quantifiers
 let (|T_Foralls_F|_|) = function
@@ -73,20 +74,47 @@ module internal Mgu =
                 let tsks = [ for α, _, k in Qk do yield α, α.skolemized k ]
                 let θ = new tsubst (Env.t.ofSeq tsks), ksubst.empty
                 in
-                    List.map snd tsks, subst_ty θ t
+                    List.map (function T_Cons (x, _) -> x | t -> unexpected "non-constructor in skolemized types: %O" __SOURCE_FILE__ __LINE__ t), subst_ty θ t
+
+        type ty with
+            member this.cons =
+                let rec R t =
+                  B.set {
+                    match t with
+                    | T_Bottom _      
+                    | T_Closure _
+                    | T_Var _                   -> ()
+                    | T_Cons (x, _)             -> yield x
+                    | T_HTuple ts               -> for t in ts do yield! R t
+                    | T_App (t1, t2)     
+                    | T_Forall ((_, t1), t2)    -> yield! R t1; yield! R t2 }
+                in
+                    R this
+
+        type prefix with
+            member this.cons = B.set { for _, t in this do yield! t.cons }
+
+        let cons_in_tsubst (tθ : tsubst) = B.set { for _, t : ty in tθ do yield! t.cons }
+        let cons_in_tksubst (tθ, _) = cons_in_tsubst tθ
+
+        let check_skolem_escape ctx c θ (Q : prefix) =
+            let cons = cons_in_tksubst θ + Q.cons
+            in
+                if Set.contains c cons then Report.Error.skolemized_type_variable_escaped ctx.loc c
 
 
-        let rec subsume ctx Q (t1 : ty) (t2 : ty) =
+        let rec subsume ctx (Q : prefix) (t1 : ty) (t2 : ty) =
             assert (t1.is_nf && t2.is_nf)
             match t1, t2 with
-            | T_Foralls_F (αs, t1), T_Foralls (Q2, t2) ->
-                assert (prefix_dom Q <> prefix_dom Q2)
+            | T_Foralls_F (αs, t1), T_ForallsQ (Q2, t2) ->
+                assert (Q.dom <> Q2.dom)
                 let tsks, t1' = skolemized t1
-                let Q1, (tθ1, _ as θ1 : tksubst) = mgu ctx (Q @ Q2) t1' t2
-                let Q2, Q3 = split_prefix Q1 (prefix_dom Q)
-                let θ2 = tθ1.remove (prefix_dom Q3)
+                let Q1, (tθ1, _ as θ1 : tksubst) = mgu ctx (Q.append Q2) t1' t2
+                let Q2, Q3 = Q1.split Q.dom
+                let θ2 = tθ1.remove Q3.dom
                 // for each skolemized variable check it does not escape
                 for tsk in tsks do
+                    check_skolem_escape tsk ctx θ2 Q2
                     // either via the substitution
                     let b1 = (θ2.search_by (fun _  t -> t = tsk)).IsSome
                     // or via the prefix
@@ -97,26 +125,26 @@ module internal Mgu =
             | _ -> Q, (tsubst.empty, ksubst.empty)
 
 
-        and mgu_scheme ctx Q (t1_ : ty)  (t2_ : ty) =
+        and mgu_scheme ctx (Q : prefix) (t1_ : ty)  (t2_ : ty) =
             assert (t1_.is_nf && t2_.is_nf)
             match t1_, t2_ with
             | (T_Bottom _, (_ as t))
             | (_ as t, T_Bottom _) -> Q, (tsubst.empty, ksubst.empty), t
 
-            | T_Foralls (Q1, t1), T_Foralls (Q2, t2) ->
+            | T_ForallsQ (Q1, t1), T_ForallsQ (Q2, t2) ->
                 assert (let p a b = Set.intersect a b = Set.empty
-                        let d = prefix_dom Q
-                        let d1 = prefix_dom Q1
-                        let d2 = prefix_dom Q2
+                        let d = Q.dom
+                        let d1 = Q1.dom
+                        let d2 = Q2.dom
                         in
                             p d d1 && p d1 d2 && p d d2)
-                let Q3, θ3 = mgu ctx (Q @ Q1 @ Q2) t1 t2
-                let Q4, Q5 = split_prefix Q3 (prefix_dom Q)
+                let Q3, θ3 = mgu ctx (Q.append(Q1).append(Q2)) t1 t2
+                let Q4, Q5 = Q3.split Q.dom
                 in
-                    Q4, θ3, T_Foralls (Q5, subst_ty θ3 t1)
+                    Q4, θ3, T_ForallsQ (Q5, subst_ty θ3 t1)
 
 
-        and mgu (ctx : mgu_context) Q t1_ t2_ =
+        and mgu (ctx : mgu_context) Q t1_ t2_ : prefix * tksubst =
             let ( ** ) = compose_tksubst
             let S = subst_ty
             let loc = ctx.loc
@@ -134,16 +162,18 @@ module internal Mgu =
                     in
                         Q3, θ3 ** θ2 ** θ1
 
-                | T_ForallK ((α, _, k1), t1), T_ForallK ((β, _, k2), t2) ->
-                    let c1 = α.skolemized k1
-                    let c2 = β.skolemized k2
+                | T_ForallK ((α1, T_Bottom _, k1), t1), T_ForallK ((α2, T_Bottom _, k2), t2) ->
+                    let c1 = α1.skolemized k1
+                    let c2 = α2.skolemized k2
                     let Q1, θ1 =
-                        let θ1 = new tsubst (α, c1), ksubst.empty
-                        let θ2 = new tsubst (β, c2), ksubst.empty
+                        let θ1 = new tsubst (α1, c1), ksubst.empty
+                        let θ2 = new tsubst (α2, c2), ksubst.empty
                         in
                             R Q0 (S θ1 t1) (S θ2 t2)
-                    if c1 // [continua] è meglio rifare il T_ForallK singolo in modo che usi un metodo 'ty.on_var f' che fa qualcosa alle variabili
-                    
+                    check_skolem_escape c1 θ1 Q1
+                    check_skolem_escape c2 θ1 Q1
+                    Q1, θ1
+
                 | T_Var (α1, k1), T_NamedVar (α2, k2) // prefer named tyvars over anonymous tyvars when unifying tyvar against tyvar
                 | T_NamedVar (α2, k2), T_Var (α1, k1)
                 | T_Var (α1, k1), T_Var (α2, k2) ->

@@ -1,5 +1,20 @@
 ﻿
-17/1/2015:
+19/1/2016:
+* REFACT: prefix is now a heavyweight type which is basically a native tail-append list; all operations have become members
+* REFACT: ForallK and ForallsK rewritten simply using the ty.kind method on the type bound
+* UP: kind inference and type evaluation for Forall term fixed
+* REFACT: convention for computation expression builder instances changed: now each type having one has a static let
+          binding B within the type namespace using a module qualification trick via F# attributes
+
+
+18/1/2016:
+* REFACT: a lot of minor and major refactors to the whole code
+* UP: scheme unification and unify_scheme implemented
+* UP: prefix update and slicing implemented
+* REFACT: Solve term unification rewritten using a new M.attemp_unify monadic method in place of try_mgu pure function (which still exists btw, as it's been used elsewhere)
+
+
+17/1/2016:
 * REFACT: substitution renamed: now tθ stands for tsubst and kθ for ksubst, leading to a very natural θ for both. Symbols Σ and Θ are not used anymore
 * UP: unification for HML implemented roughly: needs completion and testing of course
 * UP: skolemification of type variables implemented via T_Cons; kinds are a problem though. Probably T_Forall should carry kinds along with quantified variables
@@ -664,3 +679,7 @@
 
 15/8/2014:
 * NEW: row types implemented roughly 
+
+
+1/1/2014:
+* Lw project started

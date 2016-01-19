@@ -132,7 +132,7 @@ let compose_tksubst (tθ' : tsubst, kθ') (tθ, kθ) =
     in
         tθ, kθ
 
-let subst_prefix θ Q = [ for α, t in Q do yield α, subst_ty θ t ]
+let subst_prefix θ Q = prefix { for α, t in Q do yield α, subst_ty θ t }
 
 // TODO: implement actual substitution of type constraints for GADTs
 let subst_type_constraints _ tcs = tcs
@@ -162,8 +162,8 @@ let fv_Γ (Γ : jenv) = fv_env (fun { scheme = σ } -> σ.fv) Γ
 
 let private var_refresher αs = new vasubst (Set.fold (fun (env : Env.t<_, _>) (α : var) -> env.bind α α.refresh) Env.empty αs)
 
-let instantiate { constraints = cs; ty = T_Foralls (Q, t) } =
-    let αs = prefix_dom Q
+let instantiate { constraints = cs; ty = T_Foralls (Q : prefix, t) } =
+    let αs = Q.dom
     let tθ = var_refresher αs
     let cs = constr { for c in cs do yield { c.refresh with ty = c.ty.subst_vars tθ } }
     in
@@ -231,78 +231,71 @@ let (|KUngeneralized|) = function
 let KUngeneralized k = { forall = Set.empty; kind = k }
 
 
-// prefix management
+
+// prefix augmentation
 //
 
-let split_prefix =
-    let rec R Q αs =
-        match Q with
-        | [] -> [], []
-        | (α, t : ty) :: Q->
-            if Set.contains α αs then
-                let Q1, Q2 = R Q (Set.remove α αs + t.fv)
-                in
-                    (α, t) :: Q1, Q2
-            else
-                let Q1, Q2 = R Q αs
-                in
-                    Q1, (α, t) :: Q2
-    in
-        R
-            
-let extend_prefix (Q : prefix) (α, t : ty) =
-    let t' = t.nf
-    in
-        if t'.is_unquantified then Q, (new tsubst (α, t'), ksubst.empty)
-        else (α, t) :: Q, (tsubst.empty, ksubst.empty)
+type prefix with
+    member Q.split αs =
+        let rec R Q αs =
+            match Q with
+            | Q_Nil -> Q_Nil, Q_Nil
+            | Q_Cons (Q, (α, t)) ->
+                if Set.contains α αs then
+                    let Q1, Q2 = R Q (Set.remove α αs + t.fv)
+                    in
+                        Q_Cons (Q1, (α, t)), Q2
+                else
+                    let Q1, Q2 = R Q αs
+                    in
+                        Q1, Q_Cons (Q2, (α, t))
+        in
+            R Q αs
 
-let extend_prefix_many Q Q' =
-    List.fold (fun (Q, θ) (α, t) -> let Q', θ' = extend_prefix Q (α, t) in Q', compose_tksubst θ' θ) (Q, (tsubst.empty, ksubst.empty)) Q'
-
-let slice f =
-    let rec R l1 = function
-        | []      -> None
-        | x :: xs -> if f x then Some (l1, x, xs) else R (x :: l1) xs
-    in
-        R []
-
-let (|Prefix_Slice|_|) α = slice (fst >> (=) α) 
-    
-
-let private update_prefix f Q (α, t : ty) =
-    match split_prefix Q t.fv with
-    | Q0, Prefix_Slice α (Q1, _, Q2) -> f (α, t, Q0, Q1, Q2)
-    | _                              -> unexpected "item (%O : %O) is not in prefix: %O" __SOURCE_FILE__ __LINE__ α t (pretty_prefix Q)
-
-let private update_prefix__reusable_part (α, t, Q0, Q1, Q2) =
-    let θ = new tsubst (α, t), ksubst.empty
-    in
-        Q0 @ Q1 @ subst_prefix θ Q2, θ
-
-let update_prefix_with_bound =
-    update_prefix <| fun (α, t, Q0, Q1, Q2 as args) ->
+    member Q.extend (α, t : ty) =
         let t' = t.nf
         in
-            if t'.is_unquantified then update_prefix__reusable_part args
-            else Q0 @ Q1 @ [α, t] @ Q2, (tsubst.empty, ksubst.empty)
+            if t'.is_unquantified then Q, (new tsubst (α, t'), ksubst.empty)
+            else Q_Cons (Q, (α, t)), (tsubst.empty, ksubst.empty)
 
-let update_prefix_with_subst = update_prefix update_prefix__reusable_part
+    member Q.extend (Q' : prefix) =
+        Q'.fold (fun (Q : prefix, θ) (α, t) -> let Q', θ' = Q.extend (α, t) in Q', compose_tksubst θ' θ) (Q, (tsubst.empty, ksubst.empty))
 
-
-let (|T_ForallsK|) = function
-    | T_Foralls (Q, t) ->
-        let rec R t =
-          [ match t with
-            | T_Bottom _      
-            | T_Closure _
-            | T_Cons _                  -> ()
-            | T_Var (α, k)              -> match List.tryFind (fst >> (=) α) Q with Some (_, t') -> yield (α, t', k) | None -> ()
-            | T_HTuple ts               -> for t in ts do yield! R t
-            | T_App (t1, t2)     
-            | T_Forall ((_, t1), t2)    -> yield! R t1; yield! R t2 ]
+    member this.slice_by p =
+        let rec R q = function
+            | Q_Nil         -> None
+            | Q_Cons (Q, i) -> if p i then Some (Q, i, q) else R (Q_Cons (q, i)) Q
         in
-            R t, t
+            R Q_Nil this
+
+
+let (|Q_Slice|_|) α (Q : prefix) = Q.slice_by (fst >> (=) α) 
+
+
+type prefix with
+    member private Q.update f (α, t : ty) =
+        match Q.split t.fv with
+        | Q0, Q_Slice α (Q1, _, Q2) -> f (α, t, Q0, Q1, Q2)
+        | _                         -> unexpected "item %s is not in prefix: %O" __SOURCE_FILE__ __LINE__ (prefix.pretty_item (α, t)) Q
+
+    static member update_prefix__reusable_part (α, t, Q0 : prefix, Q1, Q2) =
+        let θ = new tsubst (α, t), ksubst.empty
+        in
+            Q0.append(Q1).append(subst_prefix θ Q2), θ
+
+    member this.update_prefix_with_bound =
+        this.update <| fun (α, t, Q0, Q1, Q2 as args) ->
+            let t' = t.nf
+            in
+                if t'.is_unquantified then prefix.update_prefix__reusable_part args
+                else Q0.append(Q1).append(α, t).append(Q2), (tsubst.empty, ksubst.empty)
+
+    member this.update_prefix_with_subst = this.update prefix.update_prefix__reusable_part
+
+
 
 let (|T_ForallK|_|) = function
-    | T_Foralls ([α, t1, k], t2) -> Some ((α, t1, k), t2)
-    | _                          -> None
+    | T_Forall ((α, t1), t2) -> Some ((α, t1, t1.kind), t2) // let α, k = t2.on_given_var (fun α k -> α, k) α in Some ((α, t1, k), t2)
+    | _                      -> None
+
+let (|T_ForallsK|) = (|Foralls|) (|T_ForallK|_|)

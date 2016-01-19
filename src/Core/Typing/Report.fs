@@ -121,7 +121,7 @@ module Error =
         E 21 loc "data constructor %s is undefined" x
 
     let closed_world_overload_constraint_not_resolved loc cx ct x t =
-        // TODO: print a better message, hiding the mention to constraints and referring to closed-world overloading only
+        // TODO: print a better message, just refer to the notion of closed-world overloading, without mentioning constraints
         E 22 loc "when generalizing symbol `%O : %O` the constraint `%s : %O` has not been resolved and was referring to a closed-world overloaded symbol" x t cx ct
 
     let lambda_parameter_is_not_monomorphic loc x t =
@@ -175,6 +175,10 @@ module Warn =
 
     let let_over_without_previous_let loc x =
         W 12 loc Low "closed-world overloading of symbol %s without a previous let non-over binding" x
+
+    let unused_quantified_type_variable loc α t =
+        W 13 loc Normal "quantified type variable %O does not occur in type %O" α t
+
 
 
 [< RequireQualifiedAccess >]

@@ -164,7 +164,9 @@ type constraints (set : Set<constraintt>) =
 
     static member empty = new constraints (Set.empty)
 
-let constr = new Computation.Builder.itemized_collection<_, _> (empty = constraints.empty, plus1 = (fun c (cs : constraints) -> cs.add c), plus = (+))
+[< CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix) >]
+module constraints =
+    let B = new Computation.Builder.itemized_collection<_, _> (empty = constraints.empty, plus1 = (fun c (cs : constraints) -> cs.add c), plus = (+))
 
 
 
@@ -227,12 +229,42 @@ type [< NoComparison; NoEquality >] scheme =
         ty               : ty
     }
 
-type prefix = (var * ty) list
+type [< NoComparison; NoEquality >] prefix = Q_Nil | Q_Cons of prefix * (var * ty)
+with
+    interface IEnumerable<var * ty> with
+        member this.GetEnumerator () = this.toSeq.GetEnumerator ()
 
-let prefix_dom Q = Computation.set { for α, _ in Q do yield α }
+    interface Collections.IEnumerable with
+        member this.GetEnumerator () = (this :> IEnumerable<_>).GetEnumerator () :> Collections.IEnumerator
 
-let pretty_prefix_item (α, t) = sprintf "(%O >= %O)" α t
-let pretty_prefix Q = mappen_strings pretty_prefix_item Config.Printing.sep_in_forall Q
+    member this.toSeq =
+        let rec R Q =
+          seq {
+            match Q with
+            | Q_Nil         -> ()
+            | Q_Cons (Q, i) -> yield! R Q; yield i }
+        in
+            R this
+
+    member Q.dom = Computation.B.set { for α, _ in Q do yield α }
+
+    static member pretty_item (α, t) = sprintf "(%O >= %O)" α t
+    member Q.pretty = mappen_strings prefix.pretty_item "," Q
+    override this.ToString () = this.pretty
+
+    member this.fold f z =
+        match this with
+        | Q_Nil         -> z
+        | Q_Cons (Q, i) -> f (Q.fold f z) i
+
+    member Q.append (α, t) = Q_Cons (Q, (α, t))
+    member Q.append (Q' : prefix) = Q'.fold (fun (Q : prefix) (α, t) -> Q.append (α, t)) Q
+
+
+[< CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix) >]
+module prefix =
+    let B = new Computation.Builder.itemized_collection<_, _> (empty = Q_Nil, plus1 = (fun i Q -> Q_Cons (Q, i)), plus = fun Q1 Q2 -> Q1.append Q2)
+    let ofSeq sq = B { for α, t in sq do yield α, t }
 
 
 
@@ -319,8 +351,20 @@ let (|T_NamedVar|_|) = function
 let T_Apps = Apps T_App
 let (|T_Apps|_|) = (|Apps|_|) (function T_App (t1, t2) -> Some (t1, t2) | _ -> None)
 
+let Foralls forall = function
+    | [], t -> t
+    | αs, t -> List.foldBack (fun α t -> forall (α, t)) αs t
+
+let rec (|Foralls|) (|Forall|_|) = function
+    | Forall (α, Foralls (|Forall|_|) (αs, t)) -> (α :: αs, t)
+    | Forall (α, t)                            -> ([α], t)
+    | t                                        -> ([], t)
+
 let T_Foralls = Foralls T_Forall
 let (|T_Foralls|) = (|Foralls|) (function T_Forall ((α, t1), t2) -> Some ((α, t1), t2) | _ -> None)
+
+let T_ForallsQ (Q : prefix, t) = T_Foralls (Seq.toList Q, t)
+let (|T_ForallsQ|) = function T_Foralls (qs, t) -> prefix.ofSeq qs, t
 
 let T_ConsApps ((x, k), ts) = T_Apps (T_Cons (x, k) :: ts)
 let (|T_ConsApps|_|) = function
@@ -436,17 +480,22 @@ type kind with
             k.map_vars (fun α -> match tθ.search α with Some β -> K_Var β | None -> k) R
 
 type ty with
-//    member internal t.collect (|P|_|) =
-//        List.fold (fun z -> function
-//            | P as t -> t
-//            | T_Var (α, k)              -> []
-//            | T_Bottom _                -> t
-//            | T_Cons (x, k)             -> T_Cons (x, Sk k)
-//            | T_App (t1, t2)            -> T_App (S t1, S t2)
-//            | T_HTuple ts               -> T_HTuple (List.map S ts)
-//            | T_Forall ((α, t1), t2)    -> assert Set.contains α tθ.dom; T_Forall ((α, S t1), S t2)
-//            | T_Closure (x, Δ, τ, k)    -> T_Closure (x, Δ, τ, Sk k)
+    member this.on_var f =
+        let rec l ts = List.fold (function None -> R | Some _ as r -> fun _ -> r) None ts
+        and R = function
+            | T_Var (α, k)              -> f α k
+            | T_HTuple ts               -> l ts
+            | T_Forall ((_, t1), t2)
+            | T_App (t1, t2)            -> l [t1; t2]
+            | T_Bottom _      
+            | T_Closure _
+            | T_Var _
+            | T_Cons _                  -> None
+        in
+            R this
 
+    member this.on_given_var f α = this.on_var (fun β k -> if α = β then Some (f k) else None)
+    
     member internal t.apply_to_vars f (tθ : subst<_>) S Sk =
         match t with
         | T_Var (α, k) ->
@@ -529,7 +578,7 @@ type ty with
             | T_Arrow (t1, t2)              -> sprintf "%s -> %s" (R t1) (R t2)
 
             | T_App (App s)          -> s
-            | T_Foralls (Q, t)       -> sprintf "forall %s. %O" (pretty_prefix Q) t
+            | T_Foralls (Q, t)       -> sprintf "forall %O. %O" Q t
             | T_Closure (x, _, τ, k) -> sprintf "<[%O] :: %O>" (Te_Lambda ((x, None), τ)) k
 
             // these are not supposed to be matched because active patterns should stand in place of them above
@@ -552,7 +601,6 @@ type ty with
         | T_Forall ((α, t1), t2)    -> let r2 = t2.fv in if Set.contains α r2 then t1.fv + (Set.remove α r2) else r2
         | T_Closure (_, _, _, k)    -> k.fv
 
-
     member this.is_monomorphic =
         match this with
         | T_Bottom _          
@@ -571,35 +619,16 @@ type ty with
 
 
 
-
-// TODO: refactor this predicate thingie and put constraints and whatever else directly inside the scheme
-//type predicate with
-//    override π.ToString () = π.pretty
-//
-//    member π.pretty =
-//        let cs = π.constraints
-//        let tcs = π.type_constraints
-//        let cspart = if cs.is_empty then "" else predicate.pretty_constraints cs
-//        let tcspart = if tcs.is_empty then "" else predicate.pretty_type_constraints tcs
-//        in
-//            if not cs.is_empty && not tcs.is_empty then sprintf "%s /\\ %s" tcspart cspart
-//            else tcspart + cspart
-//
-//    static member pretty_constraints cs = sprintf "{ %O }" cs
-//
-//    static member pretty_type_constraints tcs = sprintf "(%O)" tcs
-
 type constraints with
-
-    member this.fv = Computation.set { for c in this do yield! c.ty.fv }
+    member this.fv = Computation.B.set { for c in this do yield! c.ty.fv }
 
 
 type scheme with    
     override this.ToString () = this.pretty
 
     member σ.pretty =
-        let { constraints = cs; ty = T_Foralls (Q, t) } = σ
-        let αs = prefix_dom Q
+        let { constraints = cs; ty = T_ForallsQ (Q, t) } = σ
+        let αs = Q.dom
         use N = var.reset_normalization αs
         let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.sep_in_forall αs)
         let cspart = if cs.is_empty then "" else sprintf "{ %O } => " cs
