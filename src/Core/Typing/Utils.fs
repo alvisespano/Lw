@@ -30,7 +30,7 @@ let vars_in_term (|Var|Leaf|Nodes|) =
         R
 
 let rec vars_in_kind k =
-    Computation.set {
+    Computation.B.set {
         match k with
         | K_Var α        -> yield α
         | K_Cons (_, ks) -> for k in ks do yield! vars_in_kind k }
@@ -79,7 +79,7 @@ let vars_in_ty_patt : ty_patt -> _ =
         vars_in_term (|Var|Leaf|Nodes|)
 
 let rec vars_in_decl (d : decl) =
-    let B = Computation.set
+    let B = Computation.B.set
     let pars bs = B { for b in bs do let x, _ = b.par in yield x }
     let inline ids bs = B { for b in bs do yield (^x : (member id : id) b) }
     in
@@ -132,7 +132,7 @@ let compose_tksubst (tθ' : tsubst, kθ') (tθ, kθ) =
     in
         tθ, kθ
 
-let subst_prefix θ Q = prefix { for α, t in Q do yield α, subst_ty θ t }
+let subst_prefix θ Q = prefix.B { for α, t in Q do yield α, subst_ty θ t }
 
 // TODO: implement actual substitution of type constraints for GADTs
 let subst_type_constraints _ tcs = tcs
@@ -162,10 +162,10 @@ let fv_Γ (Γ : jenv) = fv_env (fun { scheme = σ } -> σ.fv) Γ
 
 let private var_refresher αs = new vasubst (Set.fold (fun (env : Env.t<_, _>) (α : var) -> env.bind α α.refresh) Env.empty αs)
 
-let instantiate { constraints = cs; ty = T_Foralls (Q : prefix, t) } =
+let instantiate { constraints = cs; ty = T_ForallsQ (Q, t) } =
     let αs = Q.dom
     let tθ = var_refresher αs
-    let cs = constr { for c in cs do yield { c.refresh with ty = c.ty.subst_vars tθ } }
+    let cs = constraints.B { for c in cs do yield { c.refresh with ty = c.ty.subst_vars tθ } }
     in
         cs, Q, t.subst_vars tθ
           
@@ -261,12 +261,17 @@ type prefix with
     member Q.extend (Q' : prefix) =
         Q'.fold (fun (Q : prefix, θ) (α, t) -> let Q', θ' = Q.extend (α, t) in Q', compose_tksubst θ' θ) (Q, (tsubst.empty, ksubst.empty))
 
+    member Q.extend l = Q.extend (prefix.ofSeq l)
+
     member this.slice_by p =
         let rec R q = function
             | Q_Nil         -> None
             | Q_Cons (Q, i) -> if p i then Some (Q, i, q) else R (Q_Cons (q, i)) Q
         in
             R Q_Nil this
+
+    member this.lookup α = Seq.find (fst >> (=) α) this |> snd
+    member this.search α = Seq.tryFind (fst >> (=) α) this |> Option.map snd
 
 
 let (|Q_Slice|_|) α (Q : prefix) = Q.slice_by (fst >> (=) α) 
@@ -291,11 +296,3 @@ type prefix with
                 else Q0.append(Q1).append(α, t).append(Q2), (tsubst.empty, ksubst.empty)
 
     member this.update_prefix_with_subst = this.update prefix.update_prefix__reusable_part
-
-
-
-let (|T_ForallK|_|) = function
-    | T_Forall ((α, t1), t2) -> Some ((α, t1, t1.kind), t2) // let α, k = t2.on_given_var (fun α k -> α, k) α in Some ((α, t1, k), t2)
-    | _                      -> None
-
-let (|T_ForallsK|) = (|Foralls|) (|T_ForallK|_|)

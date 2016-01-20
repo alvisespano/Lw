@@ -60,48 +60,14 @@ let pt_typed_param ctx = function
 let rec pt_expr (ctx : context) (e0 : expr) =
     let M = new translator_typing_builder<_, _> (e0)
     M {
-        let e = e0.value // NOTE: uexpr must be bound before translation, or printing will not work
+        let e = e0.value // uexpr must be bound before translation, or printing will not work
         let! t = pt_expr' ctx e0
         do! resolve_constraints ctx e0
         let! cs = M.get_constraints
-        L.debug Min "[e:T] %O\n      : %O\n[C]   %O\n[e*]  %O" e t cs e0
+        L.debug Min "[e]  %O\n[:T] : %O\n[C]  %O\n[e*] %O" e t cs e0
         return t
     } 
 
-
-//infer :: (Q, Γ, e) → (Q, tθ, ϕ)
-//
-//infer(Q, Γ, x ) =
-//return (Q, [], Γ(x))
-//
-//infer(Q, Γ, let x = e1 in e2)
-//let (Q1, tθ1, ϕ1) = infer(Q, Γ, e1)
-//let (Q2, tθ2, ϕ2) = infer(Q1,(tθ1Γ, x : ϕ1), e2)
-//return (Q2, tθ2 ◦ tθ1, ϕ2)
-//
-//infer(Q, Γ, λx . e) =
-//assume α, β are fresh
-//let (Q1, tθ1, ϕ1) = infer((Q, α > ⊥),(Γ, x : α), e)
-//fail if not (tθ1α = τ ) for some τ
-//let (Q2, Q3) = split(Q1, dom(Q))
-//let (Q03, tθ03) = extend(Q3, β > ϕ1)
-//return (Q2, tθ1, ∀Q03. tθ1α → tθ03β)
-//
-//infer(Q, Γ, λ(x :: σ). e) =
-//assume β is fresh, σ is closed
-//let (Q1, tθ1, ϕ1) = infer(Q,(Γ, x : σ), e)
-//let (Q2, Q3) = split(Q1, dom(Q))
-//let (Q03, tθ03) = extend(Q3, β > ϕ1)
-//return (Q2, tθ1, ∀Q03. σ → tθ03β)
-//
-//infer(Q, Γ, e1 e2) =
-//assume α1, α2, β are fresh
-//let (Q1, ϕ1, tθ1) = infer(Q, Γ, e1)
-//let (Q2, ϕ2, tθ2) = infer(Q1, tθ1Γ, e2)
-//let (Q02, tθ02) = extend(Q2, α1 > tθ2ϕ1, α2 > ϕ2, β > ⊥)
-//let (Q3, tθ3) = unify(Q02, tθ02α1, tθ02α2 → β)
-//let (Q4, Q5) = split(Q3, dom(Q))
-//return (Q4, tθ3 ◦ tθ2 ◦ tθ1, ∀Q5. tθ3β)
 
 
 and pt_expr' ctx e0 =
@@ -203,11 +169,11 @@ and pt_expr' ctx e0 =
             if τo.IsNone && not t.is_monomorphic then Report.Error.lambda_parameter_is_not_monomorphic e0.loc x t
             // TODO: the following code can be monadized
             let! Q1 = M.get_Q
-            let Q2, Q3 = split_prefix Q1 (prefix_dom Q0)
-            let Q3', θ3' = extend_prefix Q3 (β, t)
+            let Q2, Q3 = Q1.split Q0.dom
+            let Q3', θ3' = Q3.extend (β, t)
             do! M.update_subst θ3'
             do! M.set_Q Q2
-            yield T_Foralls (Q3', T_Arrow (tx, T_Star_Var β))
+            yield T_ForallsQ (Q3', T_Arrow (tx, T_Star_Var β))
 
         | App (e1, e2) -> 
             let! Q0 = M.get_Q
@@ -218,7 +184,7 @@ and pt_expr' ctx e0 =
             let α1 = var.fresh
             let α2 = var.fresh
             let β = var.fresh
-            let Q2', θ2' = extend_prefix_many Q2 [α1, subst_ty θ2 t1; α2, t2; β, T_Bottom K_Star]
+            let Q2', θ2' = Q2.extend [α1, subst_ty θ2 t1; α2, t2; β, T_Bottom K_Star]
             do! M.update_subst θ2'
             let α1 = T_Star_Var α1
             let α2 = T_Star_Var α2
@@ -226,17 +192,10 @@ and pt_expr' ctx e0 =
             do! M.set_Q Q2'
             do! M.unify e1.loc (T_Arrow (α2, β)) α1
             let! Q3 = M.get_Q
-            let Q4, Q5 = split_prefix Q3 (prefix_dom Q0)
+            let Q4, Q5 = Q3.split Q0.dom
             do! M.set_Q Q4
-            yield T_Foralls (Q5, β)
+            yield T_ForallsQ (Q5, β)
             
-//        | App (e1, e2) -> 
-//            let! t1 = pt_expr ctx e1
-//            let! t2 = pt_expr ctx e2
-//            let α = ty.fresh_var
-//            do! M.unify e1.loc (T_Arrow (t2, α)) t1
-//            yield α
-
         | Tuple ([] | [_]) as e ->
             return unexpected "empty or unary tuple: %O" __SOURCE_FILE__ __LINE__ e
 
@@ -262,7 +221,6 @@ and pt_expr' ctx e0 =
             return unexpected "empty case list in match expression" __SOURCE_FILE__ __LINE__ 
              
         | Match (e1, cases) ->
-            // TODO: pattern exhaustivity check
             let! te1 = pt_expr ctx e1
             let tr0 = ty.fresh_var
             for p, ewo, e in cases do
@@ -407,14 +365,14 @@ and pt_decl' (ctx : context) (d0 : decl) =
         }
     let jk over x t = if over then Jk_Inst (x, t.GetHashCode ()) else Jk_Var x
 
-    let gen_bind prefixes q (e0 : node<_, _>) x t =
+    let gen_bind prefixes decl_qual (e0 : node<_, _>) x t =
         let loc = e0.loc
         let Lo x = Lo loc x
         M {
             let! { γ = γ; constraints = cs } = M.get_state
             // check shadowing and relation with previous bindings
             let! jb = M.search_binding_by_name_Γ x
-            if q.over then
+            if decl_qual.over then
                 match jb with                
                 | Jb_Overload pt -> if not (is_instance_of { loc = loc; γ = γ } pt t) then Report.Error.instance_not_valid loc x t pt   // open-world overloadable instance
                 | Jb_Unbound     -> Report.Warn.let_over_without_previous_let loc x                                                     // let-over binding without a previous let-non-over is a warning
@@ -446,13 +404,13 @@ and pt_decl' (ctx : context) (d0 : decl) =
                 | _ -> ()
 
             // generalize, bind and translate
-            let jk = jk q.over x t
+            let jk = jk decl_qual.over x t
             let! σ =
-                let jm = if q.over then Jm_Overloadable else Jm_Normal
+                let jm = if decl_qual.over then Jm_Overloadable else Jm_Normal
                 in
                     M.gen_bind_Γ jk jm t
             let e1 = if cs.is_empty then e0 else LambdaFun ([possibly_tuple Lo P_CId P_Tuple cs], Lo e0.value)
-            Report.prompt ctx (prefixes @ q.as_tokens) x σ None
+            Report.prompt ctx (prefixes @ decl_qual.as_tokens) x σ None
             return jk, e1
         }
 

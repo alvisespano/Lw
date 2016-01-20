@@ -59,7 +59,7 @@ with
             tθ   = tsubst.empty
             δ   = tenv.empty
             kθ   = ksubst.empty
-            Q   = []
+            Q   = Q_Nil
 
             constraints     = constraints.empty
             named_tyvars    = Env.empty
@@ -123,7 +123,7 @@ type basic_builder (loc : location) =
     member private M.gen t =
         M {
             let! { Γ = Γ; constraints = cs; Q = Q; tθ = tθ; kθ = kθ } as st = M.get_state
-            let vas = Computation.set { for x, n in st.named_tyvars do yield Va (n, Some x) }
+            let vas = Computation.B.set { for x, n in st.named_tyvars do yield Va (n, Some x) }
             return generalize (cs, Q, subst_ty (tθ, kθ) t) Γ vas
         }
 
@@ -216,7 +216,7 @@ type basic_builder (loc : location) =
 
     member M.add_prefix α t =
         M {
-            do! M.lift_Q (fun Q -> (α, t) :: Q)
+            do! M.lift_Q (fun Q -> Q.append (α, t))
         }
 
     member M.add_constraint c =

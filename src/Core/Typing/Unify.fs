@@ -8,7 +8,6 @@ module Lw.Core.Typing.Unify
 
 open FSharp.Common.Prelude
 open FSharp.Common.Log
-open FSharp.Common.Computation
 open FSharp.Common
 open Lw.Core.Absyn
 open Lw.Core.Globals
@@ -53,7 +52,7 @@ let rec rewrite_row loc t1 t2 r0 l =
 let dom_wrt Q (t : ty) = 
     let αs = t.fv
     in
-        B.set { for α, t : ty in Q do if Set.contains α αs then yield! t.fv }
+        Computation.B.set { for α, t : ty in Q do if Set.contains α αs then yield! t.fv }
 
 // match System-F quantifiers
 let (|T_Foralls_F|_|) = function
@@ -66,20 +65,20 @@ module internal Mgu =
 
     module Pure =
         type var with
-            member α.skolemized k = T_Cons (sprintf Config.Typing.skolemized_tyvar_fmt α.pretty, k)
+            member α.skolemized = sprintf Config.Typing.skolemized_tyvar_fmt α.pretty
 
         let skolemized = function
-            | T_ForallsK ([], t) -> [], t
-            | T_ForallsK (Qk, t) ->
-                let tsks = [ for α, _, k in Qk do yield α, α.skolemized k ]
-                let θ = new tsubst (Env.t.ofSeq tsks), ksubst.empty
+            | T_Foralls ([], t) -> [], t
+            | T_Foralls (Q, t) ->
+                let sks = [ for α, t in Q do yield α, α.skolemized, t.kind ]
+                let θ = new tsubst (Env.t.ofSeq <| List.map (fun (α, x, k) -> α, T_Cons (x, k)) sks), ksubst.empty
                 in
-                    List.map (function T_Cons (x, _) -> x | t -> unexpected "non-constructor in skolemized types: %O" __SOURCE_FILE__ __LINE__ t), subst_ty θ t
+                    List.map (fun (_, x, _) -> x) sks, subst_ty θ t
 
         type ty with
             member this.cons =
                 let rec R t =
-                  B.set {
+                  Computation.B.set {
                     match t with
                     | T_Bottom _      
                     | T_Closure _
@@ -92,9 +91,9 @@ module internal Mgu =
                     R this
 
         type prefix with
-            member this.cons = B.set { for _, t in this do yield! t.cons }
+            member this.cons = Computation.B.set { for _, t in this do yield! t.cons }
 
-        let cons_in_tsubst (tθ : tsubst) = B.set { for _, t : ty in tθ do yield! t.cons }
+        let cons_in_tsubst (tθ : tsubst) = Computation.B.set { for _, t : ty in tθ do yield! t.cons }
         let cons_in_tksubst (tθ, _) = cons_in_tsubst tθ
 
         let check_skolem_escape ctx c θ (Q : prefix) =
@@ -108,19 +107,14 @@ module internal Mgu =
             match t1, t2 with
             | T_Foralls_F (αs, t1), T_ForallsQ (Q2, t2) ->
                 assert (Q.dom <> Q2.dom)
-                let tsks, t1' = skolemized t1
-                let Q1, (tθ1, _ as θ1 : tksubst) = mgu ctx (Q.append Q2) t1' t2
+                let skcs, t1' = skolemized t1
+                let Q1, (tθ1, kθ1) = mgu ctx (Q.append Q2) t1' t2
                 let Q2, Q3 = Q1.split Q.dom
-                let θ2 = tθ1.remove Q3.dom
+                let θ2 = tθ1.remove Q3.dom, kθ1
                 // for each skolemized variable check it does not escape
-                for tsk in tsks do
-                    check_skolem_escape tsk ctx θ2 Q2
-                    // either via the substitution
-                    let b1 = (θ2.search_by (fun _  t -> t = tsk)).IsSome
-                    // or via the prefix
-                    let b2 = List.exists (function _, t -> t = tsk) Q2
-                    if b1 || b2 then Report.Error.skolemized_type_variable_escaped ctx.loc tsk
-                Q2, (θ2, ksubst.empty)
+                for c in skcs do
+                    check_skolem_escape ctx c θ2 Q2
+                Q2, θ2
 
             | _ -> Q, (tsubst.empty, ksubst.empty)
 
@@ -148,7 +142,10 @@ module internal Mgu =
             let ( ** ) = compose_tksubst
             let S = subst_ty
             let loc = ctx.loc
-            let rec R (Q0 : prefix) t1 t2 =
+            let t1_ = t1_.nf
+            let t2_ = t2_.nf
+            let rec R (Q0 : prefix) (t1 : ty) (t2 : ty) =
+                assert (t1.is_nf && t2.is_nf)
                 match t1, t2 with
                 | T_Cons (x, k1), T_Cons (y, k2) when x = y -> Q0, (tsubst.empty, kmgu ctx k1 k2)
                 | T_Var (α, k1), T_Var (β, k2) when α = β   -> Q0, (tsubst.empty, kmgu ctx k1 k2)
@@ -162,44 +159,45 @@ module internal Mgu =
                     in
                         Q3, θ3 ** θ2 ** θ1
 
-                | T_ForallK ((α1, T_Bottom _, k1), t1), T_ForallK ((α2, T_Bottom _, k2), t2) ->
-                    let c1 = α1.skolemized k1
-                    let c2 = α2.skolemized k2
+                | T_Forall ((α1, T_Bottom k1), t1), T_Forall ((α2, T_Bottom k2), t2) ->
+                    let c1 = α1.skolemized
+                    let c2 = α2.skolemized
                     let Q1, θ1 =
-                        let θ1 = new tsubst (α1, c1), ksubst.empty
-                        let θ2 = new tsubst (α2, c2), ksubst.empty
+                        let θ1 = new tsubst (α1, T_Cons (c1, k1)), ksubst.empty
+                        let θ2 = new tsubst (α2, T_Cons (c2, k2)), ksubst.empty
                         in
                             R Q0 (S θ1 t1) (S θ2 t2)
-                    check_skolem_escape c1 θ1 Q1
-                    check_skolem_escape c2 θ1 Q1
+                    // TODO: a more efficient way to check skolem escape is to check for occurrences of c1 and c2 in t1 and t2 AFTER unification (i.e. applying θ1 to them)
+                    check_skolem_escape ctx c1 θ1 Q1
+                    check_skolem_escape ctx c2 θ1 Q1
                     Q1, θ1
 
                 | T_Var (α1, k1), T_NamedVar (α2, k2) // prefer named tyvars over anonymous tyvars when unifying tyvar against tyvar
                 | T_NamedVar (α2, k2), T_Var (α1, k1)
                 | T_Var (α1, k1), T_Var (α2, k2) ->
-                    let αt1 = List.find (fst >> (=) α1) Q0 |> snd
-                    let αt2 = List.find (fst >> (=) α2) Q0 |> snd
+                    let α1t = Q0.lookup α1
+                    let α2t = Q0.lookup α2
                     // occurs check between one var into the other type bound
-                    let check α t = if Set.contains α (dom_wrt Q0 t) then Report.Error.circularity loc t1 t2 (T_Var (α, t)) t2
-                    check α1 t2
-                    check α2 t1
-                    let Q1, θ1, t = mgu_scheme ctx Q αt1 αt2
-                    let Q2, θ2 = update_prefix_with_subst Q1 (α1, t2)
-                    let Q3, θ3 = update_prefix_with_bound Q2 (α2, t)
+                    let check α t = if Set.contains α (dom_wrt Q0 t) then Report.Error.circularity loc t1 t2 (T_Var (α, t.kind)) t2
+                    check α1 α2t
+                    check α2 α1t
+                    let Q1, θ1, t = mgu_scheme ctx Q α1t α2t
+                    let Q2, θ2 = Q1.update_prefix_with_subst (α1, t2)
+                    let Q3, θ3 = Q2.update_prefix_with_bound (α2, t)
                     in
                         Q3, θ3 ** θ2 ** θ1
 
                 | T_Var (α, k), t
                 | t, T_Var (α, k) ->
                     let αt =
-                        match List.tryFind (function β, _ -> α = β) Q0 with
-                        | Some (_, t) -> t
-                        | None        -> unexpected "type variable %O does not occur in prefix" __SOURCE_FILE__ __LINE__ α
+                        match Q0.search α with
+                        | Some t -> t
+                        | None   -> unexpected "type variable %O does not occur in prefix" __SOURCE_FILE__ __LINE__ α
                     let θ0 = tsubst.empty, kmgu ctx k t.kind                    
                     // occurs check
                     if Set.contains α (dom_wrt Q t) then let S = S θ0 in Report.Error.circularity loc (S t1_) (S t2_) (S (T_Var (α, k))) (S t)
                     let Q1, θ1 = subsume ctx Q t αt
-                    let Q2, θ2 = update_prefix_with_subst Q1 (α, S θ1 t)
+                    let Q2, θ2 = Q1.update_prefix_with_subst (α, S θ1 t)
                     in
                         Q2, θ2 ** θ1
 
@@ -212,7 +210,6 @@ module internal Mgu =
                 | t1, t2 ->
                     raise (Mismatch (t1, t2))
 
-            assert (t1_.is_nf && t2_.is_nf)
             try R Q t1_ t2_
             with Mismatch (t1, t2) -> Report.Error.type_mismatch loc t1_ t2_ t1 t2
 
@@ -229,8 +226,9 @@ type basic_builder with
             let! { tθ = tθ; kθ = kθ; γ = γ } = M.get_state
             let θ = tθ, kθ
             let! Q = M.get_Q
+            L.mgu "[U] %O == %O" t1 t2
             let Q, (tθ, kθ as θ) = mgu { loc = loc; γ = γ } Q (subst_ty θ t1) (subst_ty θ t2)
-            L.mgu "[U] %O == %O\n    [%O] --- [%O]\n    Q = %O" t1 t2 tθ kθ Q
+            L.mgu "[S] [%O] --- [%O]\n    Q = %O" tθ kθ Q
             do! M.set_Q Q
             do! M.update_subst θ
         }
@@ -243,12 +241,12 @@ type basic_builder with
         }
 
 let try_principal_type_of ctx pt t =
-    try_mgu ctx [] pt t |> Option.bind (function _, θ -> let t1 = subst_ty θ pt in if t1 = t then Some θ else None)
+    try_mgu ctx Q_Nil pt t |> Option.bind (function _, θ -> let t1 = subst_ty θ pt in if t1 = t then Some θ else None)
 
 let is_principal_type_of ctx pt t = (try_principal_type_of ctx pt t).IsSome
 
 let is_instance_of ctx pt t =
-    let _, θ = mgu ctx [] pt t
+    let _, θ = mgu ctx Q_Nil pt t
     let t = subst_ty θ t
     in
         is_principal_type_of ctx pt t   // TODO: unification is not enough: unifier must be SMALLER - that would tell whether it is actually an instance

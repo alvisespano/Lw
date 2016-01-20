@@ -366,6 +366,10 @@ let (|T_Foralls|) = (|Foralls|) (function T_Forall ((α, t1), t2) -> Some ((α, 
 let T_ForallsQ (Q : prefix, t) = T_Foralls (Seq.toList Q, t)
 let (|T_ForallsQ|) = function T_Foralls (qs, t) -> prefix.ofSeq qs, t
 
+//let (|T_ForallK|_|) = function
+//    | T_Forall ((α, t1), t2) -> Some ((α, t1, t1.kind), t2)
+//    | _                      -> None
+
 let T_ConsApps ((x, k), ts) = T_Apps (T_Cons (x, k) :: ts)
 let (|T_ConsApps|_|) = function
     | T_Apps (T_Cons (x, k) :: ts) -> Some ((x, k), ts)
@@ -507,7 +511,7 @@ type ty with
         | T_Cons (x, k)             -> T_Cons (x, Sk k)
         | T_App (t1, t2)            -> T_App (S t1, S t2)
         | T_HTuple ts               -> T_HTuple (List.map S ts)
-        | T_Forall ((α, t1), t2)    -> assert Set.contains α tθ.dom; T_Forall ((α, S t1), S t2)
+        | T_Forall ((α, t1), t2)    -> T_Forall ((α, S t1), S t2)
         | T_Closure (x, Δ, τ, k)    -> T_Closure (x, Δ, τ, Sk k)
 
     member t.subst_vars (tθ : vasubst) =
@@ -578,11 +582,14 @@ type ty with
             | T_Arrow (t1, t2)              -> sprintf "%s -> %s" (R t1) (R t2)
 
             | T_App (App s)          -> s
-            | T_Foralls (Q, t)       -> sprintf "forall %O. %O" Q t
+//            | T_Foralls (Q, t)       -> sprintf "forall %O. %O" Q t
             | T_Closure (x, _, τ, k) -> sprintf "<[%O] :: %O>" (Te_Lambda ((x, None), τ)) k
 
+            | T_Bottom k             -> sprintf "(_|_ :: %O)" k
+            | T_Forall ((α, t1), t2) -> sprintf "forall (%O : %O). %O" α t1 t2
+
             // these are not supposed to be matched because active patterns should stand in place of them above
-            | T_Forall _ as t -> unexpected "term %O in type" __SOURCE_FILE__ __LINE__ t
+//            | T_Forall _ as t -> unexpected "term %O in type" __SOURCE_FILE__ __LINE__ t
         in
             R this
 

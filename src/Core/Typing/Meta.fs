@@ -125,7 +125,7 @@ module private Eval =
                         let k =
                             match t2.on_given_var identity α with
                             | Some k -> k
-                            | None   -> Report.Warn.unused_quantified_type_variable τ1.loc α t2; kind.fresh_var
+                            | None   -> Report.Warn.unused_quantified_type_variable τ2.loc α t2; kind.fresh_var
                         in
                             return T_Bottom k
                 }

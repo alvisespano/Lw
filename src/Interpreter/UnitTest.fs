@@ -288,7 +288,7 @@ module Computations =
     let main () =
         L.debug Normal "start" 
         let s3 =
-            str {
+            B.str {
                 yield 'a'
                 yield 'b'
                 yield! "ciao"
