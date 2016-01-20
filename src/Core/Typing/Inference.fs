@@ -64,7 +64,8 @@ let rec pt_expr (ctx : context) (e0 : expr) =
         let! t = pt_expr' ctx e0
         do! resolve_constraints ctx e0
         let! cs = M.get_constraints
-        L.debug Min "[e]  %O\n[:T] : %O\n[C]  %O\n[e*] %O" e t cs e0
+        let! Q = M.get_Q
+        L.debug Min "[e]  %O\n[:T] : %O\n[C]  %O\n[Q]  %O\n[e*] %O" e t cs Q e0
         return t
     } 
 
@@ -169,7 +170,7 @@ and pt_expr' ctx e0 =
             if τo.IsNone && not t.is_monomorphic then Report.Error.lambda_parameter_is_not_monomorphic e0.loc x t
             // TODO: the following code can be monadized
             let! Q1 = M.get_Q
-            let Q2, Q3 = Q1.split Q0.dom
+            let Q2, Q3 = Q1.split Q0.dom    // TODO: monadize split: here Q2 would become the new prefix for the monad and Q3 the result of the split function
             let Q3', θ3' = Q3.extend (β, t)
             do! M.update_subst θ3'
             do! M.set_Q Q2
@@ -436,6 +437,9 @@ and pt_decl' (ctx : context) (d0 : decl) =
                                 do! M.clear_constraints
                                 let! te = pt_expr ctx e
                                 return! M.fork_Γ <| M {
+                                    match p with
+                                    | P_Var x -> // TODO: [continua] gestire il caso di binding semplice in modo da non chiamare pt_patt
+                                        
                                     let! tp = pt_patt ctx p
                                     do! unify_and_resolve ctx e tp te
                                     let! cs = M.get_constraints
@@ -552,9 +556,12 @@ and pt_patt ctx (p0 : patt) =
             yield T_Variant ([x, T_Arrow (α, β)], Some ρ)
 
         | P_Var x ->
-            let α = ty.fresh_var
-            let! _ = M.bind_var_Γ x α
-            yield α
+            let α = var.fresh
+            let k = K_Star
+            do! M.add_prefix α (T_Bottom k)
+            let t = T_Var (α, k)
+            do! M.ignore <| M.bind_var_Γ x t
+            yield t
 
         | P_Lit lit ->
             yield pt_lit lit

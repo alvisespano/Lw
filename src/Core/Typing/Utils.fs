@@ -194,8 +194,8 @@ type ty with
         | T_Forall ((α, t1), t2) ->
             if not <| Set.contains α t2.fv then t2.nf
             elif match t2.nf with
-                 | T_Var (β, _) -> α = β
-                 | _            -> false
+                    | T_Var (β, _) -> α = β
+                    | _            -> false
             then t1.nf
             else
                 let t' = t1.nf
@@ -205,7 +205,30 @@ type ty with
 
         | t -> t
 
-    member this.is_nf = this = this.nf
+    member t.is_nf =
+        let t' = t.nf
+        if t <> t' then L.debug Low "nf(%O) <> %O" t t'; false
+        else true
+
+    member t.ftype =
+        let t = t.nf    // normalization can be left out of the recursion
+        let rec R = function
+            | T_Forall ((α, T_Bottom k), t2) ->
+                T_Forall ((α, T_Bottom k), R t2)
+
+            | T_Forall ((α, T_ForallsQ (Q, t1)), t2) ->
+                let θ = new tsubst (α, t1), ksubst.empty
+                in
+                    R (T_ForallsQ (Q, subst_ty θ t2))
+
+            | t -> t    // no need to recur inside types because HML flexible types only have an outer forall carrying bounds, and all inner foralls are unbound
+        in
+            R t
+
+    member t.is_ftype =
+        let t' = t.ftype
+        if t <> t' then L.debug Low "ftype(%O) <> %O" t t'; false
+        else true
 
 
 // operations over kinds

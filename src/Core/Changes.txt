@@ -1,4 +1,12 @@
 ﻿
+20/1/2016:
+* UP: HML implementation largely done
+* TEST: testing of HML system started: a few early bugs have been fixed, but there's gonna be a lot of work to do yet
+* REFACT: lots of type manipulation stuff, useful for putting asserts checking System-F types, normal form etc.
+* FIX: old type inference code introducing fresh vars into Γ have been updated to introduce a boundary for that var into the prefix as well.
+       One example of this is pt_patt dealing with P_Var term
+
+
 19/1/2016:
 * REFACT: prefix is now a heavyweight type which is basically a native tail-append list; all operations have become members
 * REFACT: ForallK and ForallsK rewritten simply using the ty.kind method on the type bound

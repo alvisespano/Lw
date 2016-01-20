@@ -10,6 +10,7 @@ module Lw.Core.Typing.Defs
 
 open System
 open System.Collections.Generic
+open System.Diagnostics
 open FSharp.Common
 open FSharp.Common.Prelude
 open FSharp.Common.Log
@@ -30,7 +31,7 @@ type kconsenv = Env.t<id, var list * kind>
 
 type tenv = Env.t<id, ty>
 
-and [< NoComparison; CustomEquality >] ty =
+and [< NoComparison; CustomEquality; DebuggerDisplay("{ToString()}") >] ty =
     | T_Cons of id * kind
     | T_Var of var * kind
     // TODO: T_Huple stands for higher-order tuples (i.e. tuples of types, not to be confused with the type of tuples in the value language), and it's not encoded
@@ -75,8 +76,13 @@ with
                     | T_Cons (x, _), T_Cons (y, _)      -> x = y
                     | T_Var (α, _), T_Var (β, _)        -> α = β
                     | T_App (t1, t2), T_App (t1', t2')  -> t1 = t1' && t2 = t2'
-                    | T_Closure _, _
-                    | _, T_Closure _                    -> L.unexpected_error "comparing type closures: %O = %O" x y; false
+                    | T_Forall ((α, t1), t2),
+                        T_Forall ((α', t1'), t2')       -> α = α' && t1 = t1' && t2 = t2'
+                    | T_Bottom _, T_Bottom _            -> true
+                    | T_HTuple ts, T_HTuple ts'
+                        when ts.Length = ts'.Length     -> List.fold2 (fun b t t' -> b && t = t') true ts ts'
+//                    | T_Closure _, _
+//                    | _, T_Closure _                    -> L.unexpected_error "comparing type closures: %O = %O" x y; false
                     | _                                 -> false
 
 
@@ -91,7 +97,7 @@ with
         | Cm_ClosedWorldOverload    -> sprintf Config.Printing.closedworld_overload_constraint_fmt x
         | Cm_FreeVar                -> sprintf Config.Printing.freevar_constraint_fmt x
 
-type [< CustomEquality; CustomComparison >] constraintt =
+type [< CustomEquality; CustomComparison; DebuggerDisplay("{ToString()}") >] constraintt =
     {
         name    : id
         num     : int
@@ -214,22 +220,17 @@ with
 // schemes and predicates
 //
 
-//type [< NoComparison; NoEquality >] predicate =
-//    {
-//        constraints      : constraints
-//        type_constraints : type_constraints
-//    }
-//with
-//    static member empty = { constraints = constraints.empty; type_constraints = C_Empty }
     
-type [< NoComparison; NoEquality >] scheme =
+type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] scheme =
     {
         constraints      : constraints
 //        type_constraints : type_constraints
         ty               : ty
     }
 
-type [< NoComparison; NoEquality >] prefix = Q_Nil | Q_Cons of prefix * (var * ty)
+type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] prefix =
+    | Q_Nil
+    | Q_Cons of prefix * (var * ty)
 with
     interface IEnumerable<var * ty> with
         member this.GetEnumerator () = this.toSeq.GetEnumerator ()
@@ -248,8 +249,10 @@ with
 
     member Q.dom = Computation.B.set { for α, _ in Q do yield α }
 
+    member Q.is_disjoint (Q' : prefix) = (Set.intersect Q.dom Q'.dom).IsEmpty
+
     static member pretty_item (α, t) = sprintf "(%O >= %O)" α t
-    member Q.pretty = mappen_strings prefix.pretty_item "," Q
+    member Q.pretty = mappen_strings prefix.pretty_item Config.Printing.sep_in_forall Q
     override this.ToString () = this.pretty
 
     member this.fold f z =
@@ -366,9 +369,12 @@ let (|T_Foralls|) = (|Foralls|) (function T_Forall ((α, t1), t2) -> Some ((α, 
 let T_ForallsQ (Q : prefix, t) = T_Foralls (Seq.toList Q, t)
 let (|T_ForallsQ|) = function T_Foralls (qs, t) -> prefix.ofSeq qs, t
 
-//let (|T_ForallK|_|) = function
-//    | T_Forall ((α, t1), t2) -> Some ((α, t1, t1.kind), t2)
-//    | _                      -> None
+// for System-F types
+let (|T_Forall_F|_|) = function
+    | T_Forall ((α, T_Bottom k), t) -> Some ((α, k), t)
+    | _ -> None
+
+let (|T_Foralls_F|) = (|Foralls|) (|T_Forall_F|_|)
 
 let T_ConsApps ((x, k), ts) = T_Apps (T_Cons (x, k) :: ts)
 let (|T_ConsApps|_|) = function
@@ -585,7 +591,8 @@ type ty with
 //            | T_Foralls (Q, t)       -> sprintf "forall %O. %O" Q t
             | T_Closure (x, _, τ, k) -> sprintf "<[%O] :: %O>" (Te_Lambda ((x, None), τ)) k
 
-            | T_Bottom k             -> sprintf "(_|_ :: %O)" k
+            | T_Bottom K_Star        -> Config.Printing.dynamic.bottom
+            | T_Bottom k             -> sprintf "(%s :: %O)" Config.Printing.dynamic.bottom k
             | T_Forall ((α, t1), t2) -> sprintf "forall (%O : %O). %O" α t1 t2
 
             // these are not supposed to be matched because active patterns should stand in place of them above

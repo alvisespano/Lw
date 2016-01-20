@@ -238,7 +238,7 @@ type var with
 // kinds
 //
 
-type kind =
+type [< Diagnostics.DebuggerDisplay("{ToString()}") >] kind =
     | K_Var of var
     | K_Cons of id * kind list
 with

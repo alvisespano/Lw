@@ -64,6 +64,7 @@ module Printing =
                 | false -> greek_tyvars_ <- false
 
         member this.forall = if this.unicode then "∀" else "forall "
+        member this.bottom = if this.unicode then "⏊" else "_|_"
 
         member this.tyvar_range = if this.greek_tyvars then 'α', 'ζ' else 'a', 'z'
         member this.tyvar_quantified_fmt : Printf.StringFormat<_> = if this.greek_tyvars then "%s" else "'%s"
