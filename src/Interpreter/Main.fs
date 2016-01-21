@@ -85,7 +85,7 @@ let interactive (envs : Intrinsic.envs) =
     print_env_diffs Intrinsic.envs0.Γ envs.Γ Intrinsic.envs0.Δ envs.Δ
     L.msg Low "entering interactive mode"
 
-    let default_ctrl_c_handler = new ConsoleCancelEventHandler (fun _ args ->
+    let default_ctrl_c_handler = new ConsoleCancelEventHandler (fun _ _ ->
         L.msg Unmaskerable "CTRL-C signal intercepted: forcing interactive exit"
         exit Config.Exit.ctrl_c)
     Console.CancelKeyPress.AddHandler default_ctrl_c_handler
@@ -169,13 +169,16 @@ let main _ =
             if Config.Interactive.interactive_mode then
                 Config.Log.set_thresholds_for_interactive ()
             let envs = ref Intrinsic.envs0
-            if not (String.IsNullOrWhiteSpace Args.filename) then
-                envs := interpret !envs Args.filename
+            try
+                if not (String.IsNullOrWhiteSpace Args.filename) then
+                    envs := interpret !envs Args.filename
+            with e -> handle_exn e |> ignore
             if Config.Interactive.interactive_mode then
                 interactive !envs
             0
             #endif
         with e -> handle_exn e
+    
 
     #if WAIT_FOR_KEY_AT_EXIT
     printfn "\n\npress any key to exit...\n"

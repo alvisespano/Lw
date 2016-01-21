@@ -172,7 +172,7 @@ with
         | Va (_, so) -> Va (fresh_int (), so)
 
 
-// this module is needed and cannot be turn into static members of the var class because static members are unit closures and cannot be constants
+// this module is needed and cannot be turn into static members within the var class because static members are unit closures and cannot be constants
 [< CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix) >]
 module private var =
     // TODO: add thread-safe support with a mutex or something
@@ -183,10 +183,12 @@ module private var =
 
 type var with
     static member reset_normalization ?quantified_vars =
+        #if !DEBUG_TYVARS
         let quantified_vars = defaultArg quantified_vars Set.empty
         var.cnt := 0
         var.env := Some Env.empty
         var.forall := Set.map (fun (α : var) -> α.uid) quantified_vars
+        #endif
         { new IDisposable with
             member __.Dispose () = var.env := None
         }

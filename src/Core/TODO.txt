@@ -60,6 +60,8 @@ SHORT-TERM
 
 LONG-TERM
 ---------
+(+)     [Constraints inside first-class type schemes] This would be awesome if possible!
+
 (+)     [GADTs] Read http://caml.inria.fr/pub/docs/manual-ocaml/extn.html#sec238 for GADTs in OCaml and reproduce the
               existentially-qualified type variable behaviour there. Among others: when a tyvar occurs in the type signature of a
               datacons but does not appear in the codomain (i.e. the gadt type itself) then it becomes existentially qualified.

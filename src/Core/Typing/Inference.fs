@@ -57,6 +57,7 @@ let pt_typed_param ctx = function
             return t
         }
 
+
 let rec pt_expr (ctx : context) (e0 : expr) =
     let M = new translator_typing_builder<_, _> (e0)
     M {
@@ -65,7 +66,8 @@ let rec pt_expr (ctx : context) (e0 : expr) =
         do! resolve_constraints ctx e0
         let! cs = M.get_constraints
         let! Q = M.get_Q
-        L.debug Min "[e]  %O\n[:T] : %O\n[C]  %O\n[Q]  %O\n[e*] %O" e t cs Q e0
+        let! θ = M.get_θ
+        L.debug Min "[e]  %O\n[:T] : %O\n[C]  %O\n[Q]  %O\n[e*] %O\n[S]  %O" e t cs Q e0 θ
         return t
     } 
 
@@ -165,9 +167,10 @@ and pt_expr' ctx e0 =
             let! t = M.fork_Γ <| M {
                 let! _ = M.bind_var_Γ x tx
                 return! pt_expr ctx e
-            }
+            }            
+            let! θ1 = M.get_θ
             // check that the type of parameter has been inferred as a monotype in case no annotation was provided
-            if τo.IsNone && not t.is_monomorphic then Report.Error.lambda_parameter_is_not_monomorphic e0.loc x t
+            if τo.IsNone && not (subst_ty θ1 tx).is_monomorphic then Report.Error.lambda_parameter_is_not_monomorphic e0.loc x t
             // TODO: the following code can be monadized
             let! Q1 = M.get_Q
             let Q2, Q3 = Q1.split Q0.dom    // TODO: monadize split: here Q2 would become the new prefix for the monad and Q3 the result of the split function
@@ -352,6 +355,7 @@ and pt_expr' ctx e0 =
 and pt_decl ctx d =
     let M = new translator_typing_builder<_, _> (d)
     M {
+        L.debug Low "[decl] %O" d
         return! (if ctx.top_level_decl then M.fork_named_tyvars else M.ReturnFrom) <| M { do! pt_decl' ctx d }
     }  
 
@@ -384,9 +388,6 @@ and pt_decl' (ctx : context) (d0 : decl) =
                 | _             -> ()                                               // normal binding that can shadow legally
 
             // check constraints solvability and scope escaping
-            #if DEBUG_CONSTRAINTS
-            L.debug Low "global constraints: %O" cs
-            #endif
             for { name = cx; ty = ct } as c in cs do
                 let αs = ct.fv - t.fv in if not αs.IsEmpty then Report.Hint.unsolvable_constraint loc x t cx ct αs
                 match c.mode with
@@ -437,13 +438,16 @@ and pt_decl' (ctx : context) (d0 : decl) =
                                 do! M.clear_constraints
                                 let! te = pt_expr ctx e
                                 return! M.fork_Γ <| M {
-                                    match p with
-                                    | P_Var x -> // TODO: [continua] gestire il caso di binding semplice in modo da non chiamare pt_patt
-                                        
-                                    let! tp = pt_patt ctx p
-                                    do! unify_and_resolve ctx e tp te
-                                    let! cs = M.get_constraints
-                                    return! vars_in_patt p |> Set.toList |> M.List.map (fun x -> M { let! { scheme = Ungeneralized t } = M.lookup_Γ (Jk_Var x) in return b, x, cs, t })
+                                    match p.value with
+                                    | P_Var x ->
+                                        let! cs = M.get_constraints
+                                        return [b, x, cs, te]
+                                    | _ ->
+                                        let! tp = pt_patt ctx p
+                                        do! M.unify e.loc tp te
+                                        do! resolve_constraints ctx e
+                                        let! cs = M.get_constraints
+                                        return! vars_in_patt p |> Set.toList |> M.List.map (fun x -> M { let! { scheme = Ungeneralized t } = M.lookup_Γ (Jk_Var x) in return b, x, cs, t })
                                 }
                             }) bs
                 let! bs' = M.List.map (fun (b : binding, x, cs, t) -> M { let! () = M.set_constraints cs in return! gen_bind Config.Printing.Prompt.value_decl_prefixes b.qual b.expr x t }) l

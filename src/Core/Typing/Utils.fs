@@ -173,7 +173,7 @@ let generalize (cs : constraints, Q, t : ty) Γ restricted_vars =
     let αs = (t.fv + cs.fv) - (fv_Γ Γ) - restricted_vars
     let Q = [ for α, t in Q do if Set.contains α αs then yield α, t ]
     in
-        { constraints = cs; ty = T_Foralls (Q, t) }
+        { constraints = cs; ty = t } //T_Foralls (Q, t) }
 
 // TODO: refresh_ty and Ungeneralized may not be of use anymore in HML
 let refresh_ty (t : ty) =
@@ -286,10 +286,17 @@ type prefix with
 
     member Q.extend l = Q.extend (prefix.ofSeq l)
 
+    member Q.insert i =
+        let rec R = function
+            | Q_Nil          -> Q_Cons (Q_Nil, i)
+            | Q_Cons (Q, i') -> Q_Cons (R Q, i')
+        in
+            R Q
+
     member this.slice_by p =
-        let rec R q = function
+        let rec R (q : prefix) = function
             | Q_Nil         -> None
-            | Q_Cons (Q, i) -> if p i then Some (Q, i, q) else R (Q_Cons (q, i)) Q
+            | Q_Cons (Q, i) -> if p i then Some (Q, i, q) else R (q.insert i) Q
         in
             R Q_Nil this
 
@@ -306,16 +313,16 @@ type prefix with
         | Q0, Q_Slice α (Q1, _, Q2) -> f (α, t, Q0, Q1, Q2)
         | _                         -> unexpected "item %s is not in prefix: %O" __SOURCE_FILE__ __LINE__ (prefix.pretty_item (α, t)) Q
 
-    static member update_prefix__reusable_part (α, t, Q0 : prefix, Q1, Q2) =
+    static member private update_prefix__reusable_part (α, t, Q0 : prefix, Q1, Q2) =
         let θ = new tsubst (α, t), ksubst.empty
         in
             Q0.append(Q1).append(subst_prefix θ Q2), θ
 
     member this.update_prefix_with_bound =
-        this.update <| fun (α, t, Q0, Q1, Q2 as args) ->
+        this.update <| fun (α, t, Q0, Q1, Q2) ->
             let t' = t.nf
             in
-                if t'.is_unquantified then prefix.update_prefix__reusable_part args
+                if t'.is_unquantified then prefix.update_prefix__reusable_part (α, t', Q0, Q1, Q2)
                 else Q0.append(Q1).append(α, t).append(Q2), (tsubst.empty, ksubst.empty)
 
     member this.update_prefix_with_subst = this.update prefix.update_prefix__reusable_part

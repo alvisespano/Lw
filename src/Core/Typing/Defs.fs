@@ -252,7 +252,7 @@ with
     member Q.is_disjoint (Q' : prefix) = (Set.intersect Q.dom Q'.dom).IsEmpty
 
     static member pretty_item (α, t) = sprintf "(%O >= %O)" α t
-    member Q.pretty = mappen_strings prefix.pretty_item Config.Printing.sep_in_forall Q
+    member Q.pretty = mappen_strings_or_nothing prefix.pretty_item Config.Printing.empty_prefix Config.Printing.sep_in_forall Q
     override this.ToString () = this.pretty
 
     member this.fold f z =
