@@ -28,7 +28,7 @@ with
 //        strict          = true
     }
 
-type [< NoComparison; NoEquality >] state =
+type [< NoComparison; NoEquality; System.Diagnostics.DebuggerDisplayAttribute("{ToString()}") >] state =
     {
         // environments
         Γ   : jenv              // type judices
@@ -36,11 +36,10 @@ type [< NoComparison; NoEquality >] state =
         δ   : tenv              // evaluated types
 
         // substitutions
-        tθ   : tsubst            // type substitution
-        kθ   : ksubst            // kind substitution
+        θ   : tksubst           // substitution
+        Q   : prefix            // prefix for quantified type variables
 
         // extras
-        Q               : prefix            // prefix for quantified type variables
         constraints     : constraints       // global constraints
         named_tyvars    : Env.t<id, int>    // named type variables
     }
@@ -50,22 +49,22 @@ with
     member this.pretty =
         let p (env : Env.t<_, _>) = env.pretty Config.Printing.type_annotation_sep "\n"
         in
-            sprintf "Γ:\n%s\n\ntθ:\n%O\n" (p this.Γ) this.tθ
+            sprintf "Γ:\n%s\n\nθ:\n%O\n" (p this.Γ) this.θ
 
     static member empty =
         {
             Γ   = Env.empty
             γ   = Env.empty
-            tθ   = tsubst.empty
+            θ   = tsubst.empty, ksubst.empty
             δ   = tenv.empty
-            kθ   = ksubst.empty
             Q   = Q_Nil
 
             constraints     = constraints.empty
             named_tyvars    = Env.empty
         }
 
-    member this.θ = this.tθ, this.kθ
+    member this.kθ = snd this.θ 
+
         
 type K<'a> = Monad.M<'a, state>
 
@@ -77,6 +76,7 @@ let (|Jb_Overload|Jb_Var|Jb_Data|Jb_OverVar|Jb_Unbound|) = function
     | None                                                                  -> Jb_Unbound
     | Some (jk, jv)                                                         -> unexpected "ill-formed jenv binding: %O = %O" __SOURCE_FILE__ __LINE__ jk jv
 
+
 type basic_builder (loc : location) =
     inherit Monad.state_builder<state> ()
 
@@ -86,13 +86,14 @@ type basic_builder (loc : location) =
 //    member __.get_tθ st = st.tθ, st
     member __.get_Q st = st.Q, st
     member __.get_constraints st = st.constraints, st
-    member M.get_θ = M { let! s = M.get_state in return s.tθ, s.kθ }
+    member M.get_θ = M { let! s = M.get_state in return s.θ }
     member __.get_named_tyvars st = st.named_tyvars, st
 
     member __.lift_Γ f st = (), { st with Γ = f st.Γ |> subst_jenv st.θ }
     member __.lift_Δ f st = (), { st with δ = f st.δ }
     member __.lift_γ f st = (), { st with γ = f st.γ |> subst_kjenv st.kθ }
     member __.lift_Q f st = (), { st with Q = f st.Q }
+    member __.lift_θ f st = (), { st with θ = f st.θ }
     member __.lift_constraints f (st : state) = (), { st with constraints = subst_constraints st.θ (f st.constraints) }
     member __.lift_named_tyvars f (st : state) = (), { st with named_tyvars = f st.named_tyvars }
 
@@ -100,6 +101,7 @@ type basic_builder (loc : location) =
     member M.set_Δ x = M.lift_Δ (fun _ -> x)
     member M.set_γ x = M.lift_γ (fun _ -> x)
     member M.set_Q x = M.lift_Q (fun _ -> x)
+    member M.set_θ x = M.lift_θ (fun _ -> x)
     member M.set_constraints x = M.lift_constraints (fun _ -> x)
     member M.set_named_tyvars x = M.lift_named_tyvars (fun _ -> x)
 
@@ -108,12 +110,11 @@ type basic_builder (loc : location) =
     member M.update_subst θ =
         M {
             do! M.lift_state (fun s ->
-                    let tθ, kθ as θ = compose_tksubst θ s.θ
+                    let (_, kθ) as θ = compose_tksubst θ s.θ
                     in
                         { γ = subst_kjenv kθ s.γ
                           δ = subst_tenv θ s.δ
-                          tθ = tθ
-                          kθ = kθ
+                          θ = θ
                           Γ = subst_jenv θ s.Γ
                           Q = subst_prefix θ s.Q
                           constraints = subst_constraints θ s.constraints
@@ -122,14 +123,14 @@ type basic_builder (loc : location) =
 
     member private M.gen t =
         M {
-            let! { Γ = Γ; constraints = cs; Q = Q; tθ = tθ; kθ = kθ } as st = M.get_state
+            let! { Γ = Γ; constraints = cs; Q = Q; θ = tθ, kθ } as st = M.get_state
             let vas = Computation.B.set { for x, n in st.named_tyvars do yield Va (n, Some x) }
             return generalize (cs, Q, subst_ty (tθ, kθ) t) Γ vas
         }
 
     member private M.kgen k =
         M {
-            let! { γ = γ; kθ = kθ } = M.get_state
+            let! { γ = γ; θ = _, kθ } = M.get_state
             return kgeneralize (subst_kind kθ k) γ
         }
 
@@ -294,6 +295,6 @@ type translator_typing_builder<'u, 'a> (e : node<'u, 'a>) =
 
 type kinding_builder<'u> (τ : node<'u, kind>) =
     inherit basic_builder (τ.loc)
-    member __.Yield ((x, k : kind)) = fun s -> let k = subst_kind s.kθ k in τ.typed <- k; (x, k), s
+    member __.Yield ((x, k : kind)) = fun (s : state) -> let k = subst_kind s.kθ k in τ.typed <- k; (x, k), s
     member M.Yield (k : kind) = M { let! (), r = M { yield (), k } in return r }
     member M.YieldFrom f = M { let! (r : kind) = f in yield r }

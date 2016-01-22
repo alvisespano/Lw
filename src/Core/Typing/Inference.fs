@@ -175,9 +175,9 @@ and pt_expr' ctx e0 =
             let! Q1 = M.get_Q
             let Q2, Q3 = Q1.split Q0.dom    // TODO: monadize split: here Q2 would become the new prefix for the monad and Q3 the result of the split function
             let Q3', θ3' = Q3.extend (β, t)
-            do! M.update_subst θ3'
+            do! M.set_θ θ1
             do! M.set_Q Q2
-            yield T_ForallsQ (Q3', T_Arrow (tx, T_Star_Var β))
+            yield T_ForallsQ (Q3', T_Arrow (subst_ty θ1 tx, subst_ty θ3' (T_Star_Var β)))
 
         | App (e1, e2) -> 
             let! Q0 = M.get_Q

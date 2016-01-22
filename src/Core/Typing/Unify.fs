@@ -231,8 +231,7 @@ let try_mgu ctx Q t1 t2 =
 type basic_builder with
     member M.unify loc t1 t2 =
         M {
-            let! { tθ = tθ; kθ = kθ; γ = γ } = M.get_state
-            let θ = tθ, kθ
+            let! { θ = θ; γ = γ } = M.get_state
             let! Q = M.get_Q
             let t1 = subst_ty θ t1
             let t2 = subst_ty θ t2

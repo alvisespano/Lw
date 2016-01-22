@@ -51,7 +51,7 @@ let rec kmgu (ctx : mgu_context) k1_ k2_ =
 type basic_builder with
     member M.kunify loc (k1 : kind) (k2 : kind) =
         M {
-            let! { kθ = kθ; γ = γ } = M.get_state
+            let! { θ = _, kθ; γ = γ } = M.get_state
             let kθ = kmgu { loc = loc; γ = γ } (subst_kind kθ k1) (subst_kind kθ k2)
             L.mgu "[kU] %O == %O [%O]" k1 k2 kθ
             do! M.update_subst (tsubst.empty, kθ)
