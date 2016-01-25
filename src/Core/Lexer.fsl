@@ -79,7 +79,7 @@ and tokenize = parse
     | "datatype"    { DATATYPE }
     | "data"        { DATA }
     | "val"         { VAL } 
-	| "type"		{ TYPE }
+	| "type"		{ TYPE } 
     | "forall"      { FORALL }
 	| "if"			{ IF }
 	| "then"        { THEN }

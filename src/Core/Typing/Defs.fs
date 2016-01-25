@@ -276,7 +276,7 @@ module prefix =
 
 
 
-// judice environment
+// type judice environment
 //
 
 type jenv_key =
@@ -463,8 +463,7 @@ type [< NoComparison; NoEquality >] subst<'t> (env : Env.t<var, 't>) =
     member __.map f = new subst<'t> (env.map f)
     member __.search_by f = env.search_by f
 
-    member __.pretty_sep sep = env.pretty_by_binding (fun α t -> sprintf "%O = %O" α t) sep
-    member this.pretty = this.pretty_sep "; "
+    member __.pretty = env.pretty_by_binding (fun α t -> sprintf "[%O = %O]" α t) ""
     override this.ToString () = this.pretty
       
     member private tθ1.append (tθ2 : subst<_>) = new subst<'t> (tθ1.env + tθ2.env)
@@ -478,6 +477,7 @@ type tsubst = subst<ty>
 type vasubst = subst<var>
 type tksubst = tsubst * ksubst
 
+let empty_θ = tsubst.empty, ksubst.empty
 
 
 // type and kind augmentations for substituting variables

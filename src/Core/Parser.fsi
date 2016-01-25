@@ -220,7 +220,6 @@ type nonTerminalId =
     | NONTERM_id
     | NONTERM_typed_param
     | NONTERM_kinded_param
-    | NONTERM_ty_forall_param_var
     | NONTERM_ty_forall_param
     | NONTERM_ty_forall_params
     | NONTERM_kind_annotation

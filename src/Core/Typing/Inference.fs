@@ -66,8 +66,8 @@ let rec pt_expr (ctx : context) (e0 : expr) =
         do! resolve_constraints ctx e0
         let! cs = M.get_constraints
         let! Q = M.get_Q
-        let! θ = M.get_θ
-        L.debug Min "[e]  %O\n[:T] : %O\n[C]  %O\n[Q]  %O\n[e*] %O\n[S]  %O" e t cs Q e0 θ
+        let! tθ, kθ = M.get_θ
+        L.debug Min "[e]  %O\n[:T] : %O\n[C]  %O\n[Q]  %O\n[e*] %O\n[S]  %O\n     %O" e t cs Q e0 tθ kθ
         return t
     } 
 
@@ -189,16 +189,17 @@ and pt_expr' ctx e0 =
             let α2 = var.fresh
             let β = var.fresh
             let Q2', θ2' = Q2.extend [α1, subst_ty θ2 t1; α2, t2; β, T_Bottom K_Star]
-            do! M.update_subst θ2'
+//            do! M.update_θ θ2'
             let α1 = T_Star_Var α1
             let α2 = T_Star_Var α2
             let β = T_Star_Var β
             do! M.set_Q Q2'
-            do! M.unify e1.loc (T_Arrow (α2, β)) α1
+            do! M.unify e1.loc (T_Arrow (subst_ty θ2' α2, β)) (subst_ty θ2' α1)
+            let! θ3 = M.get_θ
             let! Q3 = M.get_Q
             let Q4, Q5 = Q3.split Q0.dom
             do! M.set_Q Q4
-            yield T_ForallsQ (Q5, β)
+            yield T_ForallsQ (Q5, subst_ty θ3 β)
             
         | Tuple ([] | [_]) as e ->
             return unexpected "empty or unary tuple: %O" __SOURCE_FILE__ __LINE__ e

@@ -101,13 +101,14 @@ type basic_builder (loc : location) =
     member M.set_Δ x = M.lift_Δ (fun _ -> x)
     member M.set_γ x = M.lift_γ (fun _ -> x)
     member M.set_Q x = M.lift_Q (fun _ -> x)
+    [< System.Obsolete("Global substitution should never be set explicitly: use update_θ method instead.") >]
     member M.set_θ x = M.lift_θ (fun _ -> x)
     member M.set_constraints x = M.lift_constraints (fun _ -> x)
     member M.set_named_tyvars x = M.lift_named_tyvars (fun _ -> x)
 
     member M.clear_constraints = M.set_constraints constraints.empty
 
-    member M.update_subst θ =
+    member M.update_θ θ =
         M {
             do! M.lift_state (fun s ->
                     let (_, kθ) as θ = compose_tksubst θ s.θ

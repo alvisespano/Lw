@@ -264,21 +264,19 @@ typed_param:
 kinded_param:
     id                                 { ($1, None) }
   | id COLON2 kind_annotation          { ($1, Some $3) }
-
-ty_forall_param_var:
-    TICK_ID                            { ($1, None) }
-  | TICK_ID COLON2 kind_annotation     { ($1, Some $3) }
-
+  
 ty_forall_param:
-    ty_forall_param_var                         { $1, None }
-  | BRA ty_forall_param_var GEQ ty_expr KET     { $2, Some $4 }
-    
+  | TICK_ID                                             { ($1, None), None }
+  | BRA TICK_ID COLON2 kind_annotation KET              { ($2, Some $4), None } 
+  | BRA TICK_ID GEQ ty_expr KET                         { ($2, None), Some $4 } 
+  | BRA TICK_ID COLON2 kind_annotation GEQ ty_expr KET  { ($2, Some $4), Some $6 } 
+
 ty_forall_params:
     ty_forall_param                    { [$1] }
   | ty_forall_param ty_forall_params   { $1 :: $2 }
 
 
-
+  
 /*
  * kinds
  */

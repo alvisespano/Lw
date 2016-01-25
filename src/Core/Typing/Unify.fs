@@ -63,8 +63,6 @@ module internal Mgu =
 
         let kmgu ctx k1 k2 = tsubst.empty, kmgu ctx k1 k2
 
-        let empty_θ = tsubst.empty, ksubst.empty
-
         type var with
             member α.skolemized = sprintf Config.Typing.skolemized_tyvar_fmt α.pretty
 
@@ -237,9 +235,9 @@ type basic_builder with
             let t2 = subst_ty θ t2
             L.mgu "[U] %O =?= %O\n    Q = %O" t1 t2 Q
             let Q, (tθ, kθ as θ) = mgu { loc = loc; γ = γ } Q t1 t2
-            L.mgu "[S] [%O] --- [%O]\n    Q' = %O" tθ kθ Q
+            L.mgu "[S] %O\n    %O\n    Q' = %O" tθ kθ Q
             do! M.set_Q Q
-            do! M.update_subst θ
+            do! M.update_θ θ
         }
 
     member M.attempt_unify loc t1 t2 =

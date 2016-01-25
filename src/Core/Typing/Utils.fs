@@ -279,7 +279,7 @@ type prefix with
         let t' = t.nf
         in
             if t'.is_unquantified then Q, (new tsubst (α, t'), ksubst.empty)
-            else Q_Cons (Q, (α, t)), (tsubst.empty, ksubst.empty)
+            else Q_Cons (Q, (α, t)), empty_θ
 
     member Q.extend (Q' : prefix) =
         Q'.fold (fun (Q : prefix, θ) (α, t) -> let Q', θ' = Q.extend (α, t) in Q', compose_tksubst θ' θ) (Q, (tsubst.empty, ksubst.empty))

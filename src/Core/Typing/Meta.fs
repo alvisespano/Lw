@@ -54,7 +54,7 @@ type basic_builder with
             let! { θ = _, kθ; γ = γ } = M.get_state
             let kθ = kmgu { loc = loc; γ = γ } (subst_kind kθ k1) (subst_kind kθ k2)
             L.mgu "[kU] %O == %O [%O]" k1 k2 kθ
-            do! M.update_subst (tsubst.empty, kθ)
+            do! M.update_θ (tsubst.empty, kθ)
         }
 
 let private prompt_inferred_kind, prompt_evaluated_type = 

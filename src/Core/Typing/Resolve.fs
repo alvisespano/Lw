@@ -83,7 +83,7 @@ let rec resolve_constraints (ctx : context) e0 =
                         | Some cand ->
                             L.resolve Normal "%s : %O\n ~~> %O" x t cand
                             do! M.remove_constraint c
-                            do! M.update_subst cand.θ
+                            do! M.update_θ cand.θ
                             let p = P_CId c
                             let e1 = E_Jk cand.jk
                             let e2 = e0.value
