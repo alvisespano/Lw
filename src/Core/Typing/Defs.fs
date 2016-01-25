@@ -81,8 +81,8 @@ with
                     | T_Bottom _, T_Bottom _            -> true
                     | T_HTuple ts, T_HTuple ts'
                         when ts.Length = ts'.Length     -> List.fold2 (fun b t t' -> b && t = t') true ts ts'
-//                    | T_Closure _, _
-//                    | _, T_Closure _                    -> L.unexpected_error "comparing type closures: %O = %O" x y; false
+                    | T_Closure _, _
+                    | _, T_Closure _                    -> L.unexpected_error "comparing type closures: %O = %O" x y; false
                     | _                                 -> false
 
 
@@ -165,7 +165,7 @@ type constraints (set : Set<constraintt>) =
     static member (+) (cs1 : constraints, cs2 : constraints) = new constraints (cs1.set + cs2.set)
     static member (-) (cs1 : constraints, cs2 : constraints) = new constraints (cs1.set - cs2.set)
 
-    member __.pretty = sprintf "{ %s }" (flatten_stringables "; " set)
+    member __.pretty = if set.IsEmpty then "{}" else sprintf "{ %s }" (flatten_stringables "; " set)
     override this.ToString () = this.pretty
 
     static member empty = new constraints (Set.empty)
@@ -251,7 +251,12 @@ with
 
     member Q.is_disjoint (Q' : prefix) = (Set.intersect Q.dom Q'.dom).IsEmpty
 
-    static member pretty_item (α, t) = sprintf "(%O >= %O)" α t
+    static member pretty_item = function
+        | α, T_Bottom K_Star        -> sprintf "%O" α
+        | α, T_Bottom k             -> sprintf "(%O :: %O)" α k
+        | α, t when t.kind = K_Star -> sprintf "(%O >= %O)" α t
+        | α, t                      -> sprintf "(%O :: %O >= %O)" α t.kind t
+
     member Q.pretty = mappen_strings_or_nothing prefix.pretty_item Config.Printing.empty_prefix Config.Printing.sep_in_forall Q
     override this.ToString () = this.pretty
 
@@ -588,12 +593,12 @@ type ty with
             | T_Arrow (t1, t2)              -> sprintf "%s -> %s" (R t1) (R t2)
 
             | T_App (App s)          -> s
-//            | T_Foralls (Q, t)       -> sprintf "forall %O. %O" Q t
             | T_Closure (x, _, τ, k) -> sprintf "<[%O] :: %O>" (Te_Lambda ((x, None), τ)) k
 
             | T_Bottom K_Star        -> Config.Printing.dynamic.bottom
             | T_Bottom k             -> sprintf "(%s :: %O)" Config.Printing.dynamic.bottom k
-            | T_Forall ((α, t1), t2) -> sprintf "forall (%O : %O). %O" α t1 t2
+            | T_ForallsQ (Q, t)       -> sprintf "forall %O. %O" Q t
+//            | T_Forall ((α, t1), t2) -> sprintf "forall (%O : %O). %O" α t1 t2
 
             // these are not supposed to be matched because active patterns should stand in place of them above
 //            | T_Forall _ as t -> unexpected "term %O in type" __SOURCE_FILE__ __LINE__ t
