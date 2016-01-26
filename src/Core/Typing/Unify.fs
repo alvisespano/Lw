@@ -155,7 +155,7 @@ module internal Mgu =
                     in
                         Q3, θ3 ** θ2 ** θ1
 
-                | T_Forall_F ((α1, k1), t1), T_Forall_F ((α2, k2), t2) ->
+//                | T_Forall_F ((α1, k1), t1), T_Forall_F ((α2, k2), t2) ->
 //                    let c1 = α1.skolemized
 //                    let c2 = α2.skolemized
 //                    let Q1, θ1 =
@@ -163,6 +163,9 @@ module internal Mgu =
 //                        let θ2 = new tsubst (α2, T_Cons (c2, k2)), ksubst.empty
 //                        in
 //                            R Q0 (S θ1 t1) (S θ2 t2)
+                | T_Forall ((α1, tb1), t1), T_Forall ((α2, tb2), t2) ->
+                    let k1 = tb1.kind
+                    let k2 = tb2.kind
                     let θ0 = kmgu ctx k1 k2 ** kmgu ctx t1.kind t2.kind
                     let skcs1, t1 = skolemize_ty [α1, k1] (S θ0 t1)
                     let skcs2, t2 = skolemize_ty [α2, k2] (S θ0 t2)
@@ -213,7 +216,7 @@ module internal Mgu =
 
             try
                 let Q, (tθ, _ as θ) = R Q t1_ t2_
-                // check post-condition over HML unify function result
+                // check post-condition of HML unify function
                 for _, t in tθ do
                     assert t.nf.is_ftype
                 Q, θ

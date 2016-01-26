@@ -62,12 +62,12 @@ let rec pt_expr (ctx : context) (e0 : expr) =
     let M = new translator_typing_builder<_, _> (e0)
     M {
         let e = e0.value // uexpr must be bound before translation, or printing will not work
-        let! t = pt_expr' ctx e0
+        let! (t : ty) = pt_expr' ctx e0
         do! resolve_constraints ctx e0
         let! cs = M.get_constraints
         let! Q = M.get_Q
         let! tθ, kθ = M.get_θ
-        L.debug Min "[e]  %O\n[:T] : %O\n[C]  %O\n[Q]  %O\n[e*] %O\n[S]  %O\n     %O" e t cs Q e0 tθ kθ
+        L.debug Min "[e]  %O\n[:T] %O\n     nf(T) = %O\n[C]  %O\n[Q]  %O\n[e*] %O\n[S]  %O\n     %O" e t t.nf cs Q e0 tθ kθ
         return t
     } 
 
@@ -169,19 +169,20 @@ and pt_expr' ctx e0 =
                 return! pt_expr ctx e
             }            
             let! θ1 = M.get_θ
-            // check that the type of parameter has been inferred as a monotype in case no annotation was provided
+            // check inferred type of parameter is a monotype when no annotation was provided
             if τo.IsNone && not (subst_ty θ1 tx).is_monomorphic then Report.Error.lambda_parameter_is_not_monomorphic e0.loc x t
             // TODO: the following code can be monadized
             let! Q1 = M.get_Q
             let Q2, Q3 = Q1.split Q0.dom    // TODO: monadize split: here Q2 would become the new prefix for the monad and Q3 the result of the split function
             let Q3', θ3' = Q3.extend (β, t)
-            do! M.set_θ θ1
             do! M.set_Q Q2
+            do! M.set_θ θ1
             yield T_ForallsQ (Q3', T_Arrow (subst_ty θ1 tx, subst_ty θ3' (T_Star_Var β)))
 
         | App (e1, e2) -> 
             let! Q0 = M.get_Q
             let! t1 = pt_expr ctx e1
+            let! θ1 = M.get_θ
             let! t2 = pt_expr ctx e2
             let! Q2 = M.get_Q
             let! θ2 = M.get_θ
@@ -194,11 +195,14 @@ and pt_expr' ctx e0 =
             let α2 = T_Star_Var α2
             let β = T_Star_Var β
             do! M.set_Q Q2'
-            do! M.unify e1.loc (T_Arrow (subst_ty θ2' α2, β)) (subst_ty θ2' α1)
-            let! θ3 = M.get_θ
-            let! Q3 = M.get_Q
+            //do! M.unify e1.loc (T_Arrow (subst_ty θ2' α2, β)) (subst_ty θ2' α1)
+            //let! θ3 = M.get_θ
+            //let! Q3 = M.get_Q
+            let! γ = M.get_γ
+            let Q3, θ3 = mgu { loc = e1.loc; γ = γ } Q2' (T_Arrow (subst_ty θ2' α2, β)) (subst_ty θ2' α1)
             let Q4, Q5 = Q3.split Q0.dom
             do! M.set_Q Q4
+            do! let ( ** ) = compose_tksubst in M.set_θ (θ3 ** θ2 ** θ1)
             yield T_ForallsQ (Q5, subst_ty θ3 β)
             
         | Tuple ([] | [_]) as e ->

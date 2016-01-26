@@ -121,8 +121,6 @@ with
 
     static member fresh_strict cm name t = { name = name; num = fresh_int (); mode = cm; strict = true; ty = t }
     
-    member this.refresh = { this with num = fresh_int () }
-
     override this.ToString () = this.pretty
 
     member this.pretty_as_translated_id = sprintf Config.Printing.cid_fmt this.name this.num
@@ -254,10 +252,10 @@ with
     static member pretty_item = function
         | α, T_Bottom K_Star        -> sprintf "%O" α
         | α, T_Bottom k             -> sprintf "(%O :: %O)" α k
-        | α, t when t.kind = K_Star -> sprintf "(%O >= %O)" α t
+        | α, t when t.kind = K_Star -> sprintf "(%O %s %O)" α Config.Printing.flexible_quantified_tyvar_sep t
         | α, t                      -> sprintf "(%O :: %O >= %O)" α t.kind t
 
-    member Q.pretty = mappen_strings_or_nothing prefix.pretty_item Config.Printing.empty_prefix Config.Printing.sep_in_forall Q
+    member Q.pretty = mappen_strings_or_nothing prefix.pretty_item Config.Printing.empty_prefix Config.Printing.prefix_sep Q
     override this.ToString () = this.pretty
 
     member this.fold f z =
@@ -549,7 +547,7 @@ type kscheme with
         match ς with
             | { forall = αs; kind = k } ->
                 use N = var.reset_normalization αs
-                let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.sep_in_forall αs)
+                let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_sep αs)
                 in
                     sprintf "%s%O" αspart k
 
@@ -598,10 +596,6 @@ type ty with
             | T_Bottom K_Star        -> Config.Printing.dynamic.bottom
             | T_Bottom k             -> sprintf "(%s :: %O)" Config.Printing.dynamic.bottom k
             | T_ForallsQ (Q, t)       -> sprintf "forall %O. %O" Q t
-//            | T_Forall ((α, t1), t2) -> sprintf "forall (%O : %O). %O" α t1 t2
-
-            // these are not supposed to be matched because active patterns should stand in place of them above
-//            | T_Forall _ as t -> unexpected "term %O in type" __SOURCE_FILE__ __LINE__ t
         in
             R this
 
@@ -609,7 +603,7 @@ type ty with
     
     static member fresh_var = T_Star_Var var.fresh
 
-    // free type and kind variables
+    // this mixes free type variables as well as free kind variables
     member this.fv =
         match this with
         | T_Bottom k                -> k.fv
@@ -645,14 +639,20 @@ type constraints with
 type scheme with    
     override this.ToString () = this.pretty
 
+//    member σ.pretty =
+//        let { constraints = cs; ty = T_ForallsQ (Q, _) as t } = σ
+//        let αs = Q.dom
+//        use N = var.reset_normalization αs
+//        let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_sep αs)
+//        let cspart = if cs.is_empty then "" else sprintf "{ %O } => " cs
+//        in
+//            sprintf "%s%s%O" αspart cspart t
+
     member σ.pretty =
-        let { constraints = cs; ty = T_ForallsQ (Q, t) } = σ
-        let αs = Q.dom
-        use N = var.reset_normalization αs
-        let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.sep_in_forall αs)
+        let { constraints = cs; ty = t } = σ
         let cspart = if cs.is_empty then "" else sprintf "{ %O } => " cs
         in
-            sprintf "%s%s%O" αspart cspart t
+            sprintf "%s%O" cspart t
                         
     member this.fv =
         let { constraints = cs; ty = t } = this

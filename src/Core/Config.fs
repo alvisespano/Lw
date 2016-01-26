@@ -15,7 +15,8 @@ open FSharp.Common.Prelude
  * Activate them in the project panel as compilation symbols.
  * Mind that logger special methods such as .mgu and .resolve are independent from these.
  *
- * DEBUG_TYVARS
+ * DEBUG_NO_TYVAR_NORM  // turn off variable normalization
+ * DEBUG_TYVAR_NAMES    // print var number and make it clear whether it is named or anonymous
  * DEBUG_MGU
  * DEBUG_CONSTRAINTS
  * DEBUG_PERF
@@ -78,9 +79,11 @@ module Printing =
 
     // static configuration bindings
 
-    let sep_in_forall = " "
+    let forall_sep = " "
+    let prefix_sep = ", "
     let type_annotation_sep = ":"
     let kind_annotation_sep = "::"
+    let flexible_quantified_tyvar_sep = ":>"
     let openworld_overload_constraint_fmt : StringFormat<string -> string> = "%s"
     let closedworld_overload_constraint_fmt : StringFormat<string -> string> = "!%s"
     let freevar_fmt : StringFormat<string -> string> = "'%s"
@@ -92,7 +95,7 @@ module Printing =
     let wildcard_reserved_fmt : StringFormat<int -> string> = "_$%d"
     let tuple_index_label_fmt : StringFormat<int -> string> = "#%d"
     let changed_var_name_fmt : StringFormat<string -> int -> string> = "%s%d"
-    #if DEBUG_TYVARS
+    #if DEBUG_TYVAR_NAMES
     let anonymous_var_fmt : StringFormat<string -> int -> string> = "%s?%d"
     let named_var_fmt : StringFormat<string -> int -> string> = "%s_%d"
     #endif

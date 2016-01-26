@@ -162,20 +162,30 @@ let fv_Γ (Γ : jenv) = fv_env (fun { scheme = σ } -> σ.fv) Γ
 
 let private var_refresher αs = new vasubst (Set.fold (fun (env : Env.t<_, _>) (α : var) -> env.bind α α.refresh) Env.empty αs)
 
-let instantiate { constraints = cs; ty = T_ForallsQ (Q, t) } =
-    let αs = Q.dom
-    let tθ = var_refresher αs
-    let cs = constraints.B { for c in cs do yield { c.refresh with ty = c.ty.subst_vars tθ } }
-    in
-        cs, Q, t.subst_vars tθ
-          
-let generalize (cs : constraints, Q, t : ty) Γ restricted_vars =
-    let αs = (t.fv + cs.fv) - (fv_Γ Γ) - restricted_vars
-    let Q = [ for α, t in Q do if Set.contains α αs then yield α, t ]
-    in
-        { constraints = cs; ty = t } //T_Foralls (Q, t) }
+module HindleyMilner =
+    type constraintt with
+        member this.refresh = { this with num = fresh_int () }
 
-// TODO: refresh_ty and Ungeneralized may not be of use anymore in HML
+    let instantiate { constraints = cs; ty = T_ForallsQ (Q, t) } =
+        let αs = Q.dom
+        let tθ = var_refresher αs
+        let cs = constraints.B { for c in cs do yield { c.refresh with ty = c.ty.subst_vars tθ } }
+        in
+            cs, Q, t.subst_vars tθ
+          
+    let generalize (cs : constraints, Q, t : ty) Γ restricted_vars =
+        let αs = (t.fv + cs.fv) - (fv_Γ Γ) - restricted_vars
+        let Q = [ for α, t in Q do if Set.contains α αs then yield α, t ]
+        in
+            { constraints = cs; ty = T_Foralls (Q, t) }
+
+module HML =
+    let instantiante { constraints = cs; ty = t } = cs, Q_Nil, t
+    let generalize (cs : constraints, Q, t : ty) Γ restricted_vars = { constraints = cs; ty = t }
+
+let instantiate = HML.instantiante
+let generalize = HML.generalize
+
 let refresh_ty (t : ty) =
     let _, _, t = instantiate { constraints = constraints.empty; ty = t }
     in
@@ -188,30 +198,29 @@ let (|Ungeneralized|) = function
     | σ -> unexpected "expected an ungeneralized type scheme but got: %O" __SOURCE_FILE__ __LINE__ σ
 
 type ty with
-    // normal form
     member this.nf =
         match this with
         | T_Forall ((α, t1), t2) ->
             if not <| Set.contains α t2.fv then t2.nf
             elif match t2.nf with
-                    | T_Var (β, _) -> α = β
-                    | _            -> false
+                 | T_Var (β, _) -> α = β
+                 | _            -> false
             then t1.nf
             else
-                let t' = t1.nf
+                let t1' = t1.nf
                 in
-                    if t'.is_unquantified then subst_ty (new tsubst (α, t'), ksubst.empty) t2
-                    else T_Forall ((α, t'), t2.nf)
+                    if t1'.is_unquantified then subst_ty (new tsubst (α, t1'), ksubst.empty) t2
+                    else T_Forall ((α, t1'), t2.nf)
 
         | t -> t
 
     member t.is_nf =
         let t' = t.nf
-        if t <> t' then L.debug Low "nf(%O) <> %O" t t'; false
-        else true
+        in
+            if t <> t' then L.debug Low "nf(%O) <> %O" t t'; false
+            else true
 
     member t.ftype =
-        let t = t.nf    // normalization can be left out of the recursion
         let rec R = function
             | T_Forall ((α, T_Bottom k), t2) ->
                 T_Forall ((α, T_Bottom k), R t2)
@@ -221,14 +230,20 @@ type ty with
                 in
                     R (T_ForallsQ (Q, subst_ty θ t2))
 
+            | T_Bottom k ->
+                let α = var.fresh
+                in
+                    T_Forall ((α, T_Bottom k), T_Var (α, k))
+
             | t -> t    // no need to recur inside types because HML flexible types only have an outer forall carrying bounds, and all inner foralls are unbound
         in
-            R t
+            R t.nf      // normalization can be left out of the recursion
 
     member t.is_ftype =
         let t' = t.ftype
-        if t <> t' then L.debug Low "ftype(%O) <> %O" t t'; false
-        else true
+        in
+            if t <> t' then L.debug Low "ftype(%O) <> %O" t t'; false
+            else true
 
 
 // operations over kinds

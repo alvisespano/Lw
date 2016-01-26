@@ -7,6 +7,8 @@ namespace Test
 
 let app f x = f x
 
+let testapp f = f 1
+
 let id x = x
 
 let revapp x f = f x

@@ -147,7 +147,7 @@ with
         match this with
         | Va (n, Some s) ->
             let r = sprintf fmt s
-            #if DEBUG_TYVARS
+            #if DEBUG_TYVAR_NAMES
             sprintf "%s_%d" r n
             #else
             r
@@ -155,14 +155,14 @@ with
 
         | Va (n, None) ->
             let r = var.auto_name fmt n
-            #if DEBUG_TYVARS
+            #if DEBUG_TYVAR_NAMES
             sprintf "%s?%d" r n
             #else
             r
             #endif
 
     member this.pretty_quantified = this.pretty_fmt Config.Printing.dynamic.tyvar_quantified_fmt
-    member this.pretty_unquantified = this.pretty_fmt Config.Printing.dynamic.tyvar_unquantified_fmt
+//    member this.pretty_unquantified = this.pretty_fmt Config.Printing.dynamic.tyvar_unquantified_fmt
 
     static member fresh = Va (fresh_int (), None)
     static member fresh_named s = Va (fresh_int (), Some s)
@@ -183,12 +183,12 @@ module private var =
 
 type var with
     static member reset_normalization ?quantified_vars =
-        #if !DEBUG_TYVARS
         let quantified_vars = defaultArg quantified_vars Set.empty
+        #if !DEBUG_NO_TYVAR_NORM
         var.cnt := 0
+        #endif
         var.env := Some Env.empty
         var.forall := Set.map (fun (α : var) -> α.uid) quantified_vars
-        #endif
         { new IDisposable with
             member __.Dispose () = var.env := None
         }
@@ -224,7 +224,7 @@ type var with
                             R s 0
 
             var.env := Some (env.bind this.uid name)
-            #if DEBUG_TYVARS
+            #if DEBUG_TYVAR_NAMES
             let fmt = 
                 match this with
                 | Va (_, Some _) -> Config.Printing.named_var_fmt
