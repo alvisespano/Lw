@@ -125,7 +125,7 @@ let pretty_param sep (id, tyo) =
         | Some a -> sprintf "%O %s %O" id sep a
 
 
-// variables
+// unification variables
 //
 
 type var = Va of int * string option
@@ -134,14 +134,21 @@ with
         match this with
         | Va (n, _) -> n
 
-    static member private auto_name fmt n =
+    static member fresh = Va (fresh_int (), None)
+    static member fresh_named s = Va (fresh_int (), Some s)
+
+    member this.refresh =
+        match this with
+        | Va (_, so) -> Va (fresh_int (), so)
+
+    static member private letterize n =
         let start, endd = Config.Printing.dynamic.tyvar_range
         let start, endd = Convert.ToInt32 start, Convert.ToInt32 endd
         let bas = endd - start + 1
         let chr n = n + start |> Convert.ToChar |> Convert.ToString
         let rec div n = let n' = n / bas in (if n' = 0 then "" else div n') + (chr (n % bas))
         in
-            sprintf fmt (div n)
+            div n
 
     member private this.pretty_fmt fmt =
         match this with
@@ -154,22 +161,12 @@ with
             #endif
 
         | Va (n, None) ->
-            let r = var.auto_name fmt n
+            let r = sprintf fmt (var.letterize n)
             #if DEBUG_TYVAR_NAMES
             sprintf "%s?%d" r n
             #else
             r
             #endif
-
-    member this.pretty_quantified = this.pretty_fmt Config.Printing.dynamic.tyvar_quantified_fmt
-//    member this.pretty_unquantified = this.pretty_fmt Config.Printing.dynamic.tyvar_unquantified_fmt
-
-    static member fresh = Va (fresh_int (), None)
-    static member fresh_named s = Va (fresh_int (), Some s)
-
-    member this.refresh =
-        match this with
-        | Va (_, so) -> Va (fresh_int (), so)
 
 
 // this module is needed and cannot be turn into static members within the var class because static members are unit closures and cannot be constants
@@ -178,7 +175,7 @@ module private var =
     // TODO: add thread-safe support with a mutex or something
     let cnt = ref 0
     let env : Env.t<int, string> option ref = ref None
-    let forall : Set<int> ref = ref Set.empty
+    let forall : Set<var> ref = ref Set.empty
 
 
 type var with
@@ -188,52 +185,64 @@ type var with
         var.cnt := 0
         #endif
         var.env := Some Env.empty
-        var.forall := Set.map (fun (α : var) -> α.uid) quantified_vars
+        var.forall := Set.ofSeq quantified_vars
         { new IDisposable with
             member __.Dispose () = var.env := None
         }
 
-    override this.ToString () = this.pretty
+    member α.add_to_normalization =
+        var.forall := Set.add α !var.forall
+        { new IDisposable with
+            member __.Dispose () = var.forall := Set.remove α !var.forall
+        }
+
+    member private __.normalizer = !var.env    // when env is None it means normalization is disabled
 
     member this.pretty =
-        match !var.env with
-        | None     -> this.pretty_quantified  // when env is None it means normalization is disabled, so tyvars are printed as quantified by default
-        | Some env ->
-            let name =
-                match env.search this.uid with
-                | Some s -> s
-                | None ->
-                    let name_exists s = env.exists (fun _ s' -> s' = s)
-                    let next_fresh_name () =
-                        let r = var.auto_name "%s" !var.cnt
-                        var.cnt := !var.cnt + 1
-                        r
-                    match this with
-                    | Va (_, None) ->
-                        let rec R () =
-                            let r = next_fresh_name ()
-                            in
-                                if name_exists r then R () else r
-                        in
-                            R ()
+        match this.normalizer with
+        | None   -> this.pretty_unnormalized 
+        | Some r -> this.pretty_normalized r
 
-                    | Va (_, Some s) ->
-                        let rec R s cnt =
-                            if name_exists s then R (sprintf Config.Printing.changed_var_name_fmt s cnt) (cnt + 1) else s
-                        in
-                            R s 0
+    override this.ToString () = this.pretty
 
-            var.env := Some (env.bind this.uid name)
-            #if DEBUG_TYVAR_NAMES
-            let fmt = 
+    member this.pretty_unnormalized = this.pretty_fmt Config.Printing.dynamic.tyvar_quantified_fmt 
+
+    member this.pretty_normalized env =
+        let name =
+            match env.search this.uid with
+            | Some s -> s
+            | None ->
+                let name_exists s = env.exists (fun _ s' -> s' = s)
+                let next_fresh_name () =
+                    let r = var.letterize !var.cnt
+                    var.cnt := !var.cnt + 1
+                    r
                 match this with
-                | Va (_, Some _) -> Config.Printing.named_var_fmt
-                | Va (_, None)   -> Config.Printing.anonymous_var_fmt
-            sprintf fmt name this.uid
-            #else
-            name
-            #endif
-            |> sprintf (if Set.contains this.uid !var.forall then Config.Printing.dynamic.tyvar_quantified_fmt else Config.Printing.dynamic.tyvar_unquantified_fmt)
+                | Va (_, None) ->
+                    let rec R () =
+                        let r = next_fresh_name ()
+                        in
+                            if name_exists r then R () else r
+                    in
+                        R ()
+
+                | Va (_, Some s) ->
+                    let rec R s cnt =
+                        if name_exists s then R (sprintf Config.Printing.already_existing_named_var_fmt s cnt) (cnt + 1) else s
+                    in
+                        R s 0
+
+        var.env := Some (env.bind this.uid name)
+        #if DEBUG_TYVAR_NAMES
+        let fmt = 
+            match this with
+            | Va (_, Some _) -> Config.Printing.named_var_fmt
+            | Va (_, None)   -> Config.Printing.anonymous_var_fmt
+        sprintf fmt name this.uid
+        #else
+        name
+        #endif
+        |> sprintf (if Set.exists (fun (α : var) -> α.uid = this.uid) !var.forall then Config.Printing.dynamic.tyvar_quantified_fmt else Config.Printing.dynamic.tyvar_unquantified_fmt)
 
 
 

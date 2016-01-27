@@ -1,4 +1,14 @@
 ﻿
+22-27/1/2016:
+* HML being debugged extensively
+* FIX: many fixes, major and minor
+* REFACT: variable printing, scheme printing and lots of other stuff redone
+* REFACT: Report.prompt now supports arbitrary values after the type, i.e. a separator (e.g. "=" for values) and a value; moreover, it introduces an EOL if the printing
+          would truncate due to console buffer width
+* UP: quantified variables (or a whole prefix) can now be added to the set of quantified variables for pretty printing normalized vars; the use-binding-and-IDisposable
+      trick has been used for removing vars from the set when coming up from recursion without the need to pass a parameter to ty.pretty
+
+
 21/1/2016:
 * FIX: when the left-hand pattern of a let-binding is a plain identifier, no trivial unification takes place between the inferred type and the type inferred for the pattern
 

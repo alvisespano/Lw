@@ -149,18 +149,18 @@ type basic_builder (loc : location) =
                         return α
         }
 
-    member M.bind_γ x ς =
+    member M.bind_γ x kσ =
         M {
             let! _, kθ = M.get_θ
-            let ς = subst_kscheme kθ ς
-            do! M.lift_γ (fun γ -> γ.bind x ς)
-            return ς
+            let kσ = subst_kscheme kθ kσ
+            do! M.lift_γ (fun γ -> γ.bind x kσ)
+            return kσ
         }
         
     member M.gen_bind_γ x k =
         M {
-            let! ς = M.kgen k
-            return! M.bind_γ x ς
+            let! kσ = M.kgen k
+            return! M.bind_γ x kσ
         }
 
     member M.bind_Δ x t =

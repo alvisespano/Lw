@@ -67,7 +67,7 @@ let rec pt_expr (ctx : context) (e0 : expr) =
         let! cs = M.get_constraints
         let! Q = M.get_Q
         let! tθ, kθ = M.get_θ
-        L.debug Min "[e]  %O\n[:T] %O\n     nf(T) = %O\n[C]  %O\n[Q]  %O\n[e*] %O\n[S]  %O\n     %O" e t t.nf cs Q e0 tθ kθ
+        L.debug Min "[e]  %O\n[:T] %O\n     nf(T) = %O\n     F-type(T) = %O\n[C]  %O\n[Q]  %O\n[e*] %O\n[S]  %O\n     %O" e t t.nf t.ftype cs Q e0 tθ kθ
         return t
     } 
 
@@ -417,7 +417,7 @@ and pt_decl' (ctx : context) (d0 : decl) =
                 in
                     M.gen_bind_Γ jk jm t
             let e1 = if cs.is_empty then e0 else LambdaFun ([possibly_tuple Lo P_CId P_Tuple cs], Lo e0.value)
-            Report.prompt ctx (prefixes @ decl_qual.as_tokens) x σ None
+            Report.prompt ctx (prefixes @ decl_qual.as_tokens) x σ (Some (Config.Printing.ftype_instance_sep, σ.ty.ftype))
             return jk, e1
         }
 
@@ -509,10 +509,10 @@ and pt_decl' (ctx : context) (d0 : decl) =
                 | k         -> [], k
             let kdom, kcod = split (|K_Arrows|_|) kc
             do! M.kunify d0.loc kcod K_Star    // TODO: unification might be wrong: consider pattern matching againts K_Star instead
-            let! ς = M.gen_bind_γ c kc
-            Report.prompt ctx Config.Printing.Prompt.datatype_decl_prefixes c ς None
+            let! kσ = M.gen_bind_γ c kc
+            Report.prompt ctx Config.Printing.Prompt.datatype_decl_prefixes c kσ None
             // rebind kc to the unified kind, by reinstantiating it rather than keeping the user-declared one
-            let kc = kinstantiate ς 
+            let kc = kinstantiate kσ 
             for { id = x; signature = τx } in bs do
                 let! tx, kx = pk_and_eval_ty_expr ctx τx
                 do! M.kunify τx.loc K_Star kx

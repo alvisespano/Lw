@@ -5,9 +5,11 @@
 
 namespace Test 
 
+let const x y = x
+
 let app f x = f x
 
-let testapp f = f 1
+let intapp f = f 1
 
 let id x = x
 

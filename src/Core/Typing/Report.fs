@@ -33,11 +33,17 @@ let inline prompt ctx prefixes x (σ : ^s) o =
     let log = if top_level then L.msg High else L.msg Normal
     let prefixes = List.distinct <| if top_level then prefixes else Config.Printing.Prompt.nested_decl_prefix :: prefixes
     use N = var.reset_normalization ()
-    log "%s %s %O%s"
-        (flatten_and_trim_strings Config.Printing.Prompt.prefix_sep (prefixes @ [x]))
-        (^s : (static member binding_separator : string) ())
-        σ
-        (soprintf " = %O" o)
+    let header = sprintf "%s %s" (flatten_and_trim_strings Config.Printing.Prompt.prefix_sep (prefixes @ [x])) (^s : (static member binding_separator : string) ())
+    let σ = σ.ToString ()
+    let reduction = 
+        match o with
+        | None -> ""
+        | Some (sep, x) ->
+            let s = sprintf "%s %O" sep x
+            in
+                if header.Length + 1 + σ.Length + 1 + s.Length >= Console.BufferWidth / 2 then sprintf "\n%s%s" (new String (' ', header.Length + 1)) s else s
+    log "%s %s %s" header σ reduction
+        
 
 let private E' f n loc fmt = let N = var.reset_normalization () in throw_formatted (fun msg -> N.Dispose (); f (msg, n, loc)) fmt
 let private E x = E' (fun args -> new type_error (args)) x

@@ -80,7 +80,6 @@ module Printing =
     // static configuration bindings
 
     let forall_sep = " "
-    let prefix_sep = ", "
     let type_annotation_sep = ":"
     let kind_annotation_sep = "::"
     let flexible_quantified_tyvar_sep = ":>"
@@ -94,13 +93,14 @@ module Printing =
     let fresh_reserved_id_fmt : StringFormat<int -> string> = "$%d"
     let wildcard_reserved_fmt : StringFormat<int -> string> = "_$%d"
     let tuple_index_label_fmt : StringFormat<int -> string> = "#%d"
-    let changed_var_name_fmt : StringFormat<string -> int -> string> = "%s%d"
+    let already_existing_named_var_fmt : StringFormat<string -> int -> string> = "%s%d" // this is needed for disambiguating name for a named var that already existed and whose name conflicted with automatically-named vars
     #if DEBUG_TYVAR_NAMES
     let anonymous_var_fmt : StringFormat<string -> int -> string> = "%s?%d"
     let named_var_fmt : StringFormat<string -> int -> string> = "%s_%d"
     #endif
     let empty_prefix = "()"
-
+    let ftype_instance_sep = "<:"
+    let type_evaluation_sep = "="
 
     module Prompt =
         let prefix_sep = " "

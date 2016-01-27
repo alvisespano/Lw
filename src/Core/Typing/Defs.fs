@@ -44,6 +44,7 @@ and [< NoComparison; CustomEquality; DebuggerDisplay("{ToString()}") >] ty =
     | T_Bottom of kind
 with
     static member binding_separator = Config.Printing.type_annotation_sep
+    static member reduction_separator = Config.Printing.ftype_instance_sep
 
     member this.kind =
         match this with
@@ -255,7 +256,7 @@ with
         | α, t when t.kind = K_Star -> sprintf "(%O %s %O)" α Config.Printing.flexible_quantified_tyvar_sep t
         | α, t                      -> sprintf "(%O :: %O >= %O)" α t.kind t
 
-    member Q.pretty = mappen_strings_or_nothing prefix.pretty_item Config.Printing.empty_prefix Config.Printing.prefix_sep Q
+    member Q.pretty = mappen_strings_or_nothing prefix.pretty_item Config.Printing.empty_prefix Config.Printing.forall_sep Q
     override this.ToString () = this.pretty
 
     member this.fold f z =
@@ -543,8 +544,8 @@ type kind with
 type kscheme with
     override this.ToString () = this.pretty
 
-    member ς.pretty =
-        match ς with
+    member kσ.pretty =
+        match kσ with
             | { forall = αs; kind = k } ->
                 use N = var.reset_normalization αs
                 let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_sep αs)
@@ -559,6 +560,14 @@ type kscheme with
 
 // augmentations for types
 //
+
+type var with
+    static member add_prefix_to_normalization (Q : prefix) =
+        let ds = [ for α, _ in Q do yield α.add_to_normalization ]
+        { new IDisposable with
+            member __.Dispose () = for d in ds do d.Dispose ()
+        }
+            
 
 type ty with
     member this.pretty =
@@ -595,7 +604,7 @@ type ty with
 
             | T_Bottom K_Star        -> Config.Printing.dynamic.bottom
             | T_Bottom k             -> sprintf "(%s :: %O)" Config.Printing.dynamic.bottom k
-            | T_ForallsQ (Q, t)       -> sprintf "forall %O. %O" Q t
+            | T_ForallsQ (Q, t)      -> use N = var.add_prefix_to_normalization Q in sprintf "forall %O. %O" Q t
         in
             R this
 
@@ -639,17 +648,11 @@ type constraints with
 type scheme with    
     override this.ToString () = this.pretty
 
-//    member σ.pretty =
-//        let { constraints = cs; ty = T_ForallsQ (Q, _) as t } = σ
+    member σ.pretty =
+        let { constraints = cs; ty = t } = σ
 //        let αs = Q.dom
 //        use N = var.reset_normalization αs
 //        let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_sep αs)
-//        let cspart = if cs.is_empty then "" else sprintf "{ %O } => " cs
-//        in
-//            sprintf "%s%s%O" αspart cspart t
-
-    member σ.pretty =
-        let { constraints = cs; ty = t } = σ
         let cspart = if cs.is_empty then "" else sprintf "{ %O } => " cs
         in
             sprintf "%s%O" cspart t

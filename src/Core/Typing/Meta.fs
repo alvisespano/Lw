@@ -59,8 +59,8 @@ type basic_builder with
 
 let private prompt_inferred_kind, prompt_evaluated_type = 
     let m = new System.Collections.Generic.Dictionary<_, _> (HashIdentity.Structural)
-    let f1 ctx ss x ς = m.Add (x, (ctx, ss, ς))
-    let f2 x t = let ctx, ss, ς = m.[x] in Report.prompt ctx ss x ς (Some t)
+    let f1 ctx ss x kσ = m.Add (x, (ctx, ss, kσ))
+    let f2 x t = let ctx, ss, kσ = m.[x] in Report.prompt ctx ss x kσ (Some (Config.Printing.type_evaluation_sep, t))
     in
         f1, f2
 
@@ -290,8 +290,8 @@ and pk_ty_expr' (ctx : context) (τ0 : ty_expr) =
                 yield α
 
         | Te_Id x ->
-            let! ς = K.lookup_γ x
-            yield kinstantiate ς
+            let! kσ = K.lookup_γ x
+            yield kinstantiate kσ
 
         | Te_Lambda ((x, ko), τ) ->
             let kx = either kind.fresh_var ko
@@ -387,8 +387,8 @@ and pk_ty_bindings (ctx : context) loc bs =
                     }
                 }) bs
         for x, k in l do
-            let! ς = M.gen_bind_γ x k
-            prompt_inferred_kind ctx Config.Printing.Prompt.type_decl_prefixes x ς
+            let! kσ = M.gen_bind_γ x k
+            prompt_inferred_kind ctx Config.Printing.Prompt.type_decl_prefixes x kσ
     }   
 
 
@@ -407,9 +407,9 @@ and pk_ty_rec_bindings (ctx : context) loc bs  =
                         }) bs
             }
         for x, kx in bs do
-            let! ς = M.gen_bind_γ x kx
+            let! kσ = M.gen_bind_γ x kx
             // TODO: all type definitions should be implicitly recursive
-            prompt_inferred_kind ctx Config.Printing.Prompt.rec_type_decl_prefixes x ς
+            prompt_inferred_kind ctx Config.Printing.Prompt.rec_type_decl_prefixes x kσ
     }
 
 
@@ -419,8 +419,8 @@ and pk_ty_patt ctx (p0 : ty_patt) =
     K {
         match p0.value with
         | Tp_Cons x ->
-            let! ς = K.lookup_γ x
-            yield kinstantiate ς
+            let! kσ = K.lookup_γ x
+            yield kinstantiate kσ
 
         | Tp_Var x ->
             let α = kind.fresh_var

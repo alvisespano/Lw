@@ -217,7 +217,7 @@ type ty with
     member t.is_nf =
         let t' = t.nf
         in
-            if t <> t' then L.debug Low "nf(%O) <> %O" t t'; false
+            if t <> t' then L.warn Low "nf(%O) <> %O" t t'; false
             else true
 
     member t.ftype =
@@ -242,14 +242,14 @@ type ty with
     member t.is_ftype =
         let t' = t.ftype
         in
-            if t <> t' then L.debug Low "ftype(%O) <> %O" t t'; false
+            if t <> t' then L.warn Low "ftype(%O) <> %O" t t'; false
             else true
 
 
 // operations over kinds
 //
 
-let fv_γ (γ : kjenv) = fv_env (fun (ς : kscheme) -> ς.fv) γ
+let fv_γ (γ : kjenv) = fv_env (fun (kσ : kscheme) -> kσ.fv) γ
 
 let kinstantiate { forall = αs; kind = k } =
     let tθ = var_refresher αs
@@ -264,7 +264,7 @@ let kgeneralize (k : kind) γ =
 
 let (|KUngeneralized|) = function
     | { forall = αs; kind = k } when αs.Count = 0 -> k
-    | ς -> unexpected "expected an ungeneralized kind scheme but got: %O" __SOURCE_FILE__ __LINE__ ς
+    | kσ -> unexpected "expected an ungeneralized kind scheme but got: %O" __SOURCE_FILE__ __LINE__ kσ
 
 let KUngeneralized k = { forall = Set.empty; kind = k }
 
