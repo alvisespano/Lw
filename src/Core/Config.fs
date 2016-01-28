@@ -15,12 +15,13 @@ open FSharp.Common.Prelude
  * Activate them in the project panel as compilation symbols.
  * Mind that logger special methods such as .mgu and .resolve are independent from these.
  *
- * DEBUG_NO_TYVAR_NORM  // turn off variable normalization
- * DEBUG_TYVAR_NAMES    // print var number and make it clear whether it is named or anonymous
+ * DEBUG_NO_TYVAR_NORM      // turn off variable normalization
+ * DEBUG_TYVAR_NAMES        // print var number and make it clear whether it is named or anonymous
  * DEBUG_MGU
  * DEBUG_CONSTRAINTS
  * DEBUG_PERF
  * DEBUG_RESOLVE
+ * DEBUG_BEFORE_INFERENCE   // print debug information for each expression also BEFORE typing (useful for comparing what happens at each inference step)
  *)
 
 module Typing =
@@ -79,7 +80,7 @@ module Printing =
 
     // static configuration bindings
 
-    let forall_sep = " "
+    let forall_prefix_sep = " "
     let type_annotation_sep = ":"
     let kind_annotation_sep = "::"
     let flexible_quantified_tyvar_sep = ":>"

@@ -57,17 +57,26 @@ let pt_typed_param ctx = function
             return t
         }
 
-
 let rec pt_expr (ctx : context) (e0 : expr) =
     let M = new translator_typing_builder<_, _> (e0)
     M {
         let e = e0.value // uexpr must be bound before translation, or printing will not work
-        let! (t : ty) = pt_expr' ctx e0
-        do! resolve_constraints ctx e0
-        let! cs = M.get_constraints
+        #if DEBUG_BEFORE_INFERENCE
         let! Q = M.get_Q
         let! tθ, kθ = M.get_θ
-        L.debug Min "[e]  %O\n[:T] %O\n     nf(T) = %O\n     F-type(T) = %O\n[C]  %O\n[Q]  %O\n[e*] %O\n[S]  %O\n     %O" e t t.nf t.ftype cs Q e0 tθ kθ
+        let! cs = M.get_constraints
+        L.tabulate 1
+        L.debug Min "[e]  %O\n[C]  %O\n[Q]  %O\n[S]  %O\n     %O" e cs Q tθ kθ
+        #endif
+        let! (t : ty) = pt_expr' ctx e0
+        do! resolve_constraints ctx e0
+        let! Q' = M.get_Q
+        let! tθ', kθ' = M.get_θ
+        let! cs' = M.get_constraints
+        #if DEBUG_BEFORE_INFERENCE
+        L.undo_tabulate
+        #endif
+        L.debug Low "[e]  %O\n[:T] %O\n     nf(T) = %O\n     F-type(T) = %O\n[e*] %O\n[C'] %O\n[Q'] %O\n[S'] %O\n     %O" e t t.nf t.ftype e0 cs' Q' tθ' kθ'
         return t
     } 
 

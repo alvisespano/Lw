@@ -146,7 +146,7 @@ let interactive (envs : Intrinsic.envs) =
                     print_decl_bindings Γ' Δ' d
                     tspan, vspan
             let s = sprintf "-- typing %s / eval %s --" tspan.pretty vspan.pretty
-            L.print_line (sprintf "%s%s" (new String (' ', Console.BufferWidth - s.Length)) s)
+            L.print_line (sprintf "%s%s" (spaces (Console.BufferWidth - s.Length)) s)
 
         with :? OperationCanceledException -> ()
            | e                             -> ignore <| handle_exn e

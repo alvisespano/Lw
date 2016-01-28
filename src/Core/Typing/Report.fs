@@ -41,7 +41,7 @@ let inline prompt ctx prefixes x (σ : ^s) o =
         | Some (sep, x) ->
             let s = sprintf "%s %O" sep x
             in
-                if header.Length + 1 + σ.Length + 1 + s.Length >= Console.BufferWidth / 2 then sprintf "\n%s%s" (new String (' ', header.Length + 1)) s else s
+                if header.Length + 1 + σ.Length + 1 + s.Length >= Console.BufferWidth / 2 then sprintf "\n%s%s" (spaces (header.Length + 1)) s else s
     log "%s %s %s" header σ reduction
         
 

@@ -340,4 +340,6 @@ type prefix with
                 if t'.is_unquantified then prefix.update_prefix__reusable_part (α, t', Q0, Q1, Q2)
                 else Q0.append(Q1).append(α, t).append(Q2), (tsubst.empty, ksubst.empty)
 
-    member this.update_prefix_with_subst = this.update prefix.update_prefix__reusable_part
+    member this.update_prefix_with_subst (α, t : ty) =
+        assert (t.is_ftype)
+        this.update prefix.update_prefix__reusable_part (α, t)

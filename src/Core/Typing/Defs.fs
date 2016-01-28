@@ -256,7 +256,7 @@ with
         | α, t when t.kind = K_Star -> sprintf "(%O %s %O)" α Config.Printing.flexible_quantified_tyvar_sep t
         | α, t                      -> sprintf "(%O :: %O >= %O)" α t.kind t
 
-    member Q.pretty = mappen_strings_or_nothing prefix.pretty_item Config.Printing.empty_prefix Config.Printing.forall_sep Q
+    member Q.pretty = mappen_strings_or_nothing prefix.pretty_item Config.Printing.empty_prefix Config.Printing.forall_prefix_sep Q
     override this.ToString () = this.pretty
 
     member this.fold f z =
@@ -548,7 +548,7 @@ type kscheme with
         match kσ with
             | { forall = αs; kind = k } ->
                 use N = var.reset_normalization αs
-                let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_sep αs)
+                let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_prefix_sep αs)
                 in
                     sprintf "%s%O" αspart k
 
@@ -570,6 +570,8 @@ type var with
             
 
 type ty with
+
+    // TODO: write another pretty printer which adds kind annotations only when kinds are not trivial
     member this.pretty =
         let (|T_Sym_Cons|_|) = (|Sym|_|) (function T_Cons (x, k) -> Some (x, (x, k)) | _ -> None)
         let (|A|_|) = function
@@ -577,9 +579,9 @@ type ty with
             | T_Var _ | T_Record _ | T_Variant _ | T_Cons _ | T_Closure _ | T_Row _ as e -> Some e
             | _ -> None
         let (|App|) = (|Application|) (function T_App (t1, t2) -> Some (t1, t2) | _ -> None) (|A|_|)
-        let rec R = function
-            | T_Star_Var α -> sprintf "%O" α
-            | T_Var (α, k) -> sprintf "(%O :: %O)" α k
+        let expected_kind_of t = K_Star
+        let rec P = function
+            | T_Var (α, _)            -> sprintf "%O" α
 
             | T_Tuple ([] | [_]) as t -> unexpected "empty or unary tuple: %O" __SOURCE_FILE__ __LINE__ t
             | T_Tuple ts              -> mappen_strings (fun t -> (match t with A _ -> sprintf "%s" | _ -> sprintf "(%s)") (R t))  " * " ts
@@ -591,22 +593,53 @@ type ty with
             | T_HTuple ([] | [_]) as t -> unexpected "empty or unary htuple: %O" __SOURCE_FILE__ __LINE__ t
             | T_HTuple ts              -> mappen_strings (fun t -> (match t with A _ -> sprintf "%s" | _ -> sprintf "(%s)") (R t))  ", " ts
 
-            | T_Sym_Cons (x, K_Star) -> sprintf "(%s)" x
-            | T_Sym_Cons (x, k)      -> sprintf "((%s) :: %O)" x k
-            | T_Cons (x, K_Star)     -> x
-            | T_Cons (x, k)          -> sprintf "(%s :: %O)" x k
+            | T_Sym_Cons (x, __)     -> sprintf "(%s)" x
+            | T_Cons (x, _)          -> x
 
             | T_Arrow (T_Arrow _ as t1, t2) -> sprintf "(%s) -> %s" (R t1) (R t2)
             | T_Arrow (t1, t2)              -> sprintf "%s -> %s" (R t1) (R t2)
 
             | T_App (App s)          -> s
-            | T_Closure (x, _, τ, k) -> sprintf "<[%O] :: %O>" (Te_Lambda ((x, None), τ)) k
+            | T_Closure (x, _, τ, _) -> sprintf "<[%O]>" (Te_Lambda ((x, None), τ))
 
-            | T_Bottom K_Star        -> Config.Printing.dynamic.bottom
-            | T_Bottom k             -> sprintf "(%s :: %O)" Config.Printing.dynamic.bottom k
+            | T_Bottom _             -> Config.Printing.dynamic.bottom
             | T_ForallsQ (Q, t)      -> use N = var.add_prefix_to_normalization Q in sprintf "forall %O. %O" Q t
+        and R t =
+            let k = t.kind
+            in
+                if k = expected_kind_of t then P t
+                else sprintf "(%s :: %O)" (P t) k
         in
             R this
+
+//        let rec R = function
+//            | T_Star_Var α -> sprintf "%O" α
+//            | T_Var (α, k) -> sprintf "(%O :: %O)" α k
+//
+//            | T_Tuple ([] | [_]) as t -> unexpected "empty or unary tuple: %O" __SOURCE_FILE__ __LINE__ t
+//            | T_Tuple ts              -> mappen_strings (fun t -> (match t with A _ -> sprintf "%s" | _ -> sprintf "(%s)") (R t))  " * " ts
+//
+//            | T_Record row  -> sprintf "{ %s }" (pretty_row "; " Config.Printing.type_annotation_sep row)
+//            | T_Variant row -> sprintf "< %s >" (pretty_row " | " Config.Printing.type_annotation_sep row)
+//            | T_Row row     -> sprintf "(| %s |)" (pretty_row " | " Config.Printing.type_annotation_sep row)
+//
+//            | T_HTuple ([] | [_]) as t -> unexpected "empty or unary htuple: %O" __SOURCE_FILE__ __LINE__ t
+//            | T_HTuple ts              -> mappen_strings (fun t -> (match t with A _ -> sprintf "%s" | _ -> sprintf "(%s)") (R t))  ", " ts
+//
+//            | T_Sym_Cons (x, K_Star) -> sprintf "(%s)" x
+//            | T_Sym_Cons (x, k)      -> sprintf "((%s) :: %O)" x k
+//            | T_Cons (x, K_Star)     -> x
+//            | T_Cons (x, k)          -> sprintf "(%s :: %O)" x k
+//
+//            | T_Arrow (T_Arrow _ as t1, t2) -> sprintf "(%s) -> %s" (R t1) (R t2)
+//            | T_Arrow (t1, t2)              -> sprintf "%s -> %s" (R t1) (R t2)
+//
+//            | T_App (App s)          -> s
+//            | T_Closure (x, _, τ, k) -> sprintf "<[%O] :: %O>" (Te_Lambda ((x, None), τ)) k
+//
+//            | T_Bottom K_Star        -> Config.Printing.dynamic.bottom
+//            | T_Bottom k             -> sprintf "(%s :: %O)" Config.Printing.dynamic.bottom k
+//            | T_ForallsQ (Q, t)      -> use N = var.add_prefix_to_normalization Q in sprintf "forall %O. %O" Q t
 
     override this.ToString () = this.pretty
     

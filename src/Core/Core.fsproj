@@ -24,7 +24,7 @@
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
     <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;DEBUG_NO_TYVAR_NORM</DefineConstants>
+    <DefineConstants>DEBUG;DEBUG_NO_TYVAR_NORM;DEBUG_BEFORE_INFERENCE</DefineConstants>
     <WarningLevel>5</WarningLevel>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <DocumentationFile>

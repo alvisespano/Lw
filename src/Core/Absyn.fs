@@ -128,6 +128,7 @@ let pretty_param sep (id, tyo) =
 // unification variables
 //
 
+[< System.Diagnostics.DebuggerDisplay("{ToString()}") >]
 type var = Va of int * string option
 with
     member this.uid =

@@ -141,7 +141,6 @@ module internal Mgu =
             let rec R (Q0 : prefix) (t1 : ty) (t2 : ty) =
                 assert (t1.is_nf && t2.is_nf)   // TODO: remove this because the next assert is enough?
                 assert (t1.is_ftype && t2.is_ftype)
-                L.mgu "[mgu] %O == %O\n      Q = %O" t1 t2 Q
                 match t1, t2 with
                 | T_Cons (x, k1), T_Cons (y, k2) when x = y -> Q0, kmgu ctx k1 k2
                 | T_Var (α, k1), T_Var (β, k2) when α = β   -> Q0, kmgu ctx k1 k2
@@ -215,10 +214,12 @@ module internal Mgu =
                     raise (Mismatch (t1, t2))
 
             try
-                let Q, (tθ, _ as θ) = R Q t1_ t2_
+                L.mgu "[U] %O == %O\n    Q = %O" t1_ t2_ Q
+                let Q, (tθ, kθ as θ) = R Q t1_ t2_
                 // check post-condition of HML unify function
                 for _, t in tθ do
                     assert t.nf.is_ftype
+                L.mgu "[S] %O\n    %O\n    Q' = %O" tθ kθ Q
                 Q, θ
             with Mismatch (t1, t2) -> Report.Error.type_mismatch loc t1_ t2_ t1 t2
 
@@ -236,9 +237,9 @@ type basic_builder with
             let! Q = M.get_Q
             let t1 = subst_ty θ t1
             let t2 = subst_ty θ t2
-            L.mgu "[U] %O =?= %O\n    Q = %O" t1 t2 Q
+//            L.mgu "[U] %O =?= %O\n    Q = %O" t1 t2 Q
             let Q, (tθ, kθ as θ) = mgu { loc = loc; γ = γ } Q t1 t2
-            L.mgu "[S] %O\n    %O\n    Q' = %O" tθ kθ Q
+//            L.mgu "[S] %O\n    %O\n    Q' = %O" tθ kθ Q
             do! M.set_Q Q
             do! M.update_θ θ
         }
