@@ -134,7 +134,6 @@ let compose_tksubst (tθ' : tsubst, kθ') (tθ, kθ) =
 
 let subst_prefix θ Q = prefix.B { for α, t in Q do yield α, subst_ty θ t }
 
-// TODO: implement actual substitution of type constraints for GADTs
 let subst_type_constraints _ tcs = tcs
 
 let subst_constraints θ (cs : constraints) = cs.map (fun c -> { c with ty = subst_ty θ c.ty })
@@ -256,7 +255,7 @@ let kinstantiate { forall = αs; kind = k } =
     in
         k.subst_vars tθ
 
-// TODO: restricted named vars should be taken into account also for kind generalization?
+// TODO: restricted named vars should be taken into account also for kind generalization? guess so
 let kgeneralize (k : kind) γ =
     let αs = k.fv - (fv_γ γ)
     in
@@ -296,10 +295,10 @@ type prefix with
             if t'.is_unquantified then Q, (new tsubst (α, t'), ksubst.empty)
             else Q_Cons (Q, (α, t)), empty_θ
 
-    member Q.extend (Q' : prefix) =
-        Q'.fold (fun (Q : prefix, θ) (α, t) -> let Q', θ' = Q.extend (α, t) in Q', compose_tksubst θ' θ) (Q, (tsubst.empty, ksubst.empty))
+    member Q.extend Q' =
+        Seq.fold (fun (Q : prefix, θ) (α, t) -> let Q', θ' = Q.extend (α, t) in Q', compose_tksubst θ' θ) (Q, (tsubst.empty, ksubst.empty)) Q'
 
-    member Q.extend l = Q.extend (prefix.ofSeq l)
+//    member Q.extend l = Q.extend (prefix.ofSeq l)
 
     member Q.insert i =
         let rec R = function
@@ -331,14 +330,14 @@ type prefix with
     static member private update_prefix__reusable_part (α, t, Q0 : prefix, Q1, Q2) =
         let θ = new tsubst (α, t), ksubst.empty
         in
-            Q0.append(Q1).append(subst_prefix θ Q2), θ
+            Q0 + Q1 + subst_prefix θ Q2, θ
 
     member this.update_prefix_with_bound =
         this.update <| fun (α, t, Q0, Q1, Q2) ->
             let t' = t.nf
             in
                 if t'.is_unquantified then prefix.update_prefix__reusable_part (α, t', Q0, Q1, Q2)
-                else Q0.append(Q1).append(α, t).append(Q2), (tsubst.empty, ksubst.empty)
+                else Q0 + Q1 + (α, t) + Q2, (tsubst.empty, ksubst.empty)
 
     member this.update_prefix_with_subst (α, t : ty) =
         assert (t.is_ftype)

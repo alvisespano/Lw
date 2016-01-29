@@ -218,7 +218,7 @@ type basic_builder (loc : location) =
 
     member M.add_prefix α t =
         M {
-            do! M.lift_Q (fun Q -> Q.append (α, t))
+            do! M.lift_Q (fun Q -> Q + (α, t))
         }
 
     member M.add_constraint c =
@@ -284,15 +284,85 @@ type basic_builder (loc : location) =
         }
 
 
+// specialized monad for typing
+//
+
 type typing_builder (loc) =
     inherit basic_builder (loc)
     member __.Yield ((x, t : ty)) = fun (s : state) -> (x, subst_ty s.θ t), s
     member M.Yield (t : ty) = M { let! (), r = M { yield (), t } in return r }
     member M.YieldFrom f = M { let! (r : ty) = f in yield r }
 
+    member M.fork_Q f =
+        M {
+            let! Q = M.get_Q
+            let! r = f
+            do! M.set_Q Q
+            return r
+        }
+
+    member M.update_ty t =
+        M {
+            yield t 
+        }
+
+    member M.split_prefix αs =
+        M {
+            let! θ = M.get_θ
+            let! Q = M.get_Q
+            let Q = subst_prefix θ Q
+            let Q1, Q2 = Q.split αs
+            do! M.set_Q Q1
+            return Q2
+        }
+
+    member M.extend (Q : prefix, α, t) =
+        M {
+            let! t = M.update_ty t
+            let Q, θ = Q.extend (α, t)
+            do! M.set_Q Q
+            do! M.update_θ θ
+        }
+
+    member M.extend (Q, xs) =
+        M {
+            for α, t in xs do
+                do! M.extend (Q, α, t)
+        }
+
+    member M.extend_prefix xs =
+        M {
+            let! Q = M.get_Q
+            do! M.extend (Q, xs)
+        }
+
+    member M.update_prefix_with_bound (Q : prefix) (α, t) =
+        M {
+            let! t = M.update_ty t
+            let Q, θ = Q.update_prefix_with_bound (α, t)
+            do! M.set_Q Q
+            do! M.update_θ θ
+        }
+
+    member M.update_prefix_with_subst (Q : prefix) (α, t) =
+        M {
+            let! t = M.update_ty t
+            let Q, θ = Q.update_prefix_with_subst (α, t)
+            do! M.set_Q Q
+            do! M.update_θ θ            
+        }
+
+
+// specialized monad for typing and translating
+//
+
 type translator_typing_builder<'u, 'a> (e : node<'u, 'a>) =
     inherit typing_builder (e.loc)
     member __.translated with set x = e.value <- x 
+
+
+// specialized monad for kinding
+//
 
 type kinding_builder<'u> (τ : node<'u, kind>) =
     inherit basic_builder (τ.loc)

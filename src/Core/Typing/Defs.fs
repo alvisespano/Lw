@@ -34,9 +34,8 @@ type tenv = Env.t<id, ty>
 and [< NoComparison; CustomEquality; DebuggerDisplay("{ToString()}") >] ty =
     | T_Cons of id * kind
     | T_Var of var * kind
-    // TODO: T_Huple stands for higher-order tuples (i.e. tuples of types, not to be confused with the type of tuples in the value language), and it's not encoded
-    // using rows because rows elements must have kind star, at the moment. Try to design a more general Rowed type which does not need stars on labels, and which would
-    // allow for a non-native definition of HTuple
+    // TODO: T_Huple stands for higher-order tuple (i.e. tuples of types, not to be confused with the type of tuples of values), and it's not encoded
+    //       using rows because each row field must have kind star. Try to design a more general Rowed type which does not expect star on fields, and encode htuples with it
     | T_HTuple of ty list
     | T_App of (ty * ty)
     | T_Forall of (var * ty) * ty
@@ -264,13 +263,13 @@ with
         | Q_Nil         -> z
         | Q_Cons (Q, i) -> f (Q.fold f z) i
 
-    member Q.append (α, t) = Q_Cons (Q, (α, t))
-    member Q.append (Q' : prefix) = Q'.fold (fun (Q : prefix) (α, t) -> Q.append (α, t)) Q
+    static member (+) (Q : prefix, (α, t)) = Q_Cons (Q, (α, t))
+    static member (+) (Q1 : prefix, Q2 : prefix) = Q2.fold (fun (Q : prefix) (α, t) -> Q + (α, t)) Q1
 
 
 [< CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix) >]
 module prefix =
-    let B = new Computation.Builder.itemized_collection<_, _> (empty = Q_Nil, plus1 = (fun i Q -> Q_Cons (Q, i)), plus = fun Q1 Q2 -> Q1.append Q2)
+    let B = new Computation.Builder.itemized_collection<_, _> (empty = Q_Nil, plus1 = (fun i Q -> Q_Cons (Q, i)), plus = fun Q1 Q2 -> Q1 + Q2)
     let ofSeq sq = B { for α, t in sq do yield α, t }
 
 
@@ -571,11 +570,10 @@ type var with
 
 type ty with
 
-    // TODO: write another pretty printer which adds kind annotations only when kinds are not trivial
     member this.pretty =
         let (|T_Sym_Cons|_|) = (|Sym|_|) (function T_Cons (x, k) -> Some (x, (x, k)) | _ -> None)
         let (|A|_|) = function
-            | T_Tuple _ -> None // NOTE: tuples are encoded using row types with integer labels, so they must be matched before
+            | T_Tuple _ -> None // tuples are encoded using row types with integer labels, so they must be matched before
             | T_Var _ | T_Record _ | T_Variant _ | T_Cons _ | T_Closure _ | T_Row _ as e -> Some e
             | _ -> None
         let (|App|) = (|Application|) (function T_App (t1, t2) -> Some (t1, t2) | _ -> None) (|A|_|)
@@ -612,38 +610,10 @@ type ty with
         in
             R this
 
-//        let rec R = function
-//            | T_Star_Var α -> sprintf "%O" α
-//            | T_Var (α, k) -> sprintf "(%O :: %O)" α k
-//
-//            | T_Tuple ([] | [_]) as t -> unexpected "empty or unary tuple: %O" __SOURCE_FILE__ __LINE__ t
-//            | T_Tuple ts              -> mappen_strings (fun t -> (match t with A _ -> sprintf "%s" | _ -> sprintf "(%s)") (R t))  " * " ts
-//
-//            | T_Record row  -> sprintf "{ %s }" (pretty_row "; " Config.Printing.type_annotation_sep row)
-//            | T_Variant row -> sprintf "< %s >" (pretty_row " | " Config.Printing.type_annotation_sep row)
-//            | T_Row row     -> sprintf "(| %s |)" (pretty_row " | " Config.Printing.type_annotation_sep row)
-//
-//            | T_HTuple ([] | [_]) as t -> unexpected "empty or unary htuple: %O" __SOURCE_FILE__ __LINE__ t
-//            | T_HTuple ts              -> mappen_strings (fun t -> (match t with A _ -> sprintf "%s" | _ -> sprintf "(%s)") (R t))  ", " ts
-//
-//            | T_Sym_Cons (x, K_Star) -> sprintf "(%s)" x
-//            | T_Sym_Cons (x, k)      -> sprintf "((%s) :: %O)" x k
-//            | T_Cons (x, K_Star)     -> x
-//            | T_Cons (x, k)          -> sprintf "(%s :: %O)" x k
-//
-//            | T_Arrow (T_Arrow _ as t1, t2) -> sprintf "(%s) -> %s" (R t1) (R t2)
-//            | T_Arrow (t1, t2)              -> sprintf "%s -> %s" (R t1) (R t2)
-//
-//            | T_App (App s)          -> s
-//            | T_Closure (x, _, τ, k) -> sprintf "<[%O] :: %O>" (Te_Lambda ((x, None), τ)) k
-//
-//            | T_Bottom K_Star        -> Config.Printing.dynamic.bottom
-//            | T_Bottom k             -> sprintf "(%s :: %O)" Config.Printing.dynamic.bottom k
-//            | T_ForallsQ (Q, t)      -> use N = var.add_prefix_to_normalization Q in sprintf "forall %O. %O" Q t
 
-    override this.ToString () = this.pretty
-    
-    static member fresh_var = T_Star_Var var.fresh
+    override this.ToString () = this.pretty    
+    static member fresh_star_var = T_Star_Var var.fresh
+    static member fresh_star_var_and_ty = let α = var.fresh in α, T_Star_Var α
 
     // this mixes free type variables as well as free kind variables
     member this.fv =

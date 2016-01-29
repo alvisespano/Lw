@@ -3,8 +3,10 @@
  * Typing/Inference.fs: principal type inference
  * (C) 2000-2014 Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
- 
+
 module Lw.Core.Typing.Inference
+
+#nowarn "49"
 
 open System
 open System.Text.RegularExpressions
@@ -47,7 +49,7 @@ let pt_typed_param ctx = function
     | _, None ->
         let M = new basic_builder (new location ())
         M {
-            return ty.fresh_var            
+            return ty.fresh_star_var            
         }
     | _, Some τ ->
         let K = new kinding_builder<_> (τ)
@@ -65,7 +67,7 @@ let rec pt_expr (ctx : context) (e0 : expr) =
         let! Q = M.get_Q
         let! tθ, kθ = M.get_θ
         let! cs = M.get_constraints
-        L.tabulate 1
+        L.tabulate 2
         L.debug Min "[e]  %O\n[C]  %O\n[Q]  %O\n[S]  %O\n     %O" e cs Q tθ kθ
         #endif
         let! (t : ty) = pt_expr' ctx e0
@@ -113,7 +115,7 @@ and pt_expr' ctx e0 =
                 yield t
 
             | Jb_OverVar ->
-                let α = ty.fresh_var
+                let α = ty.fresh_star_var
                 let c = constraintt.fresh_strict Cm_ClosedWorldOverload x α
                 do! M.add_constraint c
                 M.translated <- E_CId c
@@ -146,7 +148,7 @@ and pt_expr' ctx e0 =
                 | Jb_Unbound    -> None
                 | Jb_Data σ   
                 | Jb_Var σ      -> Report.Warn.freevar_shadowing e0.loc x σ; None
-            let t = either ty.fresh_var ot
+            let t = either ty.fresh_star_var ot
             do! M.add_constraint (constraintt.fresh_strict Cm_FreeVar x t)
             yield t
 
@@ -154,65 +156,70 @@ and pt_expr' ctx e0 =
             return unexpected "expression Reserved_Cons is not supposed to appear in input code: %O" __SOURCE_FILE__ __LINE__ x
 
         | PolyCons x ->
-            let α = ty.fresh_var
-            let β = ty.fresh_var
+            let α = ty.fresh_star_var
+            let β = ty.fresh_star_var
             let ρ = var.fresh
             yield T_Variant ([x, T_Arrow (α, β)], Some ρ)
 
         | Lambda ((x, τo), e) ->
-            let α = var.fresh
-            let β = var.fresh
+            let α, tα = ty.fresh_star_var_and_ty
+            let β, tβ = ty.fresh_star_var_and_ty
             let! Q0 = M.get_Q
             let! tx = M {
                 match τo with
                 | None ->
-                    let k = K_Star
-                    do! M.add_prefix α (T_Bottom k)
-                    return T_Var (α, k)
+                    do! M.add_prefix α (T_Bottom K_Star)
+                    return tα
                 | Some τ ->
-                    let! t, _ = pk_and_eval_ty_expr ctx τ
+                    let! t, k = pk_and_eval_ty_expr ctx τ
+                    do! M.kunify τ.loc K_Star k
                     return t
             }
             let! t = M.fork_Γ <| M {
                 let! _ = M.bind_var_Γ x tx
                 return! pt_expr ctx e
             }            
-            let! θ1 = M.get_θ
+            let! tx = M.update_ty tx
             // check inferred type of parameter is a monotype when no annotation was provided
-            if τo.IsNone && not (subst_ty θ1 tx).is_monomorphic then Report.Error.lambda_parameter_is_not_monomorphic e0.loc x t
-            // TODO: the following code can be monadized
-            let! Q1 = M.get_Q
-            let Q2, Q3 = Q1.split Q0.dom    // TODO: monadize split: here Q2 would become the new prefix for the monad and Q3 the result of the split function
-            let Q3', θ3' = Q3.extend (β, t)
-            do! M.set_Q Q2
-            do! M.set_θ θ1
-            yield T_ForallsQ (Q3', T_Arrow (subst_ty θ1 tx, subst_ty θ3' (T_Star_Var β)))
+            if τo.IsNone && not tx.is_monomorphic then Report.Error.lambda_parameter_is_not_monomorphic e0.loc x t
+            let! Q3 = M.split_prefix Q0.dom
+            let! Q3' = M.fork_Q <| M {
+                do! M.extend (Q3, β, t)
+                return! M.get_Q
+            }
+            yield T_ForallsQ (Q3', T_Arrow (tx, tβ))
+
+//            let! θ1 = M.get_θ
+//            if τo.IsNone && not (subst_ty θ1 tx).is_monomorphic then Report.Error.lambda_parameter_is_not_monomorphic e0.loc x t
+//            let! Q1 = M.get_Q
+//            let Q2, Q3 = Q1.split Q0.dom    // TODO: monadize split: here Q2 would become the new prefix for the monad and Q3 the result of the split function
+//            let Q3', θ3' = Q3.extend (β, t)
+//            do! M.set_Q Q2
+//            do! M.set_θ θ1
+//            yield T_ForallsQ (Q3', T_Arrow (subst_ty θ1 tx, subst_ty θ3' (T_Star_Var β)))
 
         | App (e1, e2) -> 
             let! Q0 = M.get_Q
             let! t1 = pt_expr ctx e1
-            let! θ1 = M.get_θ
             let! t2 = pt_expr ctx e2
-            let! Q2 = M.get_Q
-            let! θ2 = M.get_θ
-            let α1 = var.fresh
-            let α2 = var.fresh
-            let β = var.fresh
-            let Q2', θ2' = Q2.extend [α1, subst_ty θ2 t1; α2, t2; β, T_Bottom K_Star]
-//            do! M.update_θ θ2'
-            let α1 = T_Star_Var α1
-            let α2 = T_Star_Var α2
-            let β = T_Star_Var β
-            do! M.set_Q Q2'
-            //do! M.unify e1.loc (T_Arrow (subst_ty θ2' α2, β)) (subst_ty θ2' α1)
-            //let! θ3 = M.get_θ
-            //let! Q3 = M.get_Q
-            let! γ = M.get_γ
-            let Q3, θ3 = mgu { loc = e1.loc; γ = γ } Q2' (T_Arrow (subst_ty θ2' α2, β)) (subst_ty θ2' α1)
-            let Q4, Q5 = Q3.split Q0.dom
-            do! M.set_Q Q4
-            do! let ( ** ) = compose_tksubst in M.set_θ (θ3 ** θ2 ** θ1)
-            yield T_ForallsQ (Q5, subst_ty θ3 β)
+            let α1, tα1 = ty.fresh_star_var_and_ty
+            let α2, tα2 = ty.fresh_star_var_and_ty
+            let β, tβ = ty.fresh_star_var_and_ty
+            do! M.extend_prefix [α1, t1; α2, t2; β, T_Bottom K_Star]
+            do! M.unify e1.loc (T_Arrow (tα2, tβ)) tα1
+            let! Q5 = M.split_prefix Q0.dom
+            yield T_ForallsQ (Q5, tβ)
+
+//            let! Q2 = M.get_Q
+//            let! θ2 = M.get_θ
+//            let Q2', θ2' = Q2.extend [α1, subst_ty θ2 t1; α2, t2; β, T_Bottom K_Star]
+//            do! M.set_Q Q2'
+//            let! γ = M.get_γ
+//            let Q3, θ3 = mgu { loc = e1.loc; γ = γ } Q2' (T_Arrow (subst_ty θ2' tα2, tβ)) (subst_ty θ2' tα1)
+//            let Q4, Q5 = Q3.split Q0.dom
+//            do! M.set_Q Q4
+//            do! let ( ** ) = compose_tksubst in M.set_θ (θ3 ** θ2 ** θ1)
+//            yield T_ForallsQ (Q5, subst_ty θ3 tβ)
             
         | Tuple ([] | [_]) as e ->
             return unexpected "empty or unary tuple: %O" __SOURCE_FILE__ __LINE__ e
@@ -240,7 +247,7 @@ and pt_expr' ctx e0 =
              
         | Match (e1, cases) ->
             let! te1 = pt_expr ctx e1
-            let tr0 = ty.fresh_var
+            let tr0 = ty.fresh_star_var
             for p, ewo, e in cases do
                 let! tp = pt_patt ctx p
                 do! M.unify p.loc te1 tp
@@ -275,14 +282,14 @@ and pt_expr' ctx e0 =
 
         | Select (e, x) ->
             let! te = pt_expr ctx e
-            let α = ty.fresh_var
+            let α = ty.fresh_star_var
             let t = T_Tailed_Record [x, α]
             do! M.unify e.loc t te
             yield α
             
         | Restrict (e, x) ->
             let! te = pt_expr ctx e
-            let α = ty.fresh_var
+            let α = ty.fresh_star_var
             let ρ = var.fresh
             do! M.unify e.loc (T_Record ([x, α], Some ρ)) te
             yield T_Record ([], Some ρ)
@@ -320,7 +327,7 @@ and pt_expr' ctx e0 =
 
         | Eject e ->
             let! t = pt_expr ctx e
-            let α = ty.fresh_var
+            let α = ty.fresh_star_var
             let ρ = var.fresh
             let tr = T_Record ([], Some ρ)
             do! M.unify e.loc (T_Arrow (tr, α)) t
@@ -517,7 +524,7 @@ and pt_decl' (ctx : context) (d0 : decl) =
                 | Arrows ks -> let ks = List.rev ks in List.tail ks, List.head ks
                 | k         -> [], k
             let kdom, kcod = split (|K_Arrows|_|) kc
-            do! M.kunify d0.loc kcod K_Star    // TODO: unification might be wrong: consider pattern matching againts K_Star instead
+            do! M.kunify d0.loc K_Star kcod
             let! kσ = M.gen_bind_γ c kc
             Report.prompt ctx Config.Printing.Prompt.datatype_decl_prefixes c kσ None
             // rebind kc to the unified kind, by reinstantiating it rather than keeping the user-declared one
@@ -530,7 +537,7 @@ and pt_decl' (ctx : context) (d0 : decl) =
                 | T_Arrows ts -> for t in ts do do! M.kunify τx.loc K_Star t.kind
                 | _           -> return ()
                 // each data constructor's codomain must be the type constructor being defined
-                let pt = T_Apps [ yield T_Cons (c, kc); for _ in kdom -> ty.fresh_var ]
+                let pt = T_Apps [ yield T_Cons (c, kc); for _ in kdom -> ty.fresh_star_var ]
                 let _, tcod = split (|T_Arrows|_|) tx
                 let! γ = M.get_γ
                 if not (is_principal_type_of { γ = γ; loc = τx.loc } pt tcod) then return Report.Error.data_constructor_codomain_invalid τx.loc x c tcod
@@ -568,8 +575,8 @@ and pt_patt ctx (p0 : patt) =
                     return Report.Error.data_constructor_bound_to_wrong_symbol loc0 "closed-world overloaded symbol" x null
 
         | P_PolyCons x ->
-            let α = ty.fresh_var
-            let β = ty.fresh_var
+            let α = ty.fresh_star_var
+            let β = ty.fresh_star_var
             let ρ = var.fresh
             yield T_Variant ([x, T_Arrow (α, β)], Some ρ)
 
@@ -616,14 +623,15 @@ and pt_patt ctx (p0 : patt) =
             yield t1
 
         | P_App (p1, p2) ->
+            // TODO: consider supporting HML for pattern application
             let! t1 = R p1
             let! t2 = R p2
-            let α = ty.fresh_var
+            let α = ty.fresh_star_var
             do! M.unify p1.loc (T_Arrow (t2, α)) t1
             yield α
 
         | P_Wildcard ->
-            yield ty.fresh_var
+            yield ty.fresh_star_var
 
         | P_As (p, x) ->
             let! tp = R p

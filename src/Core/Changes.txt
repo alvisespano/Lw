@@ -1,4 +1,16 @@
 ﻿
+29/1/2016:
+* UP: lambda parameter annotated type now unifies with star
+* REFACT: HML parts of type inference have been monadized
+* UP: unification between type applications now unifies kinds of both left-hands to an arrow
+* UP: several minor TODOs in the task list have been done or pruned
+* REFACT: new small utiliy: ty.fresh_star_var_and_ty: it computes both the var and the ty
+
+
+28/1/2016:
+* UP: kind unification integrated within new mgu algorithm for HML
+
+
 22-27/1/2016:
 * HML being debugged extensively
 * FIX: many fixes, major and minor

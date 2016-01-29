@@ -198,7 +198,7 @@ module Hint =
         manual resolution will be needed for evaluating a ground value"
             cx ct (flatten_stringables ", " αs) x t
 
-    // TODO: is this hint message really unnecessary?
+    // TODO: is this hint message really not necessary anymore?
     let manually_resolved_symbol_refers_to_mupliple_constraints loc x t cs =
         H 2 loc Normal "symbol `%O : %O` specified in manual resolution refers to multiple constraints sharing the same name. \
         Unification with user-specified type %O will apply in unpredicible order, possibly preventing the desired resolution to take place. \

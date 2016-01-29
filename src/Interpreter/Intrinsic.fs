@@ -82,7 +82,7 @@ module Builtin =
         let private bin_ffb = bin2 F B
 
         let private bin_ααb f name =
-            let α = ty.fresh_var
+            let α = ty.fresh_star_var
             Arrows T_Arrow [α; α; T_Bool],
             redux (name, (fun v1 -> redux (sprintf "%O %O" (Id name) v1, (fun v2 -> V_Const (Bool (f v1 v2))))))
 

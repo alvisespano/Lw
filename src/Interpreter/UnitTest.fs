@@ -14,7 +14,7 @@ open Lw.Core.Typing.Defs
 open Lw.Core.Globals
 
 
-// TODO: translate into F# this test stuff originally written in Haskell for the HML system
+// TODO: translate these HML tests written in Haskell into F#
 
 (*
 testsAll :: [Test]
@@ -288,7 +288,7 @@ module Computations =
     let main () =
         L.debug Normal "start" 
         let s3 =
-            B.str {
+            B.string {
                 yield 'a'
                 yield 'b'
                 yield! "ciao"

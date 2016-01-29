@@ -36,7 +36,7 @@ let rec rewrite_row loc t1 t2 r0 l =
                 t, T_Row_Ext (l', t', r'), tθ
 
     | T_Row_Var ρ ->
-        let α = ty.fresh_var
+        let α = ty.fresh_star_var
         let β = T_Row_Var var.fresh
         let t = T_Row_Ext (l, α, β)
         in
@@ -111,7 +111,7 @@ module internal Mgu =
             | T_ForallsQ (Q2, t2) ->            
                 assert (Q.is_disjoint Q2)
                 let skcs, t1' = skolemize_ty αs t1
-                let Q1, (tθ1, kθ1) = mgu ctx (Q.append Q2) t1' t2   // TODO: is this enough for kind unification as well?
+                let Q1, (tθ1, kθ1) = mgu ctx (Q + Q2) t1' t2
                 let Q2, Q3 = Q1.split Q.dom
                 let θ2 = tθ1.remove Q3.dom, kθ1
                 check_skolems_escape ctx skcs θ2 Q2
@@ -127,7 +127,7 @@ module internal Mgu =
 
             | T_ForallsQ (Q1, t1), T_ForallsQ (Q2, t2) ->
                 assert (let p (a : prefix) b = a.is_disjoint b in p Q Q1 && p Q1 Q2 && p Q Q2)
-                let Q3, θ3 = mgu ctx (Q.append(Q1).append(Q2)) t1 t2    // TODO: again, is this enough for kind unification as well?
+                let Q3, θ3 = mgu ctx (Q + Q1 + Q2) t1 t2
                 let Q4, Q5 = Q3.split Q.dom
                 in
                     Q4, θ3, T_ForallsQ (Q5, S θ3 t1)
@@ -139,7 +139,6 @@ module internal Mgu =
             let t1_ = t1_.nf
             let t2_ = t2_.nf
             let rec R (Q0 : prefix) (t1 : ty) (t2 : ty) =
-                assert (t1.is_nf && t2.is_nf)   // TODO: remove this because the next assert is enough?
                 assert (t1.is_ftype && t2.is_ftype)
                 match t1, t2 with
                 | T_Cons (x, k1), T_Cons (y, k2) when x = y -> Q0, kmgu ctx k1 k2
@@ -155,13 +154,6 @@ module internal Mgu =
                         Q3, θ3 ** θ2 ** θ1
 
 //                | T_Forall_F ((α1, k1), t1), T_Forall_F ((α2, k2), t2) ->
-//                    let c1 = α1.skolemized
-//                    let c2 = α2.skolemized
-//                    let Q1, θ1 =
-//                        let θ1 = new tsubst (α1, T_Cons (c1, k1)), ksubst.empty
-//                        let θ2 = new tsubst (α2, T_Cons (c2, k2)), ksubst.empty
-//                        in
-//                            R Q0 (S θ1 t1) (S θ2 t2)
                 | T_Forall ((α1, tb1), t1), T_Forall ((α2, tb2), t2) ->
                     let k1 = tb1.kind
                     let k2 = tb2.kind
@@ -169,7 +161,6 @@ module internal Mgu =
                     let skcs1, t1 = skolemize_ty [α1, k1] (S θ0 t1)
                     let skcs2, t2 = skolemize_ty [α2, k2] (S θ0 t2)
                     let Q1, θ1 = R Q0 t1 t2
-                    // TODO: a more efficient way to check skolem escape is to check for occurrences of c1 and c2 in t1 and t2 AFTER unification (i.e. applying θ1 to them)
                     check_skolems_escape ctx (skcs1 + skcs2) θ1 Q1
                     Q1, θ1
 
@@ -189,7 +180,7 @@ module internal Mgu =
                     in
                         Q3, θ3 ** θ2 ** θ1 ** θ0
 
-                | T_Var (α, k), t       // TODO: HML spec says that t should be an ftype: add an assert OR define an active pattern Ty_F which tranforms a ty into an System-F type
+                | T_Var (α, k), t
                 | t, T_Var (α, k) ->
                     let αt =
                         match Q0.search α with
@@ -204,11 +195,11 @@ module internal Mgu =
                         Q2, θ2 ** θ1 ** θ0
 
                 | T_App (t1, t2), T_App (t1', t2') ->
-                    // TODO: don't we need to unify the kinds of t1 and t1' with a K_Arrow?
-                    let Q1, θ1 = R Q0 t1 t1'
+                    let θ0 = kmgu ctx (K_Arrow (t2.kind, kind.fresh_var)) t1.kind ** kmgu ctx (K_Arrow (t2'.kind, kind.fresh_var)) t1'.kind
+                    let Q1, θ1 = R Q0 (S θ0 t1) (S θ0 t1')
                     let Q2, θ2 = R Q1 (S θ1 t2) (S θ1 t2')
                     in
-                        Q2, θ2 ** θ1
+                        Q2, θ2 ** θ1 ** θ0
                                                            
                 | t1, t2 -> 
                     raise (Mismatch (t1, t2))
@@ -260,7 +251,7 @@ let is_instance_of ctx pt t =
     let _, θ = mgu ctx Q_Nil pt t
     let t = subst_ty θ t
     in
-        is_principal_type_of ctx pt t   // TODO: unification is not enough: unifier must be SMALLER - that would tell whether it is actually an instance
+        is_principal_type_of ctx pt t   // TODO: use HML subsume for checking instances
 
 
 

@@ -173,7 +173,6 @@ with
 // this module is needed and cannot be turn into static members within the var class because static members are unit closures and cannot be constants
 [< CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix) >]
 module private var =
-    // TODO: add thread-safe support with a mutex or something
     let cnt = ref 0
     let env : Env.t<int, string> option ref = ref None
     let forall : Set<var> ref = ref Set.empty
@@ -408,7 +407,7 @@ and [< NoComparison; NoEquality >] ty_uexpr =
     | Te_Forall of (kinded_param * ty_expr option) * ty_expr
 with
     interface annotable with
-        member __.annot_sep = Config.Printing.kind_annotation_sep   // TODO: redesign this annot_sep thing
+        member __.annot_sep = Config.Printing.kind_annotation_sep
 
 and [< NoComparison; NoEquality >] ty_udecl =
     | Td_Bind of ty_binding list
