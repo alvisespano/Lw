@@ -124,11 +124,11 @@ let rec subst_ty (tθ : tsubst, kθ : ksubst) (t :ty) =
         t.apply_to_vars (fun t _ -> t) tθ S Sk
 
 //// first argument is the NEW subst, second argument is the OLD one
-let compose_ksubst (tθ' : ksubst) tθ = tθ'.compose subst_kind tθ
+let compose_ksubst (kθ' : ksubst) (kθ : ksubst) = kθ.compose subst_kind kθ'
 
-let compose_tksubst (tθ' : tsubst, kθ') (tθ, kθ) =
+let compose_tksubst (tθ' : tsubst, kθ') (tθ : tsubst, kθ) =
     let kθ = compose_ksubst kθ' kθ
-    let tθ = tθ'.compose (fun tθ -> subst_ty (tθ, kθ)) tθ
+    let tθ = tθ.compose (fun tθ -> subst_ty (tθ, kθ)) tθ'
     in
         tθ, kθ
 

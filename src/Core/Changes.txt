@@ -5,6 +5,7 @@
 * UP: unification between type applications now unifies kinds of both left-hands to an arrow
 * UP: several minor TODOs in the task list have been done or pruned
 * REFACT: new small utiliy: ty.fresh_star_var_and_ty: it computes both the var and the ty
+* FIX: substitution composition fixed again: it was applied in reverse order sometimes
 
 
 28/1/2016:

@@ -78,6 +78,7 @@ let rec pt_expr (ctx : context) (e0 : expr) =
         #if DEBUG_BEFORE_INFERENCE
         L.undo_tabulate
         #endif
+        // TODO: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)
         L.debug Low "[e]  %O\n[:T] %O\n     nf(T) = %O\n     F-type(T) = %O\n[e*] %O\n[C'] %O\n[Q'] %O\n[S'] %O\n     %O" e t t.nf t.ftype e0 cs' Q' tθ' kθ'
         return t
     } 
@@ -180,23 +181,14 @@ and pt_expr' ctx e0 =
                 return! pt_expr ctx e
             }            
             let! tx = M.update_ty tx
-            // check inferred type of parameter is a monotype when no annotation was provided
-            if τo.IsNone && not tx.is_monomorphic then Report.Error.lambda_parameter_is_not_monomorphic e0.loc x t
+            // check that the inferred type of parameter is a monotype when no annotation was provided
+            if τo.IsNone && not tx.is_monomorphic then Report.Error.inferred_lambda_parameter_is_not_monomorphic e0.loc x t
             let! Q3 = M.split_prefix Q0.dom
             let! Q3' = M.fork_Q <| M {
                 do! M.extend (Q3, β, t)
                 return! M.get_Q
             }
             yield T_ForallsQ (Q3', T_Arrow (tx, tβ))
-
-//            let! θ1 = M.get_θ
-//            if τo.IsNone && not (subst_ty θ1 tx).is_monomorphic then Report.Error.lambda_parameter_is_not_monomorphic e0.loc x t
-//            let! Q1 = M.get_Q
-//            let Q2, Q3 = Q1.split Q0.dom    // TODO: monadize split: here Q2 would become the new prefix for the monad and Q3 the result of the split function
-//            let Q3', θ3' = Q3.extend (β, t)
-//            do! M.set_Q Q2
-//            do! M.set_θ θ1
-//            yield T_ForallsQ (Q3', T_Arrow (subst_ty θ1 tx, subst_ty θ3' (T_Star_Var β)))
 
         | App (e1, e2) -> 
             let! Q0 = M.get_Q
@@ -209,18 +201,7 @@ and pt_expr' ctx e0 =
             do! M.unify e1.loc (T_Arrow (tα2, tβ)) tα1
             let! Q5 = M.split_prefix Q0.dom
             yield T_ForallsQ (Q5, tβ)
-
-//            let! Q2 = M.get_Q
-//            let! θ2 = M.get_θ
-//            let Q2', θ2' = Q2.extend [α1, subst_ty θ2 t1; α2, t2; β, T_Bottom K_Star]
-//            do! M.set_Q Q2'
-//            let! γ = M.get_γ
-//            let Q3, θ3 = mgu { loc = e1.loc; γ = γ } Q2' (T_Arrow (subst_ty θ2' tα2, tβ)) (subst_ty θ2' tα1)
-//            let Q4, Q5 = Q3.split Q0.dom
-//            do! M.set_Q Q4
-//            do! let ( ** ) = compose_tksubst in M.set_θ (θ3 ** θ2 ** θ1)
-//            yield T_ForallsQ (Q5, subst_ty θ3 tβ)
-            
+           
         | Tuple ([] | [_]) as e ->
             return unexpected "empty or unary tuple: %O" __SOURCE_FILE__ __LINE__ e
 

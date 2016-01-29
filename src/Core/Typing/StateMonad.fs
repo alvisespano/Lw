@@ -7,11 +7,14 @@
 module Lw.Core.Typing.StateMonad
 
 open FSharp.Common.Prelude
+open FSharp.Common.Log
 open FSharp.Common
 open Lw.Core
 open Lw.Core.Absyn
 open Lw.Core.Typing.Defs
 open Lw.Core.Typing.Utils
+open Lw.Core.Globals
+
 
 type resolution = Res_Strict | Res_Loose | Res_No
 
@@ -108,7 +111,7 @@ type basic_builder (loc : location) =
 
     member M.clear_constraints = M.set_constraints constraints.empty
 
-    member M.update_θ θ =
+    member M.update_θ (tθ, kθ as θ) =
         M {
             do! M.lift_state (fun s ->
                     let (_, kθ) as θ = compose_tksubst θ s.θ
@@ -120,6 +123,8 @@ type basic_builder (loc : location) =
                           Q = subst_prefix θ s.Q
                           constraints = subst_constraints θ s.constraints
                           named_tyvars = s.named_tyvars })
+            let! tθ', _ = M.get_θ
+            L.debug Normal "[S+] %O\n     = %O" tθ tθ'
         }
 
     member private M.gen t =

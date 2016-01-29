@@ -464,11 +464,11 @@ type [< NoComparison; NoEquality >] subst<'t> (env : Env.t<var, 't>) =
     member __.pretty = env.pretty_by_binding (fun α t -> sprintf "[%O = %O]" α t) ""
     override this.ToString () = this.pretty
       
-    member private tθ1.append (tθ2 : subst<_>) = new subst<'t> (tθ1.env + tθ2.env)
+    member private θ1.append (θ2 : subst<_>) = new subst<'t> (θ1.env + θ2.env)
 
     static member empty = new subst<'t> ()
 
-    member tθ1.compose apply_subst (tθ2 : subst<'t>) = (tθ1.map (fun _ t -> apply_subst tθ2 t)).append (tθ2.restrict (tθ2.dom - tθ1.dom))
+    member θ1.compose apply_subst (θ2 : subst<'t>) = (θ1.map (fun _ t -> apply_subst θ2 t)).append (θ2.restrict (θ2.dom - θ1.dom))
 
 type ksubst = subst<kind>
 type tsubst = subst<ty>
