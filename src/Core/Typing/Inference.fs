@@ -75,11 +75,11 @@ let rec pt_expr (ctx : context) (e0 : expr) =
         let! Q' = M.get_Q
         let! tθ', kθ' = M.get_θ
         let! cs' = M.get_constraints
+        // TODO: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)
+        L.debug Low "[e]  %O\n[:T] %O\n     nf(T) = %O\n     F-type(T) = %O\n[e*] %O\n[C'] %O\n[Q'] %O\n[S'] %O\n     %O" e t t.nf t.ftype e0 cs' Q' tθ' kθ'
         #if DEBUG_BEFORE_INFERENCE
         L.undo_tabulate
         #endif
-        // TODO: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)
-        L.debug Low "[e]  %O\n[:T] %O\n     nf(T) = %O\n     F-type(T) = %O\n[e*] %O\n[C'] %O\n[Q'] %O\n[S'] %O\n     %O" e t t.nf t.ftype e0 cs' Q' tθ' kθ'
         return t
     } 
 
@@ -164,7 +164,6 @@ and pt_expr' ctx e0 =
 
         | Lambda ((x, τo), e) ->
             let α, tα = ty.fresh_star_var_and_ty
-            let β, tβ = ty.fresh_star_var_and_ty
             let! Q0 = M.get_Q
             let! tx = M {
                 match τo with
@@ -184,6 +183,7 @@ and pt_expr' ctx e0 =
             // check that the inferred type of parameter is a monotype when no annotation was provided
             if τo.IsNone && not tx.is_monomorphic then Report.Error.inferred_lambda_parameter_is_not_monomorphic e0.loc x t
             let! Q3 = M.split_prefix Q0.dom
+            let β, tβ = ty.fresh_star_var_and_ty
             let! Q3' = M.fork_Q <| M {
                 do! M.extend (Q3, β, t)
                 return! M.get_Q
@@ -197,7 +197,7 @@ and pt_expr' ctx e0 =
             let α1, tα1 = ty.fresh_star_var_and_ty
             let α2, tα2 = ty.fresh_star_var_and_ty
             let β, tβ = ty.fresh_star_var_and_ty
-            do! M.extend_prefix [α1, t1; α2, t2; β, T_Bottom K_Star]
+            do! M.extend [α1, t1; α2, t2; β, T_Bottom K_Star]
             do! M.unify e1.loc (T_Arrow (tα2, tβ)) tα1
             let! Q5 = M.split_prefix Q0.dom
             yield T_ForallsQ (Q5, tβ)
@@ -242,7 +242,7 @@ and pt_expr' ctx e0 =
         
         | Annot (e, τ) ->
             let! t, _ = pk_and_eval_ty_expr ctx τ
-            let! te = pt_expr ctx e
+            let! te = pt_expr ctx e // TODO: treat Annot as an application to an annotated lambda
             do! M.unify e.loc t te
             yield t
 

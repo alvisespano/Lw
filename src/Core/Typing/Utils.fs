@@ -35,15 +35,6 @@ let rec vars_in_kind k =
         | K_Var α        -> yield α
         | K_Cons (_, ks) -> for k in ks do yield! vars_in_kind k }
 
-//let rec vars_in_ty t =
-//    Computation.set {
-//        match t with
-//        | T_Var (α, k)     -> yield α; yield! vars_in_kind k
-//        | T_Cons (_, k)    -> yield! vars_in_kind k
-//        | T_HTuple (ts, k) -> for t in ts do yield! vars_in_ty t; yield! vars_in_kind k
-//        | T_App (t1, t2)   -> yield! vars_in_ty t1; yield! vars_in_ty t2
-//        | T_Closure ( kind }
-
 let vars_in_patt p =
     let (|Var|Leaf|Nodes|) (p : patt) =
         match p.value with
@@ -293,7 +284,7 @@ type prefix with
         let t' = t.nf
         in
             if t'.is_unquantified then Q, (new tsubst (α, t'), ksubst.empty)
-            else Q_Cons (Q, (α, t)), empty_θ
+            else Q + (α, t), empty_θ
 
     member Q.extend Q' =
         Seq.fold (fun (Q : prefix, θ) (α, t) -> let Q', θ' = Q.extend (α, t) in Q', compose_tksubst θ' θ) (Q, (tsubst.empty, ksubst.empty)) Q'
@@ -327,7 +318,8 @@ type prefix with
         | Q0, Q_Slice α (Q1, _, Q2) -> f (α, t, Q0, Q1, Q2)
         | _                         -> unexpected "item %s is not in prefix: %O" __SOURCE_FILE__ __LINE__ (prefix.pretty_item (α, t)) Q
 
-    static member private update_prefix__reusable_part (α, t, Q0 : prefix, Q1, Q2) =
+    static member private update_prefix__reusable_part (α, t : ty, Q0 : prefix, Q1, Q2) =
+        assert t.is_ftype
         let θ = new tsubst (α, t), ksubst.empty
         in
             Q0 + Q1 + subst_prefix θ Q2, θ
@@ -340,5 +332,5 @@ type prefix with
                 else Q0 + Q1 + (α, t) + Q2, (tsubst.empty, ksubst.empty)
 
     member this.update_prefix_with_subst (α, t : ty) =
-        assert (t.is_ftype)
+        assert t.is_ftype
         this.update prefix.update_prefix__reusable_part (α, t)

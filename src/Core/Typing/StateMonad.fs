@@ -315,7 +315,7 @@ type typing_builder (loc) =
         M {
             let! θ = M.get_θ
             let! Q = M.get_Q
-            let Q = subst_prefix θ Q
+            let Q = subst_prefix θ Q    // TODO: is this really needed?
             let Q1, Q2 = Q.split αs
             do! M.set_Q Q1
             return Q2
@@ -327,6 +327,7 @@ type typing_builder (loc) =
             let Q, θ = Q.extend (α, t)
             do! M.set_Q Q
             do! M.update_θ θ
+            L.debug Normal "[Q+] %s\n     = %O" (prefix.pretty_item (α, t)) Q
         }
 
     member M.extend (Q, xs) =
@@ -335,7 +336,7 @@ type typing_builder (loc) =
                 do! M.extend (Q, α, t)
         }
 
-    member M.extend_prefix xs =
+    member M.extend xs =
         M {
             let! Q = M.get_Q
             do! M.extend (Q, xs)

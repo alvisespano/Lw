@@ -23,6 +23,7 @@ type TimeSpan with
 
 type logger () =
     inherit Log.console_logger (Config.Log.cfg)
+
     member this.not_implemented fmt = this.custom_error Config.Log.not_implemented_color "NOT IMPLEMENTED" fmt
     member this.mgu fmt = this.custom_debug Config.Log.mgu_color "MGU" Min fmt
     member this.resolve pri fmt = this.custom_debug Config.Log.resolve_color "RESOLVE" pri fmt

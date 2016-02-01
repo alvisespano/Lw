@@ -1,4 +1,8 @@
 ﻿
+1/2/2016:
+* REFACT: much debug over HML
+
+
 29/1/2016:
 * UP: lambda parameter annotated type now unifies with star
 * REFACT: HML parts of type inference have been monadized

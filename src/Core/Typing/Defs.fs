@@ -653,8 +653,9 @@ type scheme with
 
     member σ.pretty =
         let { constraints = cs; ty = t } = σ
+        // TODO: deal with variables in the constraints and choose how to show them, either detecting the outer-most foralls or something like that
 //        let αs = Q.dom
-//        use N = var.reset_normalization αs
+//        use N = var.reset_normalization ()
 //        let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_sep αs)
         let cspart = if cs.is_empty then "" else sprintf "{ %O } => " cs
         in
