@@ -68,21 +68,22 @@ let private prompt_inferred_kind, prompt_evaluated_type =
 // type evaluation
 //
 
+[< RequireQualifiedAccess >]
 module private Eval =
 
-    let rec eval_ty_expr (ctx : context) (τ : ty_expr) =
+    let rec ty_expr (ctx : context) (τ : ty_expr) =
         let M = new translator_typing_builder<_, _> (τ)
         M {            
             let! _, kθ = M.get_θ
             τ.typed <- subst_kind kθ τ.typed // apply latest subst to each typed node
-            let! t = eval_ty_expr' ctx τ
+            let! t = ty_expr' ctx τ
             L.debug Min "[t::K] %O\n :: %O\n[T*]   %O" τ τ.typed t
             return t
         } 
 
-    and eval_ty_expr' (ctx : context) (τ0 : ty_expr) =
+    and ty_expr' (ctx : context) (τ0 : ty_expr) =
         let M = new translator_typing_builder<_, _> (τ0)
-        let E = eval_ty_expr ctx
+        let E = ty_expr ctx
         M {
             let k0 = τ0.typed
             match τ0.value with
@@ -133,7 +134,7 @@ module private Eval =
 
             | Te_Let (d, τ1) ->
                 yield! M.fork_Δ <| M {
-                    do! eval_ty_decl ctx d
+                    do! ty_decl ctx d
                     yield! E τ1
                 }
 
@@ -154,40 +155,40 @@ module private Eval =
             | Te_Match (τ1, cases) ->
                 let! t1 = E τ1
                 yield! M.fork_Δ <| M {
-                    let! τo = M.List.tryPick (fun (p, _, τ) -> M { let! b = eval_ty_patt ctx p t1 in if b then return Some τ else return None }) cases
+                    let! τo = M.List.tryPick (fun (p, _, τ) -> M { let! b = ty_patt ctx p t1 in if b then return Some τ else return None }) cases
                     match τo with
                     | None   -> return Report.Error.type_patterns_not_exhaustive τ1.loc t1
                     | Some τ -> yield! E τ
                 }
         }
 
-    and eval_ty_decl ctx d =
+    and ty_decl ctx d =
         let M = new basic_builder (d.loc)
         M {
             match d.value with
             | Td_Bind bs ->
-                do! eval_ty_bindings ctx d.loc bs
+                do! ty_bindings ctx d.loc bs
 
             | Td_Rec bs ->
-                do! eval_ty_rec_bindings ctx d.loc bs
+                do! ty_rec_bindings ctx d.loc bs
 
             | Td_Kind _ ->
                 return not_implemented "%O" __SOURCE_FILE__ __LINE__ d
         }
 
-    and eval_ty_bindings (ctx : context) loc bs =
+    and ty_bindings (ctx : context) loc bs =
         let M = new basic_builder (loc)
         M {
             for { patt = p; expr = τ } in bs do
-                let! t = eval_ty_expr ctx τ
-                do! M.ignore <| eval_ty_patt ctx p t
+                let! t = ty_expr ctx τ
+                do! M.ignore <| ty_patt ctx p t
                 // prompt evaluated types
                 let! Δ = M.get_Δ
                 for x in vars_in_ty_patt p do
                     prompt_evaluated_type x (Δ.lookup x)
         }
 
-    and eval_ty_rec_bindings (ctx : context) loc bs =
+    and ty_rec_bindings (ctx : context) loc bs =
         let M = new basic_builder (loc)
         M {
             let! Δ = M.get_Δ
@@ -199,9 +200,9 @@ module private Eval =
             do! M.set_Δ !Δr
         }
 
-    and eval_ty_patt ctx (p : ty_patt) t =
+    and ty_patt ctx (p : ty_patt) t =
         let M = new basic_builder (p.loc)
-        let R = eval_ty_patt ctx
+        let R = ty_patt ctx
         M {
             match p.value, t with
             | Tp_Var x, t ->
@@ -265,17 +266,17 @@ module private Eval =
 
 //#region kind inference
 
-let rec pk_ty_expr (ctx : context) (τ0 : ty_expr) =
+let rec Wk_ty_expr (ctx : context) (τ0 : ty_expr) =
     let K = new kinding_builder<_> (τ0)
     K {
-        let! k = pk_ty_expr' ctx τ0
+        let! k = Wk_ty_expr' ctx τ0
         L.debug Min "[t::K] %O\n      :: %O\n" τ0 k
         return k
     }
 
-and pk_ty_expr' (ctx : context) (τ0 : ty_expr) =
+and Wk_ty_expr' (ctx : context) (τ0 : ty_expr) =
     let K = new kinding_builder<_> (τ0)
-    let R = pk_ty_expr ctx
+    let R = Wk_ty_expr ctx
     K {
         match τ0.value with
         | Te_PolyVar x ->
@@ -332,7 +333,7 @@ and pk_ty_expr' (ctx : context) (τ0 : ty_expr) =
 
         | Te_Let (d, τ) ->
             yield! K.fork_γ <| K {
-                do! pk_ty_decl { ctx with top_level_decl = false } d
+                do! Wk_ty_decl { ctx with top_level_decl = false } d
                 yield! R τ
             }                 
 
@@ -342,9 +343,9 @@ and pk_ty_expr' (ctx : context) (τ0 : ty_expr) =
             let kr0 = kind.fresh_var
             for p, _, τ in cases do
                 do! K.fork_γ <| K {
-                    let! kp = pk_ty_patt ctx p
+                    let! kp = Wk_ty_patt ctx p
                     do! K.kunify p.loc k1 kp
-                    let! tr = pk_ty_expr ctx τ
+                    let! tr = Wk_ty_expr ctx τ
                     do! K.kunify τ.loc kr0 tr
                 }
             yield kr0
@@ -360,28 +361,28 @@ and pk_ty_expr' (ctx : context) (τ0 : ty_expr) =
             yield K_Row
     }
 
-and pk_ty_decl ctx d =
+and Wk_ty_decl ctx d =
     let M = new basic_builder (d.loc)
     M {
         match d.value with
         | Td_Bind bs ->
-            return! pk_ty_bindings ctx d.loc bs
+            return! Wk_ty_bindings ctx d.loc bs
 
         | Td_Rec bs ->
-            return! pk_ty_rec_bindings ctx d.loc bs
+            return! Wk_ty_rec_bindings ctx d.loc bs
 
         | Td_Kind _ ->
             return not_implemented "%O" __SOURCE_FILE__ __LINE__ d
     }
 
 // TODO: deal with kindvars scoping; should resemble tyvars scoping, with restriction when generalization occurs etc
-and pk_ty_bindings (ctx : context) loc bs =
+and Wk_ty_bindings (ctx : context) loc bs =
     let M = new basic_builder (loc)
     M {
         let! l = M.List.collect (fun { patt = p; expr = τ } -> M {
-                    let! ke = pk_ty_expr ctx τ
+                    let! ke = Wk_ty_expr ctx τ
                     return! M.fork_γ <| M {
-                        let! kp = pk_ty_patt ctx p
+                        let! kp = Wk_ty_patt ctx p
                         do! M.kunify p.loc kp ke
                         return! M.List.map (fun x -> M { let! (KUngeneralized k) = M.lookup_γ x in return x, k }) (vars_in_ty_patt p |> Set.toList)
                     }
@@ -392,7 +393,7 @@ and pk_ty_bindings (ctx : context) loc bs =
     }   
 
 
-and pk_ty_rec_bindings (ctx : context) loc bs  =
+and Wk_ty_rec_bindings (ctx : context) loc bs  =
     let M = new basic_builder (loc)
     M {
         let! bs = M.fork_γ <| M {
@@ -401,7 +402,7 @@ and pk_ty_rec_bindings (ctx : context) loc bs  =
                     do! M.ignore <| M.bind_γ x (KUngeneralized kx)
                 return! M.List.map (fun { par = x, _; expr = τ } -> M {
                                 let! KUngeneralized kx = M.lookup_γ x
-                                let! k = pk_ty_expr ctx τ
+                                let! k = Wk_ty_expr ctx τ
                                 do! M.kunify τ.loc kx k
                                 return x, kx
                         }) bs
@@ -413,9 +414,9 @@ and pk_ty_rec_bindings (ctx : context) loc bs  =
     }
 
 
-and pk_ty_patt ctx (p0 : ty_patt) =
+and Wk_ty_patt ctx (p0 : ty_patt) =
     let K = new kinding_builder<_> (p0)
-    let R = pk_ty_patt ctx
+    let R = Wk_ty_patt ctx
     K {
         match p0.value with
         | Tp_Cons x ->
@@ -485,26 +486,26 @@ and pk_ty_patt ctx (p0 : ty_patt) =
 // kind inference and type evaluation in one shot
 //
 
-let pk_and_eval_ty_expr (ctx : context) τ =
+let Wk_and_eval_ty_expr (ctx : context) τ =
     let M = new translator_typing_builder<_, _> (τ)
     M {
-        let! k = pk_ty_expr ctx τ
-        let! t = Eval.eval_ty_expr ctx τ
+        let! k = Wk_ty_expr ctx τ
+        let! t = Eval.ty_expr ctx τ
         return t, k                         
     }
 
-let pk_and_eval_ty_bindings (ctx : context) loc bs =
+let Wk_and_eval_ty_bindings (ctx : context) loc bs =
     let M = new basic_builder (loc)
     M {
-        do! pk_ty_bindings ctx loc bs
-        do! Eval.eval_ty_bindings ctx loc bs
+        do! Wk_ty_bindings ctx loc bs
+        do! Eval.ty_bindings ctx loc bs
     }
 
-let pk_and_eval_ty_rec_bindings (ctx : context) loc bs =
+let Wk_and_eval_ty_rec_bindings (ctx : context) loc bs =
     let M = new basic_builder (loc)
     M {
-        do! pk_ty_rec_bindings ctx loc bs
-        do! Eval.eval_ty_rec_bindings ctx loc bs
+        do! Wk_ty_rec_bindings ctx loc bs
+        do! Eval.ty_rec_bindings ctx loc bs
     }
 
 

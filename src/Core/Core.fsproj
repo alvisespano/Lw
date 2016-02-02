@@ -88,6 +88,7 @@
     <Content Include="packages.config" />
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Config.fs" />
+    <Compile Include="Globals.fs" />
     <Compile Include="Absyn.fs" />
     <FsYacc Include="Parser.fsy">
       <OtherFlags>--module Lw.Core.Parser</OtherFlags>
@@ -103,7 +104,6 @@
       <Visible>false</Visible>
       <Link>Lexer.fs</Link>
     </Compile>
-    <Compile Include="Globals.fs" />
     <Compile Include="Parsing.fs" />
     <Compile Include="Typing\Defs.fs" />
     <Compile Include="Typing\Report.fs" />

@@ -1,6 +1,15 @@
 ﻿
+2/2/2016:
+* REFACT: new open and closed version of rowed types (records and variants)
+* REFACT: all pt_* functions have been renamed to W_* and all pk_* to Wk_*
+* REFACT: Globals module has been lifted up in the source compilation order
+* NEW: ty.constructed_form method implemented according to the HML prototype (though it does not appear in the paper) and called bvy subsume and mgu_scheme
+
+
 1/2/2016:
 * REFACT: much debug over HML
+* FIX: lots of fixes in normalform, subsume and mgu
+* NOTE: the reason why (APP) rule seems to infer always a wrong forall 'a. 'a is that the HML paper might be wrong - not sure though
 
 
 29/1/2016:

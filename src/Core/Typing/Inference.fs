@@ -25,18 +25,6 @@ open Lw.Core.Typing.Utils
 open Lw.Core.Typing.Meta
 
 
-// type inference
-//
-
-let pt_lit = function
-    | Int _       -> T_Int
-    | Float _     -> T_Float
-    | String _    -> T_String
-    | Bool _      -> T_Bool
-    | Char _      -> T_Char
-    | Unit        -> T_Unit
-
-
 let desugar (M : translator_typing_builder<_, _>) f (e0 : node<_, _>) (e : node<_, _>) =
     M {
         L.debug Low "[DESUGAR] %O ~~> %O" e0 e
@@ -45,7 +33,19 @@ let desugar (M : translator_typing_builder<_, _>) f (e0 : node<_, _>) (e : node<
         return t
     }
 
-let pt_typed_param ctx = function
+
+// inference algorithm
+//
+
+let W_lit = function
+    | Int _       -> T_Int
+    | Float _     -> T_Float
+    | String _    -> T_String
+    | Bool _      -> T_Bool
+    | Char _      -> T_Char
+    | Unit        -> T_Unit
+
+let W_typed_param ctx = function
     | _, None ->
         let M = new basic_builder (new location ())
         M {
@@ -54,12 +54,16 @@ let pt_typed_param ctx = function
     | _, Some τ ->
         let K = new kinding_builder<_> (τ)
         K {
-            let! t, k = pk_and_eval_ty_expr ctx τ
+            let! t, k = Wk_and_eval_ty_expr ctx τ
             do! K.kunify τ.loc K_Star k
             return t
         }
 
-let rec pt_expr (ctx : context) (e0 : expr) =
+
+// wrappers
+//
+
+let rec W_expr (ctx : context) (e0 : expr) =
     let M = new translator_typing_builder<_, _> (e0)
     M {
         let e = e0.value // uexpr must be bound before translation, or printing will not work
@@ -70,7 +74,7 @@ let rec pt_expr (ctx : context) (e0 : expr) =
         L.tabulate 2
         L.debug Min "[e]  %O\n[C]  %O\n[Q]  %O\n[S]  %O\n     %O" e cs Q tθ kθ
         #endif
-        let! (t : ty) = pt_expr' ctx e0
+        let! (t : ty) = W_expr' ctx e0
         do! resolve_constraints ctx e0
         let! Q' = M.get_Q
         let! tθ', kθ' = M.get_θ
@@ -83,25 +87,36 @@ let rec pt_expr (ctx : context) (e0 : expr) =
         return t
     } 
 
+and W_decl ctx d =
+    let M = new translator_typing_builder<_, _> (d)
+    M {
+        L.debug Low "[decl] %O" d
+        return! (if ctx.top_level_decl then M.fork_named_tyvars else M.ReturnFrom) <| M { 
+            do! W_decl' ctx d
+        }
+    }  
+
+//
+// end of wrappers
 
 
-and pt_expr' ctx e0 =
+and W_expr' ctx e0 =
     let Lo x = Lo e0.loc x
     let M = new translator_typing_builder<_, _> (e0)
-    let desugar = desugar M (pt_expr ctx) e0
+    let desugar = desugar M (W_expr ctx) e0
     M {
         match e0.value with
         | Lit lit ->
-            yield pt_lit lit
+            yield W_lit lit
 
         | Record (bs, eo) ->
-            let! bs = M.List.map (fun (l, e) -> M { let! t = pt_expr ctx e in return l, t }) bs
+            let! bs = M.List.map (fun (l, e) -> M { let! t = W_expr ctx e in return l, t }) bs
             match eo with
             | None ->
-                yield T_Record (bs, None)
+                yield T_Closed_Record bs
 
             | Some e ->
-                let! te = pt_expr ctx e
+                let! te = W_expr ctx e
                 let ρ = var.fresh
                 do! M.unify e.loc (T_Record ([], Some ρ)) te
                 yield T_Record (bs, Some ρ)
@@ -159,8 +174,7 @@ and pt_expr' ctx e0 =
         | PolyCons x ->
             let α = ty.fresh_star_var
             let β = ty.fresh_star_var
-            let ρ = var.fresh
-            yield T_Variant ([x, T_Arrow (α, β)], Some ρ)
+            yield T_Open_Variant [x, T_Arrow (α, β)]
 
         | Lambda ((x, τo), e) ->
             let α, tα = ty.fresh_star_var_and_ty
@@ -171,13 +185,13 @@ and pt_expr' ctx e0 =
                     do! M.add_prefix α (T_Bottom K_Star)
                     return tα
                 | Some τ ->
-                    let! t, k = pk_and_eval_ty_expr ctx τ
+                    let! t, k = Wk_and_eval_ty_expr ctx τ
                     do! M.kunify τ.loc K_Star k
                     return t
             }
             let! t = M.fork_Γ <| M {
                 let! _ = M.bind_var_Γ x tx
-                return! pt_expr ctx e
+                return! W_expr ctx e
             }            
             let! tx = M.update_ty tx
             // check that the inferred type of parameter is a monotype when no annotation was provided
@@ -185,15 +199,15 @@ and pt_expr' ctx e0 =
             let! Q3 = M.split_prefix Q0.dom
             let β, tβ = ty.fresh_star_var_and_ty
             let! Q3' = M.fork_Q <| M {
-                do! M.extend (Q3, β, t)
+                do! M.extend (Q3, β, t) // [CONTINUA] qui la extend aggiunge per forza al prefisso e non alla sostituzione!
                 return! M.get_Q
             }
             yield T_ForallsQ (Q3', T_Arrow (tx, tβ))
 
         | App (e1, e2) -> 
             let! Q0 = M.get_Q
-            let! t1 = pt_expr ctx e1
-            let! t2 = pt_expr ctx e2
+            let! t1 = W_expr ctx e1
+            let! t2 = W_expr ctx e2
             let α1, tα1 = ty.fresh_star_var_and_ty
             let α2, tα2 = ty.fresh_star_var_and_ty
             let β, tβ = ty.fresh_star_var_and_ty
@@ -206,43 +220,43 @@ and pt_expr' ctx e0 =
             return unexpected "empty or unary tuple: %O" __SOURCE_FILE__ __LINE__ e
 
         | Tuple es ->
-            let! ts = M.List.map (pt_expr ctx) es
+            let! ts = M.List.map (W_expr ctx) es
             yield T_Tuple ts
 
         | If (e1, e2, e3) ->
-            let! t1 = pt_expr ctx e1
+            let! t1 = W_expr ctx e1
             do! M.unify e1.loc T_Bool t1
-            let! t2 = pt_expr ctx e2
-            let! t3 = pt_expr ctx e3
+            let! t2 = W_expr ctx e2
+            let! t3 = W_expr ctx e3
             do! M.unify e3.loc t2 t3
             yield t2
 
         | Let (d, e) ->
             yield! M.fork_Γ <| M {
-                do! M.ignore <| pt_decl { ctx with top_level_decl = false } d
-                yield! pt_expr ctx e
+                do! M.ignore <| W_decl { ctx with top_level_decl = false } d
+                yield! W_expr ctx e
             }
         
         | Match (_, []) ->
             return unexpected "empty case list in match expression" __SOURCE_FILE__ __LINE__ 
              
         | Match (e1, cases) ->
-            let! te1 = pt_expr ctx e1
+            let! te1 = W_expr ctx e1
             let tr0 = ty.fresh_star_var
             for p, ewo, e in cases do
-                let! tp = pt_patt ctx p
+                let! tp = W_patt ctx p
                 do! M.unify p.loc te1 tp
                 match ewo with
                 | None    -> return ()
-                | Some ew -> let! tew = pt_expr ctx ew
+                | Some ew -> let! tew = W_expr ctx ew
                              do! M.unify ew.loc T_Bool tew
-                let! te = pt_expr ctx e
+                let! te = W_expr ctx e
                 do! M.unify e.loc tr0 te
             yield tr0
         
         | Annot (e, τ) ->
-            let! t, _ = pk_and_eval_ty_expr ctx τ
-            let! te = pt_expr ctx e // TODO: treat Annot as an application to an annotated lambda
+            let! t, _ = Wk_and_eval_ty_expr ctx τ
+            let! te = W_expr ctx e // TODO: treat Annot as an application to an annotated lambda
             do! M.unify e.loc t te
             yield t
 
@@ -256,20 +270,20 @@ and pt_expr' ctx e0 =
                 in
                     R es
             for ei in es do
-                let! ti = pt_expr ctx ei
+                let! ti = W_expr ctx ei
                 try do! M.unify ei.loc T_Unit ti
                 with :? Report.type_error as e -> Report.Warn.expected_unit_statement ei.loc ti
-            yield! pt_expr ctx e
+            yield! W_expr ctx e
 
         | Select (e, x) ->
-            let! te = pt_expr ctx e
+            let! te = W_expr ctx e
             let α = ty.fresh_star_var
-            let t = T_Tailed_Record [x, α]
+            let t = T_Open_Record [x, α]
             do! M.unify e.loc t te
             yield α
             
         | Restrict (e, x) ->
-            let! te = pt_expr ctx e
+            let! te = W_expr ctx e
             let α = ty.fresh_star_var
             let ρ = var.fresh
             do! M.unify e.loc (T_Record ([x, α], Some ρ)) te
@@ -277,7 +291,7 @@ and pt_expr' ctx e0 =
 
         | Loosen e ->
             let! cs0 = M.get_constraints
-            let! t = pt_expr ctx e
+            let! t = W_expr ctx e
             let! cs1 = M.get_constraints
             let cs = cs1 - cs0
             if cs.is_empty then Report.Warn.no_constraints_to_loosen e.loc
@@ -287,7 +301,7 @@ and pt_expr' ctx e0 =
             yield t
 
         | Val e ->
-            let! t = pt_expr { ctx with resolution = Res_Loose } e
+            let! t = W_expr { ctx with resolution = Res_Loose } e
             let! cs = M.get_constraints
             if not cs.is_empty then return Report.Error.value_not_resolved e0.loc cs
             yield t
@@ -295,7 +309,7 @@ and pt_expr' ctx e0 =
         | Inject e ->
             let! cs = M.fork_constraints <| M {
                 do! M.clear_constraints
-                let! _ = pt_expr ctx e
+                let! _ = W_expr ctx e
                 return! M.get_constraints
             }
             let x = fresh_reserved_id ()
@@ -307,10 +321,9 @@ and pt_expr' ctx e0 =
             yield! desugar (Lo <| Lambda ((x, None), Lo e1))
 
         | Eject e ->
-            let! t = pt_expr ctx e
+            let! t = W_expr ctx e
             let α = ty.fresh_star_var
-            let ρ = var.fresh
-            let tr = T_Record ([], Some ρ)
+            let tr = T_Open_Record []
             do! M.unify e.loc (T_Arrow (tr, α)) t
             match tr with
             | T_Record (xts, _) ->
@@ -325,9 +338,9 @@ and pt_expr' ctx e0 =
             yield! desugar (Lo <| Let (Lo <| D_Bind [{ qual = decl_qual.none; patt = Lo <| P_Var x; expr = Lo e1 }], Lo e2))
 
         | Solve (e, τ) ->
-            let! te = pt_expr ctx e
-            let! t, _ = pk_and_eval_ty_expr ctx τ
-            do! M.unify e.loc (T_Tailed_Record []) t
+            let! te = W_expr ctx e
+            let! t, _ = Wk_and_eval_ty_expr ctx τ
+            do! M.unify e.loc (T_Open_Record []) t
             let xts =
                 match t with
                 | T_Record (xts, _) -> xts
@@ -354,17 +367,9 @@ and pt_expr' ctx e0 =
     }
     
 
-and pt_decl ctx d =
-    let M = new translator_typing_builder<_, _> (d)
-    M {
-        L.debug Low "[decl] %O" d
-        return! (if ctx.top_level_decl then M.fork_named_tyvars else M.ReturnFrom) <| M { do! pt_decl' ctx d }
-    }  
-
-
-and pt_decl' (ctx : context) (d0 : decl) =
+and W_decl' (ctx : context) (d0 : decl) =
     let M = new translator_typing_builder<_, _> (d0)
-    let desugar = desugar M (pt_decl ctx) d0
+    let desugar = desugar M (W_decl ctx) d0
     let unify_and_resolve (ctx : context) (e : node<_, _>) t1 t2 =
         M {
             do! M.unify e.loc t1 t2
@@ -428,7 +433,7 @@ and pt_decl' (ctx : context) (d0 : decl) =
 
         | D_Overload l ->
             for { id = x; signature = τ } in l do
-                let! t, k = pk_and_eval_ty_expr ctx τ
+                let! t, k = Wk_and_eval_ty_expr ctx τ
                 do! M.kunify τ.loc K_Star k
                 let! _ = M.bind_Γ (Jk_Var x) { mode = Jm_Overloadable; scheme = Ungeneralized t }
                 Report.prompt ctx Config.Printing.Prompt.overload_decl_prefixes x t None
@@ -438,14 +443,14 @@ and pt_decl' (ctx : context) (d0 : decl) =
                 let! l =
                     M.List.collect (fun ({ patt = p; expr = e } as b) -> M {
                                 do! M.clear_constraints
-                                let! te = pt_expr ctx e
+                                let! te = W_expr ctx e
                                 return! M.fork_Γ <| M {
                                     match p.value with
                                     | P_Var x ->
                                         let! cs = M.get_constraints
                                         return [b, x, cs, te]
                                     | _ ->
-                                        let! tp = pt_patt ctx p
+                                        let! tp = W_patt ctx p
                                         do! M.unify e.loc tp te
                                         do! resolve_constraints ctx e
                                         let! cs = M.get_constraints
@@ -462,12 +467,12 @@ and pt_decl' (ctx : context) (d0 : decl) =
                     M.fork_Γ <| M {
                         do! M.clear_constraints
                         let! l = M.List.map (fun ({ qual = q; par = x, _; expr = e } as b) -> M {
-                                        let! tx = pt_typed_param ctx b.par
+                                        let! tx = W_typed_param ctx b.par
                                         let! _ = M.bind_Γ (jk q.over x tx) { mode = Jm_Normal; scheme = Ungeneralized tx }
                                         return b, x, tx
                                     }) bs
                         for { expr = e }, _, tx in l do
-                            let! te = pt_expr ctx e
+                            let! te = W_expr ctx e
                             do! unify_and_resolve ctx e tx te
                             match te with
                             | T_Arrow _ -> ()
@@ -479,8 +484,8 @@ and pt_decl' (ctx : context) (d0 : decl) =
             }
 
         | D_Open (q, e) ->
-            let! t = pt_expr ctx e
-            do! unify_and_resolve ctx e (T_Tailed_Record []) t
+            let! t = W_expr ctx e
+            do! unify_and_resolve ctx e (T_Open_Record []) t
             let Lo x = Lo e.loc x
             match t with
             | T_Record (bs, _) ->
@@ -494,10 +499,10 @@ and pt_decl' (ctx : context) (d0 : decl) =
 
         | D_Reserved_Multi ds ->
             for d in ds do
-                do! pt_decl ctx d
+                do! W_decl ctx d
 
         | D_Type bs ->
-            do! pk_and_eval_ty_rec_bindings ctx d0.loc bs                    
+            do! Wk_and_eval_ty_rec_bindings ctx d0.loc bs                    
 
         | D_Datatype { id = c; kind = kc; datacons = bs } ->
             // type constructor must have star as codomain
@@ -511,7 +516,7 @@ and pt_decl' (ctx : context) (d0 : decl) =
             // rebind kc to the unified kind, by reinstantiating it rather than keeping the user-declared one
             let kc = kinstantiate kσ 
             for { id = x; signature = τx } in bs do
-                let! tx, kx = pk_and_eval_ty_expr ctx τx
+                let! tx, kx = Wk_and_eval_ty_expr ctx τx
                 do! M.kunify τx.loc K_Star kx
                 // each curried argument of the each data constructor must have kind star
                 match tx with
@@ -530,9 +535,9 @@ and pt_decl' (ctx : context) (d0 : decl) =
     }  
 
 
-and pt_patt ctx (p0 : patt) =
+and W_patt ctx (p0 : patt) =
     let M = new translator_typing_builder<_, _> (p0)
-    let R = pt_patt ctx
+    let R = W_patt ctx
     let loc0 = p0.loc
     M {
         match p0.value with
@@ -558,8 +563,7 @@ and pt_patt ctx (p0 : patt) =
         | P_PolyCons x ->
             let α = ty.fresh_star_var
             let β = ty.fresh_star_var
-            let ρ = var.fresh
-            yield T_Variant ([x, T_Arrow (α, β)], Some ρ)
+            yield T_Open_Variant [x, T_Arrow (α, β)]
 
         | P_Var x ->
             let α = var.fresh
@@ -570,7 +574,7 @@ and pt_patt ctx (p0 : patt) =
             yield t
 
         | P_Lit lit ->
-            yield pt_lit lit
+            yield W_lit lit
 
         | P_Tuple ([] | [_]) as p ->
             return unexpected "empty or unary tuple in pattern: %O" __SOURCE_FILE__ __LINE__ p
@@ -581,7 +585,7 @@ and pt_patt ctx (p0 : patt) =
 
         | P_Record xps ->
             let! xts = M.List.map (fun (x, p) -> M { let! t = R p in yield x, t }) xps
-            yield T_Tailed_Record xts
+            yield T_Open_Record xts
 
         | P_Or (p1, p2) ->
             let xs1 = vars_in_patt p1
@@ -620,22 +624,22 @@ and pt_patt ctx (p0 : patt) =
             yield tp
 
         | P_Annot (p, τ) ->
-            let! t, _ = pk_and_eval_ty_expr ctx τ
+            let! t, _ = Wk_and_eval_ty_expr ctx τ
             let! tp = R p
             do! M.unify p.loc t tp
             yield t
     }
 
 
-and pt_program (prg : program) =
+and W_program (prg : program) =
     let ctx = context.top_level
     let M = new typing_builder (new location ())
     M {
         for d in prg.decls do
-            do! pt_decl ctx d
+            do! W_decl ctx d
         match prg.main with
         | None -> ()
         | Some e ->
-            let! t = pt_expr ctx (Lo e.loc <| Val e)
+            let! t = W_expr ctx (Lo e.loc <| Val e)
             do! M.unify e.loc T_Int t
     }

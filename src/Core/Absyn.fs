@@ -14,6 +14,7 @@ open FSharp.Common
 open FSharp.Common.Prelude
 open FSharp.Common.Log
 open FSharp.Common.Parsing
+open Lw.Core.Globals
 
 
 // misc stuff
@@ -135,7 +136,11 @@ with
         match this with
         | Va (n, _) -> n
 
-    static member fresh = Va (fresh_int (), None)
+    static member fresh =
+        let r = Va (fresh_int (), None)
+        L.hint Low "fresh var created: %O" r
+        r
+
     static member fresh_named s = Va (fresh_int (), Some s)
 
     member this.refresh =

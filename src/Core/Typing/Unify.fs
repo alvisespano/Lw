@@ -121,15 +121,13 @@ module internal Mgu =
             r
 
         and subsume' ctx (Q : prefix) (t1_ : ty) (t2_ : ty) =
-            let t1_ = t1_.nf
-            let t2_ = t2_.nf
+            let t1_ = t1_.ftype.nf
+            let t2_ = t2_.nf.constructed_form
             match t1_, t2_ with
             | _, T_Bottom k -> Q, kmgu ctx t1_.kind k   // this case comes from HML implementation - it is not in the paper
 
             | T_Foralls_F (αs, t1), T_ForallsQ (Q2, t2) ->            
                 assert Q.is_disjoint Q2
-                assert t1.is_unquantified
-                assert t2.is_unquantified
                 let skcs, t1' = skolemize_ty αs t1
                 let Q1, (tθ1, kθ1) = mgu ctx (Q + Q2) t1' t2    // TODO: does this unify kinds automatically?
                 let Q2, Q3 = Q1.split Q.dom
@@ -207,7 +205,7 @@ module internal Mgu =
                     let θ0 = kmgu ctx k t.kind
                     // occurs check
                     if Set.contains α (dom_wrt Q t) then let S = S θ0 in Report.Error.circularity loc (S t1_) (S t2_) (S (T_Var (α, k))) (S t)
-                    let Q1, θ1 = subsume ctx Q t αt
+                    let Q1, θ1 = subsume ctx Q (S θ0 t) (S θ0 αt)
                     let Q2, θ2 = let S = S <| θ1 ** θ0 in Q1.update_prefix_with_subst (α, S t)
                     in
                         Q2, θ2 ** θ1 ** θ0

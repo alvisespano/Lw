@@ -111,7 +111,11 @@ type basic_builder (loc : location) =
 
     member M.clear_constraints = M.set_constraints constraints.empty
 
-    member M.update_θ (tθ, kθ as θ) =
+    // TODO: design a smart system for pruning substition automatically via weak pointers.
+    //       The basic implementation idea behind it is to use weak references: each object of type var carries a reference count, which implies that each type a given var 
+    //       appears in increases the counter. Naturally, also substitutions carry objects of type var, but substitutions should count as weak references, in such a way
+    //       that when a var is being referenced only from within a substitution, the substitution entry can be safely removed because we ensure no other type is referencing that var any longer.
+    member M.update_θ (tθ, _ as θ) =
         M {
             do! M.lift_state (fun s ->
                     let (_, kθ) as θ = compose_tksubst θ s.θ
@@ -318,6 +322,7 @@ type typing_builder (loc) =
             let Q = subst_prefix θ Q    // TODO: is this really needed?
             let Q1, Q2 = Q.split αs
             do! M.set_Q Q1
+            L.debug Normal "[split] (%O) { %s } = (%O) ; (%O)" Q (flatten_stringables ", " αs) Q1 Q2
             return Q2
         }
 

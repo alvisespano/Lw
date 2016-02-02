@@ -11,7 +11,6 @@ open System
 open FSharp.Common
 open FSharp.Common.Log
 open FSharp.Common.Prelude
-open Lw.Core.Absyn
 
 type TimeSpan with
     member this.pretty =

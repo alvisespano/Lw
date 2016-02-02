@@ -24,7 +24,7 @@ Console.CancelKeyPress.AddHandler (fun _ _ -> ())
 
 let typecheck_prg (envs : Intrinsic.envs) prg =
     let st = { Typing.StateMonad.state.empty with Γ = envs.Γ; γ = envs.γ }
-    let (), st = Typing.Inference.pt_program prg st
+    let (), st = Typing.Inference.W_program prg st
     in
         { envs with Γ = st.Γ; γ = st.γ; δ = st.δ }
 
@@ -133,13 +133,13 @@ let interactive (envs : Intrinsic.envs) =
             let tspan, vspan =
                 match Parsing.parse_line stdin "STDIN" with
                 | A.Line_Expr e ->
-                    let t, tspan = cputime (unM Typing.Inference.pt_expr) e
+                    let t, tspan = cputime (unM Typing.Inference.W_expr) e
                     let v, vspan = W Eval.eval_expr e
                     L.print_line (Config.Interactive.pretty_prompt_expr t v)
                     tspan, vspan
 
                 | A.Line_Decl d ->
-                    let (), tspan = cputime (unM Typing.Inference.pt_decl) d
+                    let (), tspan = cputime (unM Typing.Inference.W_decl) d
                     let Δ', vspan = W Eval.eval_decl d
                     let Γ' = (!st).Γ
                     rΔ := Δ'

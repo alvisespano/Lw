@@ -434,7 +434,10 @@ let private (|T_Rowed|_|) name = function
     | _ -> None
 
 let T_Record, T_Variant, T_Tuple, (|T_Record|_|), (|T_Variant|_|), (|T_Tuple|_|) = make_rows T_Rowed (|T_Rowed|_|)
-let T_Tailed_Record xts = T_Record (xts, Some var.fresh)
+let T_Open_Record xts = T_Record (xts, Some var.fresh)
+let T_Closed_Record xts = T_Record (xts, None)
+let T_Open_Variant xts = T_Variant (xts, Some var.fresh)
+let T_Closed_Variant xts = T_Variant (xts, None)
 
 
 // substitutions

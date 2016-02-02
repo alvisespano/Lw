@@ -152,6 +152,7 @@ let fv_Γ (Γ : jenv) = fv_env (fun { scheme = σ } -> σ.fv) Γ
 
 let private var_refresher αs = new vasubst (Set.fold (fun (env : Env.t<_, _>) (α : var) -> env.bind α α.refresh) Env.empty αs)
 
+[< System.Obsolete("HidleyMilner version of instantiate and generalize functions are bugged. Do not use them.") >]
 module HindleyMilner =
     type constraintt with
         member this.refresh = { this with num = fresh_int () }
@@ -184,7 +185,7 @@ let refresh_ty (t : ty) =
 let Ungeneralized t = { constraints = constraints.empty; ty = t }
 
 let (|Ungeneralized|) = function
-    | { constraints = _; ty = T_Foralls ([], t) } -> t
+    | { constraints = cs; ty = t } when cs.is_empty -> t
     | σ -> unexpected "expected an ungeneralized type scheme but got: %O" __SOURCE_FILE__ __LINE__ σ
 
 type ty with
@@ -221,7 +222,7 @@ type ty with
                     R (T_ForallsQ (Q, subst_ty θ t2))
 
             | T_Bottom k ->
-                let α = var.fresh
+                let α = var.fresh   // TODO: is this fresh var really the case?
                 in
                     T_Forall ((α, T_Bottom k), T_Var (α, k))
 
@@ -234,6 +235,37 @@ type ty with
         in
             if t <> t' then L.warn Low "ftype(%O) <> %O" t t'; false
             else true
+
+    [< System.Obsolete("Method ty.constructed_form comes from the HML implementation and does not appear in the paper. It should not be used only if its actual behaviour has been confirmed.") >]
+    member t.constructed_form =
+        let check_var α = function
+            | T_Var (β, _) -> α = β
+            | _            -> false
+        in
+            match t with
+            | T_Forall ((α, _), t2) ->
+                if check_var α t2 then t2.constructed_form
+                else t
+            | t -> t
+
+(*constructedForm tp
+  = case tp of
+      Forall (Quant id bound) rho
+        -> do eq <- checkTVar id rho
+              if eq then constructedForm rho
+                    else return tp
+      _ -> return tp
+  where
+    checkTVar id rho
+      = case rho of 
+         TVar (TypeVar id2 (Uni ref))
+            -> do bound <- readRef ref
+                  case bound of
+                    Equal t  -> checkTVar id t
+                    _        -> return False
+         TVar (TypeVar id2 Quantified)  | id == id2
+           -> return True
+         _ -> return False*)
 
 
 // operations over kinds
@@ -319,7 +351,6 @@ type prefix with
         | _                         -> unexpected "item %s is not in prefix: %O" __SOURCE_FILE__ __LINE__ (prefix.pretty_item (α, t)) Q
 
     static member private update_prefix__reusable_part (α, t : ty, Q0 : prefix, Q1, Q2) =
-        assert t.is_ftype
         let θ = new tsubst (α, t), ksubst.empty
         in
             Q0 + Q1 + subst_prefix θ Q2, θ
