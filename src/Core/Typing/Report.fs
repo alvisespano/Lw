@@ -32,7 +32,7 @@ let inline prompt ctx prefixes x (σ : ^s) o =
     let top_level = (^a : (member top_level_decl : bool) ctx)
     let log = if top_level then L.msg High else L.msg Normal
     let prefixes = List.distinct <| if top_level then prefixes else Config.Printing.Prompt.nested_decl_prefix :: prefixes
-    use N = var.reset_normalization ()
+    use N = var.reset_normalization
     let header = sprintf "%s %s" (flatten_and_trim_strings Config.Printing.Prompt.prefix_sep (prefixes @ [x])) (^s : (static member binding_separator : string) ())
     let σ = σ.ToString ()
     let reduction = 
@@ -45,12 +45,12 @@ let inline prompt ctx prefixes x (σ : ^s) o =
     log "%s %s %s" header σ reduction
         
 
-let private E' f n loc fmt = let N = var.reset_normalization () in throw_formatted (fun msg -> N.Dispose (); f (msg, n, loc)) fmt
+let private E' f n loc fmt = let N = var.reset_normalization in throw_formatted (fun msg -> N.Dispose (); f (msg, n, loc)) fmt
 let private E x = E' (fun args -> new type_error (args)) x
 let private Ek x = E' (fun args -> new kind_error (args)) x
    
 let private mismatch f n what1 what2 loc expected1 got1 expected2 got2 =
-    use N = var.reset_normalization ()
+    use N = var.reset_normalization
     let s = sprintf "%s was expected to have %s %O but got %s %O" what1 what2 expected1 what2 got1
     let s = s + if expected1 <> expected2 && got1 <> got2 then sprintf ", because %s %O is not compatible with %O" what2 expected2 got2 else ""
     in

@@ -459,7 +459,7 @@ type [< NoComparison; NoEquality >] subst<'t> (env : Env.t<var, 't>) =
     member __.search = env.search
     member __.dom = env.dom
     member __.restrict αs = new subst<'t> (env.filter (fun α _ -> Set.contains α αs))
-    member __.restrict αks = new subst<'t> (env.filter (fun α _ -> Set.exists (fun (α', _) -> α = α') αks))
+//    member __.restrict αks = new subst<'t> (env.filter (fun α _ -> Set.exists (fun (α', _) -> α = α') αks))
     member __.remove αs = new subst<'t> (Seq.fold (fun env α -> env.remove α) env αs)
     member __.map f = new subst<'t> (env.map f)
     member __.search_by f = env.search_by f
@@ -471,7 +471,7 @@ type [< NoComparison; NoEquality >] subst<'t> (env : Env.t<var, 't>) =
 
     static member empty = new subst<'t> ()
 
-    member θ1.compose apply_subst (θ2 : subst<'t>) = (θ1.map (fun _ t -> apply_subst θ2 t)).append (θ2.restrict (θ2.dom - θ1.dom))
+    member θ1.compose apply_subst (θ2 : subst<'t>) = (θ2.map (fun _ t2 -> apply_subst θ1 t2)).append (θ1.restrict (θ1.dom - θ2.dom))
 
 type ksubst = subst<kind>
 type tsubst = subst<ty>
@@ -549,7 +549,7 @@ type kscheme with
     member kσ.pretty =
         match kσ with
             | { forall = αs; kind = k } ->
-                use N = var.reset_normalization αs
+                use A = var.add_quantified αs
                 let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_prefix_sep αs)
                 in
                     sprintf "%s%O" αspart k
@@ -562,14 +562,10 @@ type kscheme with
 
 // augmentations for types
 //
-
+    
 type var with
-    static member add_prefix_to_normalization (Q : prefix) =
-        let ds = [ for α, _ in Q do yield α.add_to_normalization ]
-        { new IDisposable with
-            member __.Dispose () = for d in ds do d.Dispose ()
-        }
-            
+    static member add_quantified (Q : prefix) = var.add_quantified (Seq.map fst Q)
+
 
 type ty with
 
@@ -604,7 +600,7 @@ type ty with
             | T_Closure (x, _, τ, _) -> sprintf "<[%O]>" (Te_Lambda ((x, None), τ))
 
             | T_Bottom _             -> Config.Printing.dynamic.bottom
-            | T_ForallsQ (Q, t)      -> use N = var.add_prefix_to_normalization Q in sprintf "forall %O. %O" Q t
+            | T_ForallsQ (Q, t)      -> use N = var.add_quantified Q in sprintf "forall %O. %O" Q t
         and R t =
             let k = t.kind
             in
@@ -618,7 +614,7 @@ type ty with
     static member fresh_star_var = T_Star_Var var.fresh
     static member fresh_star_var_and_ty = let α = var.fresh in α, T_Star_Var α
 
-    // this mixes free type variables as well as free kind variables
+    // this mixes type variables with kind variables in the same set
     member this.fv =
         match this with
         | T_Bottom k                -> k.fv
@@ -658,7 +654,6 @@ type scheme with
         let { constraints = cs; ty = t } = σ
         // TODO: deal with variables in the constraints and choose how to show them, either detecting the outer-most foralls or something like that
 //        let αs = Q.dom
-//        use N = var.reset_normalization ()
 //        let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_sep αs)
         let cspart = if cs.is_empty then "" else sprintf "{ %O } => " cs
         in

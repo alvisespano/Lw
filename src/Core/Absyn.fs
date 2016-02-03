@@ -136,10 +136,7 @@ with
         match this with
         | Va (n, _) -> n
 
-    static member fresh =
-        let r = Va (fresh_int (), None)
-        L.hint Low "fresh var created: %O" r
-        r
+    static member fresh = let r = Va (fresh_int (), None) in L.hint Low "fresh var: %O" r; r
 
     static member fresh_named s = Va (fresh_int (), Some s)
 
@@ -156,24 +153,6 @@ with
         in
             div n
 
-    member private this.pretty_fmt fmt =
-        match this with
-        | Va (n, Some s) ->
-            let r = sprintf fmt s
-            #if DEBUG_TYVAR_NAMES
-            sprintf "%s_%d" r n
-            #else
-            r
-            #endif
-
-        | Va (n, None) ->
-            let r = sprintf fmt (var.letterize n)
-            #if DEBUG_TYVAR_NAMES
-            sprintf "%s?%d" r n
-            #else
-            r
-            #endif
-
 
 // this module is needed and cannot be turn into static members within the var class because static members are unit closures and cannot be constants
 [< CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix) >]
@@ -184,35 +163,56 @@ module private var =
 
 
 type var with
-    static member reset_normalization ?quantified_vars =
-        let quantified_vars = defaultArg quantified_vars Set.empty
-        #if !DEBUG_NO_TYVAR_NORM
+    static member reset_normalization =
         var.cnt := 0
-        #endif
+        #if !DEBUG_NO_TYVAR_NORM
         var.env := Some Env.empty
-        var.forall := Set.ofSeq quantified_vars
+        #endif
         { new IDisposable with
             member __.Dispose () = var.env := None
         }
 
-    member α.add_to_normalization =
+    static member add_quantified α =
         var.forall := Set.add α !var.forall
         { new IDisposable with
             member __.Dispose () = var.forall := Set.remove α !var.forall
         }
 
-    member private __.normalizer = !var.env    // when env is None it means normalization is disabled
+    static member add_quantified αs =
+        let ds = [ for α : var in αs do yield var.add_quantified α ]
+        { new IDisposable with
+            member __.Dispose () = for d in ds do d.Dispose ()
+        }
+
+    // this method abstracts how normalization is turned on
+    member __.is_quantification_enabled = not (!var.forall).IsEmpty
+    member __.is_normalization_enabled = (!var.env).IsSome
 
     member this.pretty =
-        match this.normalizer with
-        | None   -> this.pretty_unnormalized 
-        | Some r -> this.pretty_normalized r
+        if this.is_normalization_enabled then this.pretty_normalized else this.pretty_unnormalized
+        |> this.pretty_with_quantification
 
     override this.ToString () = this.pretty
 
-    member this.pretty_unnormalized = this.pretty_fmt Config.Printing.dynamic.tyvar_quantified_fmt 
+    member this.pretty_unnormalized = 
+        match this with
+        | Va (n, Some s) ->
+            #if DEBUG_TYVAR_NAMES
+            sprintf "%s_%d" s n
+            #else
+            s
+            #endif
 
-    member this.pretty_normalized env =
+        | Va (n, None) ->
+            let s = var.letterize n
+            #if DEBUG_TYVAR_NAMES
+            sprintf "%s?%d" s n
+            #else
+            s
+            #endif
+
+    member this.pretty_normalized =
+        let env = (!var.env).Value
         let name =
             match env.search this.uid with
             | Some s -> s
@@ -232,12 +232,14 @@ type var with
                         R ()
 
                 | Va (_, Some s) ->
-                    let rec R s cnt =
-                        if name_exists s then R (sprintf Config.Printing.already_existing_named_var_fmt s cnt) (cnt + 1) else s
+                    let rec R s suffix =
+                        if name_exists s then R (sprintf Config.Printing.already_existing_named_var_fmt s suffix) (suffix + 1) else s
                     in
                         R s 0
-
         var.env := Some (env.bind this.uid name)
+        name
+
+    member this.pretty_with_quantification name =
         #if DEBUG_TYVAR_NAMES
         let fmt = 
             match this with
@@ -247,7 +249,8 @@ type var with
         #else
         name
         #endif
-        |> sprintf (if Set.exists (fun (α : var) -> α.uid = this.uid) !var.forall then Config.Printing.dynamic.tyvar_quantified_fmt else Config.Printing.dynamic.tyvar_unquantified_fmt)
+        |> sprintf (if not this.is_quantification_enabled || Set.exists (fun (α : var) -> α.uid = this.uid) !var.forall then Config.Printing.dynamic.tyvar_quantified_fmt
+                    else Config.Printing.dynamic.tyvar_unquantified_fmt)
 
 
 

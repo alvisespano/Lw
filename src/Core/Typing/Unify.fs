@@ -122,7 +122,7 @@ module internal Mgu =
 
         and subsume' ctx (Q : prefix) (t1_ : ty) (t2_ : ty) =
             let t1_ = t1_.ftype.nf
-            let t2_ = t2_.nf.constructed_form
+            let t2_ = t2_.nf //.constructed_form
             match t1_, t2_ with
             | _, T_Bottom k -> Q, kmgu ctx t1_.kind k   // this case comes from HML implementation - it is not in the paper
 
@@ -180,8 +180,8 @@ module internal Mgu =
                     check_skolems_escape ctx (skcs1 + skcs2) θ1 Q1
                     Q1, θ1 ** θ0
 
-                | T_Var (α1, k1), T_NamedVar (α2, k2) // prefer named over anonymous when unifying var vs. var
-                | T_NamedVar (α2, k2), T_Var (α1, k1)
+//                | T_Var (α1, k1), T_NamedVar (α2, k2) // prefer named over anonymous when unifying var vs. var
+//                | T_NamedVar (α2, k2), T_Var (α1, k1)
                 | T_Var (α1, k1), T_Var (α2, k2) ->
                     let θ0 = kmgu ctx k1 k2
                     let α1t = Q0.lookup α1
@@ -198,10 +198,7 @@ module internal Mgu =
 
                 | T_Var (α, k), t
                 | t, T_Var (α, k) ->
-                    let αt =
-                        match Q0.search α with
-                        | Some t -> t
-                        | None   -> unexpected "type variable %O does not occur in prefix" __SOURCE_FILE__ __LINE__ α
+                    let αt = Q0.lookup α
                     let θ0 = kmgu ctx k t.kind
                     // occurs check
                     if Set.contains α (dom_wrt Q t) then let S = S θ0 in Report.Error.circularity loc (S t1_) (S t2_) (S (T_Var (α, k))) (S t)
@@ -243,9 +240,7 @@ type typing_builder with
             let! Q = M.get_Q
             let! t1 = M.update_ty t1
             let! t2 = M.update_ty t2
-//            L.mgu "[U] %O =?= %O\n    Q = %O" t1 t2 Q
             let Q, (tθ, kθ as θ) = mgu { loc = loc; γ = γ } Q t1 t2
-//            L.mgu "[S] %O\n    %O\n    Q' = %O" tθ kθ Q
             do! M.set_Q Q
             do! M.update_θ θ
         }

@@ -1,4 +1,17 @@
 ﻿
+3/2/2016:
+* REFACT: var pretty printing changed again: now variables are printed as unquantified only when quantification has been enabled by a forall. In other words, when a T_Forall is encountered
+          quantification is enabled for the type sub-branch; otherwords vars are printed as quantified even if they are unquantified (this is for readability purposes, where vars in substitutions
+          or in sub-terms are better printed without the underscore prefix)
+* FIX: in rule (LAMBDA) the prefix is now reset to original after inferring the sub-term (used to keep the newly inserted variable, which was wrong)
+* FIX: monadic extend was bugged: now there's only a pretty natural extend dealing with the Q within the monad, and no more extend overloads dealing with Q as a parameter
+* FIX: in rule (LAMBDA) uses of former monadic extend overloads have been rewritten using the pure version of extend
+* REFACT: var.reset_normalization does not take a set of quantified variables anymore: it just resets normalization; it is now used only by Report, not by scheme and kscheme pretty printers anymore
+* FIX: var.reset_normalization didn't work as intended when compilation flag DEBUG_NO_TYVAR_NORM was enabled; now it should
+* REFACT: some new var.add_quantified static overloads dealing with a single var, a sequence of vars and a prefix
+* REFACT: substitution composition (again!!) was reversed: probably it didn't matter anyway, but hey...
+
+
 2/2/2016:
 * REFACT: new open and closed version of rowed types (records and variants)
 * REFACT: all pt_* functions have been renamed to W_* and all pk_* to Wk_*
@@ -604,7 +617,7 @@
 
 
 21/9/2014:
-* NEW: val is now a first-class expression checking that 
+* NEW: val is now a first-class citizen within the expression syntax, and it behaves like this:
                 Γ ⊢ e : {}. t
           (VAL) -------------------------
                 Γ ⊢ val e : {}. t ~~> e
@@ -643,7 +656,7 @@
          (AUTO) ---------------------------------------------------------
                 Γ ⊢ e : π - (x#n : t). t' ~~> let x#m = x$k in e
 
-* NEW: warning numbering and filtering sub-system implemented, including cmdline args
+* NEW: warning numbers and filters implemented, including command line arguments enabling/disabling them
 * NEW: translation sub-system implemented and partly tested
 
 
@@ -727,7 +740,11 @@
 
 
 15/8/2014:
-* NEW: row types implemented roughly 
+* NEW: row types implemented roughly
+
+
+23/7/2014:
+* NEW: ML type inference and most infrastructure written
 
 
 1/1/2014:

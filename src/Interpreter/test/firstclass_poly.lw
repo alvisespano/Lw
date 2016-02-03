@@ -7,14 +7,17 @@ namespace Test
 
 let app f x = f x
 
+let app2 f g x = f (g x)
 
-let intapp f = f 1
+(*let intapp f = f 1
 
 let const x y = x
 
+let const x y z w v = x, w
+
 let id x = x
 
-let revapp x f = f x
+let revapp x f = f x*)
 
 (*let poly (f : forall 'a. 'a -> 'a) = f 1, f true
 

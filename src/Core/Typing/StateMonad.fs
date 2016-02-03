@@ -298,8 +298,8 @@ type basic_builder (loc : location) =
 
 type typing_builder (loc) =
     inherit basic_builder (loc)
-    member __.Yield ((x, t : ty)) = fun (s : state) -> (x, subst_ty s.θ t), s
-    member M.Yield (t : ty) = M { let! (), r = M { yield (), t } in return r }
+    member __.Yield (t : ty) = fun (s : state) -> subst_ty s.θ t, s
+    member __.Yield<'a> ((x : 'a, t : ty)) = fun (s : state) -> (x, subst_ty s.θ t), s
     member M.YieldFrom f = M { let! (r : ty) = f in yield r }
 
     member M.fork_Q f =
@@ -312,39 +312,35 @@ type typing_builder (loc) =
 
     member M.update_ty t =
         M {
-            yield t 
+            let! θ = M.get_θ
+            return subst_ty θ t
         }
 
     member M.split_prefix αs =
         M {
             let! θ = M.get_θ
             let! Q = M.get_Q
-            let Q = subst_prefix θ Q    // TODO: is this really needed?
+//            let Q = subst_prefix θ Q    // TODO: is this really needed?
             let Q1, Q2 = Q.split αs
             do! M.set_Q Q1
             L.debug Normal "[split] (%O) { %s } = (%O) ; (%O)" Q (flatten_stringables ", " αs) Q1 Q2
             return Q2
         }
 
-    member M.extend (Q : prefix, α, t) =
+    member M.extend (α, t) =
         M {
             let! t = M.update_ty t
+            let! Q = M.get_Q
             let Q, θ = Q.extend (α, t)
             do! M.set_Q Q
             do! M.update_θ θ
             L.debug Normal "[Q+] %s\n     = %O" (prefix.pretty_item (α, t)) Q
         }
 
-    member M.extend (Q, xs) =
-        M {
-            for α, t in xs do
-                do! M.extend (Q, α, t)
-        }
-
     member M.extend xs =
         M {
-            let! Q = M.get_Q
-            do! M.extend (Q, xs)
+            for α, t in xs do
+                do! M.extend (α, t)
         }
 
     member M.update_prefix_with_bound (Q : prefix) (α, t) =

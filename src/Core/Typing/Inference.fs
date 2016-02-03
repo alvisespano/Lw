@@ -169,7 +169,7 @@ and W_expr' ctx e0 =
             yield t
 
         | Reserved_Cons x ->
-            return unexpected "expression Reserved_Cons is not supposed to appear in input code: %O" __SOURCE_FILE__ __LINE__ x
+            return unexpected "Reserved_Cons term is not supposed to appear in input code: %O" __SOURCE_FILE__ __LINE__ x
 
         | PolyCons x ->
             let α = ty.fresh_star_var
@@ -187,21 +187,21 @@ and W_expr' ctx e0 =
                 | Some τ ->
                     let! t, k = Wk_and_eval_ty_expr ctx τ
                     do! M.kunify τ.loc K_Star k
-                    return t
+                    yield t
             }
             let! t = M.fork_Γ <| M {
                 let! _ = M.bind_var_Γ x tx
-                return! W_expr ctx e
+                yield! W_expr ctx e
             }            
             let! tx = M.update_ty tx
             // check that the inferred type of parameter is a monotype when no annotation was provided
             if τo.IsNone && not tx.is_monomorphic then Report.Error.inferred_lambda_parameter_is_not_monomorphic e0.loc x t
             let! Q3 = M.split_prefix Q0.dom
             let β, tβ = ty.fresh_star_var_and_ty
-            let! Q3' = M.fork_Q <| M {
-                do! M.extend (Q3, β, t) // [CONTINUA] qui la extend aggiunge per forza al prefisso e non alla sostituzione!
-                return! M.get_Q
-            }
+            let Q3', θ3' = Q3.extend (β, t)
+            do! M.update_θ θ3'
+            let! tx = M.update_ty tx
+            let! tβ = M.update_ty tβ
             yield T_ForallsQ (Q3', T_Arrow (tx, tβ))
 
         | App (e1, e2) -> 
@@ -214,6 +214,7 @@ and W_expr' ctx e0 =
             do! M.extend [α1, t1; α2, t2; β, T_Bottom K_Star]
             do! M.unify e1.loc (T_Arrow (tα2, tβ)) tα1
             let! Q5 = M.split_prefix Q0.dom
+            let! tβ = M.update_ty tβ    // this is needed before quantification because substitution must be applied to the non-quantified part
             yield T_ForallsQ (Q5, tβ)
            
         | Tuple ([] | [_]) as e ->

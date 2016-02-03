@@ -200,7 +200,7 @@ type ty with
             else
                 let t1' = t1.nf
                 in
-                    if t1'.is_unquantified then subst_ty (new tsubst (α, t1'), ksubst.empty) t2
+                    if t1'.is_unquantified then (subst_ty (new tsubst (α, t1'), ksubst.empty) t2).nf
                     else T_Forall ((α, t1'), t2.nf)
 
         | t -> t
@@ -237,16 +237,15 @@ type ty with
             else true
 
     [< System.Obsolete("Method ty.constructed_form comes from the HML implementation and does not appear in the paper. It should not be used only if its actual behaviour has been confirmed.") >]
-    member t.constructed_form =
+    member t.constructed_form =        
         let check_var α = function
             | T_Var (β, _) -> α = β
             | _            -> false
+        let rec R = function
+            | T_Forall ((α, _), t2) when check_var α t2 -> R t2
+            | t                                         -> t
         in
-            match t with
-            | T_Forall ((α, _), t2) ->
-                if check_var α t2 then t2.constructed_form
-                else t
-            | t -> t
+            R
 
 (*constructedForm tp
   = case tp of
@@ -318,8 +317,8 @@ type prefix with
             if t'.is_unquantified then Q, (new tsubst (α, t'), ksubst.empty)
             else Q + (α, t), empty_θ
 
-    member Q.extend Q' =
-        Seq.fold (fun (Q : prefix, θ) (α, t) -> let Q', θ' = Q.extend (α, t) in Q', compose_tksubst θ' θ) (Q, (tsubst.empty, ksubst.empty)) Q'
+//    member Q.extend Q' =
+//        Seq.fold (fun (Q : prefix, θ) (α, t) -> let Q', θ' = Q.extend (α, t) in Q', compose_tksubst θ' θ) (Q, (tsubst.empty, ksubst.empty)) Q'
 
 //    member Q.extend l = Q.extend (prefix.ofSeq l)
 
@@ -337,7 +336,11 @@ type prefix with
         in
             R Q_Nil this
 
-    member this.lookup α = Seq.find (fst >> (=) α) this |> snd
+    member this.lookup α =
+        match this.search α with
+        | Some x -> x
+        | None   -> unexpected "type variable %O does not occur in prefix %O" __SOURCE_FILE__ __LINE__ α this
+
     member this.search α = Seq.tryFind (fst >> (=) α) this |> Option.map snd
 
 
