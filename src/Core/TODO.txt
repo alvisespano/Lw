@@ -60,11 +60,38 @@ SHORT-TERM
 
 LONG-TERM
 ---------
+
 (+)     [Constraints inside first-class type schemes] This would be awesome if possible!
 
 (+)     [GADTs] Read http://caml.inria.fr/pub/docs/manual-ocaml/extn.html#sec238 for GADTs in OCaml and reproduce the
-              existentially-qualified type variable behaviour there. Among others: when a tyvar occurs in the type signature of a
-              datacons but does not appear in the codomain (i.e. the gadt type itself) then it becomes existentially qualified.
+            existentially-qualified type variable behaviour there. Among others: when a tyvar occurs in the type signature of a
+            datacons but does not appear in the codomain (i.e. the gadt type itself) then it becomes existentially qualified.
+
+(-)     [Subtyping, sub-typesets and active patterns] Design a system which reformulates active patterns as a way for defining subsets of types, i.e. subtypes.
+            Consider the following example, where this variant defines the most general representation for types:
+                datatype ty with
+                    | T_Forall of var * ty * ty
+                    | T_App of ty * ty
+                    | T_Var of var
+                    | T_Cons of string
+                    | T_Bottom
+
+            Users may define a subtype like this:
+                datatype sysf_ty <: ty with
+                    | T_Forall (α, T_Bottom, t2) -> F_Forall (α, t2)
+                    | T_App (t1, t2)             -> F_App (t1, t2)
+                    | T_Var α                    -> F_Var α
+                    | T_Cons x                   -> F_Cons x
+                    | T_Bottom                   -> let α = fresh_var () in F_Forall (α, T_Var α)
+
+            It basically is another way of defining active patterns, in a structured and guided way.
+            But not only: key point is the non-exhaustive pattern matching, which clearly implies that we're treating a subset of the original type.
+            This subset can be bound to a name, and a subtype relation with the original type can be introduced.
+            Explore this feature further: one might define a supertype as well by adding variants to an original type or by mapping a type to a type with more
+            variants; or even type equations might be introduced in case of exhaustive pattern matching.
+            Formulate these also with poly variants, not only for GADTs.
+            P.S: think for example at subtypes of int for certain intervals to be passed to some functions operating in those ranges - it's like having finally a type-safe way
+            for dealing with subsets of numbers and things like that! 
 
 (-)     [Call-by-need and where-bindings] Lazyness shortcut introduced by where-bindings: call-by-need identifiers automatically recursive. Evaluated at lookup-time.
 
@@ -72,24 +99,24 @@ LONG-TERM
             also support the val prefix: this would allow users to quickly make a record from a whole set of top-level bindings
             just by embrancing them
 
-(-)     [Kind constraints] Does support for kind constraints make sense? (introduced by freevars, at least, if not overloading) in the type-level language.
-              Might be useful for advanced type programming; and is also a beautiful simmetry
-
 (-)     [Active patterns] Active patterns and syntactic sugar for patterns passed as function arguments
 
 (-)     [Sum types] #-expressions introduces sum types. e.g: (match e with A -> #3 | B -> #true) : <int | bool>
-              Row types with special labels could be used for implementing this, like tuples are made
+            Row types with special labels could be used for implementing this, like tuples are made
 
 (-)     [Multi-threaded evaluator] Implement an effect system whose goal is marking expressions in such a way that
-              a massive parallel evaluator can be implemented (as in Concurrent ML).
-              https://www.irisa.fr/prive/talpin/papers/jfp92.pdf
-              https://books.google.it/books?id=odbvBwAAQBAJ&pg=PA4&lpg=PA4&dq=effect+system+for+ml&source=bl&ots=KUOedMnQ8I&sig=0lXYne_oAi6jFW5-kY-qICxhJYE&hl=it&sa=X&ved=0CDYQ6AEwAmoVChMIhafpiNL0yAIVw9kaCh0nBQ5M#v=onepage&q=effect%20system%20for%20ml&f=false
+            a massive parallel evaluator can be implemented (as in Concurrent ML).
+            https://www.irisa.fr/prive/talpin/papers/jfp92.pdf
+            https://books.google.it/books?id=odbvBwAAQBAJ&pg=PA4&lpg=PA4&dq=effect+system+for+ml&source=bl&ots=KUOedMnQ8I&sig=0lXYne_oAi6jFW5-kY-qICxhJYE&hl=it&sa=X&ved=0CDYQ6AEwAmoVChMIhafpiNL0yAIVw9kaCh0nBQ5M#v=onepage&q=effect%20system%20for%20ml&f=false
 
 (-)     [References and assignments] Choose the best system for inferring refs and assignment without too much value restriction.
-              http://delivery.acm.org/10.1145/100000/99622/p291-leroy.pdf?ip=157.138.17.165&id=99622&acc=ACTIVE%20SERVICE&key=4DF843340132291B%2E4D4702B0C3E38B35%2E4D4702B0C3E38B35%2E4D4702B0C3E38B35&CFID=727079897&CFTOKEN=72912914&__acm__=1446568920_888a1e8be56e0b4667e524ff65e093a9
+            http://delivery.acm.org/10.1145/100000/99622/p291-leroy.pdf?ip=157.138.17.165&id=99622&acc=ACTIVE%20SERVICE&key=4DF843340132291B%2E4D4702B0C3E38B35%2E4D4702B0C3E38B35%2E4D4702B0C3E38B35&CFID=727079897&CFTOKEN=72912914&__acm__=1446568920_888a1e8be56e0b4667e524ff65e093a9
+
+(--)    [Kind constraints] Does support for kind constraints make sense? (introduced by freevars, at least, if not overloading) in the type-level language.
+            Might be useful for advanced type programming; and is also a beautiful simmetry
 
 (--)    [Extensible data types] In OCaml, declaration 'type t += C of s' adds a new constructor to an existing datatype.
-              Create something similar for GADTs (and for polyvariants, assuming it does make sense).
+            Create something similar for GADTs (and for polyvariants, assuming it does make sense).
 
 (--)    [Multi-threaded typing] Use async for pt_expr and jenv must bind to joinable values
 
@@ -100,8 +127,8 @@ LONG-TERM
 (--)    [Existential types] Support existential types for explicit subsumption of records. Example: let x : 'a <: { x : int } = if b then { x = 1 } else { x = 2; y = "str" }
 
 (--)    [Better error messages] Type error messages coming from MGU are imprecise: when some subterm gets unified successfully and another part
-                of it doesn't, the mismatch message prints completely un-unified types, i.e. the parts of the type that had
-                already been unified appear as they were BEFORE the whole unification process. This should be fixed somehow
+            of it doesn't, the mismatch message prints completely un-unified types, i.e. the parts of the type that had
+            already been unified appear as they were BEFORE the whole unification process. This should be fixed somehow
 
 (--)    [Separate compilation and namespaces] Support separate compilation and namespaces. Study how they relate to modules.
 

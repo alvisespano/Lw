@@ -63,7 +63,7 @@ let ULo x = new node<_, _> (x)
 let (|Lo|) (l : node<'a, _>) = l.value, l.loc
 let (|ULo|) = function Lo (x, _) -> x
 
-let (|Application|) (|App|_|) (|R|_|) =
+let (|Application|) (|App|_|) (|R|_|) = // (|R|_|) matches right-hand atoms
     let (|L|_|) = function
         | App _ | R _ as x -> Some x
         | _ -> None
@@ -136,7 +136,7 @@ with
         match this with
         | Va (n, _) -> n
 
-    static member fresh = let r = Va (fresh_int (), None) in L.hint Low "fresh var: %O" r; r
+    static member fresh = Va (fresh_int (), None)
 
     static member fresh_named s = Va (fresh_int (), Some s)
 

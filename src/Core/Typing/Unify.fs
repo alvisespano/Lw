@@ -48,7 +48,7 @@ let rec rewrite_row loc t1 t2 r0 l =
     | T_NoRow _ ->
         unexpected "row type expected: %O" __SOURCE_FILE__ __LINE__ r0
                 
-// this implementation differs from HML definition, but it should be equivalent
+// this implementation differs from HML definition in the paper, but it should be equivalent
 let dom_wrt Q (t : ty) = 
     let αs = t.fv
     in
@@ -121,23 +121,26 @@ module internal Mgu =
             r
 
         and subsume' ctx (Q : prefix) (t1_ : ty) (t2_ : ty) =
-            let t1_ = t1_.ftype.nf
-            let t2_ = t2_.nf //.constructed_form
+            assert t1_.is_ftype
+            let t1_ = t1_.nf
+            let t2_ = t2_.nf
             match t1_, t2_ with
-            | _, T_Bottom k -> Q, kmgu ctx t1_.kind k   // this case comes from HML implementation - it is not in the paper
+            // this case comes from HML implementation - it is not in the paper
+            | _, T_Bottom k ->
+                Q, kmgu ctx t1_.kind k   
 
-            | T_Foralls_F (αs, t1), T_ForallsQ (Q2, t2) ->            
-                assert Q.is_disjoint Q2
+            | F_Foralls (αs, t1), T_ForallsQ (Q', t2) ->            
+                assert Q.is_disjoint Q'
                 let skcs, t1' = skolemize_ty αs t1
-                let Q1, (tθ1, kθ1) = mgu ctx (Q + Q2) t1' t2    // TODO: does this unify kinds automatically?
+                let Q1, (tθ1, kθ1) = mgu ctx (Q + Q') t1' t2    // TODO: does this unify kinds automatically?
                 let Q2, Q3 = Q1.split Q.dom
                 let θ2 = tθ1.remove Q3.dom, kθ1
                 check_skolems_escape ctx skcs θ2 Q2
                 Q2, θ2
 
         and mgu_scheme' ctx (Q : prefix) (t1_ : ty)  (t2_ : ty) =
-            assert t1_.is_nf
-            assert t2_.is_nf
+            let t1_ = t1_.nf
+            let t2_ = t2_.nf
             match t1_, t2_ with
             | (T_Bottom k, (_ as t))
             | (_ as t, T_Bottom k) -> Q, kmgu ctx k t.kind, t
@@ -152,10 +155,10 @@ module internal Mgu =
         and mgu' (ctx : mgu_context) Q t1_ t2_ : prefix * tksubst =
             let loc = ctx.loc
             let rec R (Q0 : prefix) (t1 : ty) (t2 : ty) =
-                let t1 = t1.nf
-                let t2 = t2.nf
                 assert t1.is_ftype
                 assert t2.is_ftype
+                let t1 = t1.nf
+                let t2 = t2.nf
                 match t1, t2 with
                 | T_Cons (x, k1), T_Cons (y, k2) when x = y -> Q0, kmgu ctx k1 k2
                 | T_Var (α, k1), T_Var (β, k2) when α = β   -> Q0, kmgu ctx k1 k2
@@ -187,10 +190,10 @@ module internal Mgu =
                     let α1t = Q0.lookup α1
                     let α2t = Q0.lookup α2
                     // occurs check between one tyvar into the other's type bound and the other way round
-                    let check α t = if Set.contains α (dom_wrt Q0 t) then let S = S θ0 in Report.Error.circularity loc (S t1) (S t2) (T_Var (α, t.kind)) (S t2)
+                    let check α t = if Set.contains α (dom_wrt Q0 t) then let S = S θ0 in Report.Error.circularity loc (S t1_) (S t2_) (T_Var (α, t.kind)) (S t2_)
                     check α1 α2t
                     check α2 α1t
-                    let Q1, θ1, t = mgu_scheme ctx Q α1t α2t
+                    let Q1, θ1, t = mgu_scheme ctx Q (S θ0 α1t) (S θ0 α2t)  // TODO: this θ0 subst should be applied also on the 2 types involved in the 2 updates below?
                     let Q2, θ2 = Q1.update_prefix_with_subst (α1, t2)
                     let Q3, θ3 = Q2.update_prefix_with_bound (α2, t)
                     in
@@ -240,7 +243,7 @@ type typing_builder with
             let! Q = M.get_Q
             let! t1 = M.update_ty t1
             let! t2 = M.update_ty t2
-            let Q, (tθ, kθ as θ) = mgu { loc = loc; γ = γ } Q t1 t2
+            let Q, θ = mgu { loc = loc; γ = γ } Q t1 t2
             do! M.set_Q Q
             do! M.update_θ θ
         }

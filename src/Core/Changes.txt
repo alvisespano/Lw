@@ -1,4 +1,15 @@
 ﻿
+4/2/2016:
+* FIX: tonight I had a revelation and I fixed HML :) Method ty.nf did not adhere precisely to the specification, as it didn't detect types of form "forall ('a :> _|_). 'a" as System-F types,
+       but it rather treated them as flexible, reducing always to _|_. This was the source of all problems, as it made type inference lose type variable information. Now nf works as intended
+       and the whole HML system infers correctly
+* NEW: a new family of active patterns Flex_* have been defined for dealing with flexible types in a semi-typed way
+* REFACT: ty.is_nf method exists no more
+* REFACT: ty.is_ftype method has been rewritten without using structural comparison
+* FIX: columns in error reporting has been increased by 1 by setting col_bias to 1
+
+
+
 3/2/2016:
 * REFACT: var pretty printing changed again: now variables are printed as unquantified only when quantification has been enabled by a forall. In other words, when a T_Forall is encountered
           quantification is enabled for the type sub-branch; otherwords vars are printed as quantified even if they are unquantified (this is for readability purposes, where vars in substitutions

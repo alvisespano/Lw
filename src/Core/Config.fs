@@ -41,7 +41,7 @@ module Typing =
         let row = "Row"
         let htuple = "HTuple"
 
-    let skolemized_tyvar_fmt : StringFormat<string -> string> = "^%O"
+    let skolemized_tyvar_fmt : StringFormat<string -> string> = "|%O|"
 
 module Printing =
 
@@ -173,7 +173,7 @@ module Log =
 
 module Parsing =
     let line_bias = 0
-    let col_bias = 0
+    let col_bias = 1
     let detailed_error_context = false
 
 module Report = 

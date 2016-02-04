@@ -80,7 +80,7 @@ let rec W_expr (ctx : context) (e0 : expr) =
         let! tθ', kθ' = M.get_θ
         let! cs' = M.get_constraints
         // TODO: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)
-        L.debug Low "[e]  %O\n[:T] %O\n     nf(T) = %O\n     F-type(T) = %O\n[e*] %O\n[C'] %O\n[Q'] %O\n[S'] %O\n     %O" e t t.nf t.ftype e0 cs' Q' tθ' kθ'
+        L.debug Low "[e]  %O\n[:T] %O\n[nf] %O\n[Ft] %O\n[e*] %O\n[C'] %O\n[Q'] %O\n[S'] %O\n     %O" e t t.nf t.ftype e0 cs' Q' tθ' kθ'
         #if DEBUG_BEFORE_INFERENCE
         L.undo_tabulate
         #endif
@@ -186,6 +186,7 @@ and W_expr' ctx e0 =
                     return tα
                 | Some τ ->
                     let! t, k = Wk_and_eval_ty_expr ctx τ
+                    assert t.is_ftype
                     do! M.kunify τ.loc K_Star k
                     yield t
             }
@@ -200,9 +201,7 @@ and W_expr' ctx e0 =
             let β, tβ = ty.fresh_star_var_and_ty
             let Q3', θ3' = Q3.extend (β, t)
             do! M.update_θ θ3'
-            let! tx = M.update_ty tx
-            let! tβ = M.update_ty tβ
-            yield T_ForallsQ (Q3', T_Arrow (tx, tβ))
+            yield! M.ForallsQ (Q3', T_Arrow (tx, tβ))
 
         | App (e1, e2) -> 
             let! Q0 = M.get_Q
@@ -214,8 +213,7 @@ and W_expr' ctx e0 =
             do! M.extend [α1, t1; α2, t2; β, T_Bottom K_Star]
             do! M.unify e1.loc (T_Arrow (tα2, tβ)) tα1
             let! Q5 = M.split_prefix Q0.dom
-            let! tβ = M.update_ty tβ    // this is needed before quantification because substitution must be applied to the non-quantified part
-            yield T_ForallsQ (Q5, tβ)
+            yield! M.ForallsQ (Q5, tβ)
            
         | Tuple ([] | [_]) as e ->
             return unexpected "empty or unary tuple: %O" __SOURCE_FILE__ __LINE__ e
@@ -378,9 +376,10 @@ and W_decl' (ctx : context) (d0 : decl) =
         }
     let jk over x t = if over then Jk_Inst (x, t.GetHashCode ()) else Jk_Var x
 
-    let gen_bind prefixes decl_qual (e0 : node<_, _>) x t =
+    let gen_bind prefixes decl_qual (e0 : node<_, _>) x (t : ty) =
         let loc = e0.loc
         let Lo x = Lo loc x
+//        let t = t.ftype     // TODO: this should be removed if we want to bind flexible types as well
         M {
             let! { γ = γ; constraints = cs } = M.get_state
             // check shadowing and relation with previous bindings

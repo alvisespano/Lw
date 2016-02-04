@@ -86,7 +86,6 @@ type basic_builder (loc : location) =
     member __.get_Γ st = st.Γ, st
     member __.get_Δ st = st.δ, st
     member __.get_γ st = st.γ, st
-//    member __.get_tθ st = st.tθ, st
     member __.get_Q st = st.Q, st
     member __.get_constraints st = st.constraints, st
     member M.get_θ = M { let! s = M.get_state in return s.θ }
@@ -302,6 +301,8 @@ type typing_builder (loc) =
     member __.Yield<'a> ((x : 'a, t : ty)) = fun (s : state) -> (x, subst_ty s.θ t), s
     member M.YieldFrom f = M { let! (r : ty) = f in yield r }
 
+    member M.ForallsQ (Q, t) = M { let! t = M.update_ty t in yield T_ForallsQ (Q, t) }  // this is a shortcut for yielding foralls where the type part have been substituted
+
     member M.fork_Q f =
         M {
             let! Q = M.get_Q
@@ -323,18 +324,16 @@ type typing_builder (loc) =
 //            let Q = subst_prefix θ Q    // TODO: is this really needed?
             let Q1, Q2 = Q.split αs
             do! M.set_Q Q1
-            L.debug Normal "[split] (%O) { %s } = (%O) ; (%O)" Q (flatten_stringables ", " αs) Q1 Q2
             return Q2
         }
 
     member M.extend (α, t) =
         M {
-            let! t = M.update_ty t
+//            let! t = M.update_ty t
             let! Q = M.get_Q
             let Q, θ = Q.extend (α, t)
             do! M.set_Q Q
             do! M.update_θ θ
-            L.debug Normal "[Q+] %s\n     = %O" (prefix.pretty_item (α, t)) Q
         }
 
     member M.extend xs =

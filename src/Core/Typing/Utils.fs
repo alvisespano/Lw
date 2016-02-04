@@ -188,10 +188,44 @@ let (|Ungeneralized|) = function
     | { constraints = cs; ty = t } when cs.is_empty -> t
     | σ -> unexpected "expected an ungeneralized type scheme but got: %O" __SOURCE_FILE__ __LINE__ σ
 
+
+
+// System-F shortcuts
+//
+
+let F_Forall ((α, k), t) = T_Forall ((α, T_Bottom k), t)
+let (|F_Forall|_|) = function
+    | T_Forall ((α, T_Bottom k), t) -> Some ((α, k), t)
+    | _ -> None
+
+let F_Foralls = Foralls F_Forall
+let (|F_Foralls|) = (|Foralls|) (|F_Forall|_|)
+
+
+// flexible types as active pattenrs
+//
+
+let rec (|Flex_F_Ty|Flex_Bottom|Flex_Forall|) = function
+    | T_App _   // TOOD: [CONTINUA] do we need to check subnodes to be F-types?
+    | T_Cons _
+    | T_Var _
+    | T_Closure _
+    | T_HTuple _
+    | T_Forall ((_, T_Bottom _), Flex_F_Ty _) as t -> Flex_F_Ty t
+    | T_Bottom k                                   -> Flex_Bottom k
+    | T_Forall ((α, t1), t2)                       -> Flex_Forall ((α, t1), t2)
+
+
+
+// type augmentations
+//
+
 type ty with
     member this.nf =
         match this with
-        | T_Forall ((α, t1), t2) ->
+        | Flex_F_Ty _
+        | Flex_Bottom _ as t -> t
+        | Flex_Forall ((α, t1), t2) ->
             if not <| Set.contains α t2.fv then t2.nf
             elif match t2.nf with
                  | T_Var (β, _) -> α = β
@@ -203,68 +237,33 @@ type ty with
                     if t1'.is_unquantified then (subst_ty (new tsubst (α, t1'), ksubst.empty) t2).nf
                     else T_Forall ((α, t1'), t2.nf)
 
-        | t -> t
-
-    member t.is_nf =
-        let t' = t.nf
-        in
-            if t <> t' then L.warn Low "nf(%O) <> %O" t t'; false
-            else true
 
     member t.ftype =
         let rec R = function
-            | T_Forall ((α, T_Bottom k), t2) ->
+            | Flex_F_Ty t -> t
+
+            | Flex_Bottom k ->
+                let α, tα = ty.fresh_var_and_ty k   // TODO: is this fresh var really the case?
+                in
+                    F_Forall ((α, k), tα)
+
+            | Flex_Forall ((α, T_Bottom k), t2) ->
                 T_Forall ((α, T_Bottom k), R t2)
 
-            | T_Forall ((α, T_ForallsQ (Q, t1)), t2) ->
+            | Flex_Forall ((α, T_ForallsQ (Q, t1)), t2) ->
                 let θ = new tsubst (α, t1), ksubst.empty
                 in
                     R (T_ForallsQ (Q, subst_ty θ t2))
 
-            | T_Bottom k ->
-                let α = var.fresh   // TODO: is this fresh var really the case?
-                in
-                    T_Forall ((α, T_Bottom k), T_Var (α, k))
-
-            | t -> t    // no need to recur inside types because HML flexible types only have an outer forall carrying bounds, and all inner foralls are unbound
         in
             R t.nf      // normalization can be left out of the recursion
 
+
     member t.is_ftype =
-        let t' = t.ftype
-        in
-            if t <> t' then L.warn Low "ftype(%O) <> %O" t t'; false
-            else true
+        match t with
+        | Flex_F_Ty _ -> true
+        | _           -> false
 
-    [< System.Obsolete("Method ty.constructed_form comes from the HML implementation and does not appear in the paper. It should not be used only if its actual behaviour has been confirmed.") >]
-    member t.constructed_form =        
-        let check_var α = function
-            | T_Var (β, _) -> α = β
-            | _            -> false
-        let rec R = function
-            | T_Forall ((α, _), t2) when check_var α t2 -> R t2
-            | t                                         -> t
-        in
-            R
-
-(*constructedForm tp
-  = case tp of
-      Forall (Quant id bound) rho
-        -> do eq <- checkTVar id rho
-              if eq then constructedForm rho
-                    else return tp
-      _ -> return tp
-  where
-    checkTVar id rho
-      = case rho of 
-         TVar (TypeVar id2 (Uni ref))
-            -> do bound <- readRef ref
-                  case bound of
-                    Equal t  -> checkTVar id t
-                    _        -> return False
-         TVar (TypeVar id2 Quantified)  | id == id2
-           -> return True
-         _ -> return False*)
 
 
 // operations over kinds
@@ -295,6 +294,7 @@ let KUngeneralized k = { forall = Set.empty; kind = k }
 //
 
 type prefix with
+    // TODO: rewrite split in a less complicated way
     member Q.split αs =
         let rec R Q αs =
             match Q with
@@ -308,19 +308,19 @@ type prefix with
                     let Q1, Q2 = R Q αs
                     in
                         Q1, Q_Cons (Q2, (α, t))
-        in
-            R Q αs
+        let Q1, Q2 as r = R Q αs
+        L.debug Normal "[split] %O, { %s } = %O, %O" Q (flatten_stringables ", " αs) Q1 Q2
+        r
+
 
     member Q.extend (α, t : ty) =
-        let t' = t.nf
-        in
-            if t'.is_unquantified then Q, (new tsubst (α, t'), ksubst.empty)
-            else Q + (α, t), empty_θ
-
-//    member Q.extend Q' =
-//        Seq.fold (fun (Q : prefix, θ) (α, t) -> let Q', θ' = Q.extend (α, t) in Q', compose_tksubst θ' θ) (Q, (tsubst.empty, ksubst.empty)) Q'
-
-//    member Q.extend l = Q.extend (prefix.ofSeq l)
+        let Q', θ' as r =
+            let t' = t.nf
+            in
+                if t'.is_unquantified then Q, (new tsubst (α, t'), ksubst.empty)
+                else Q + (α, t), empty_θ
+        L.debug Normal "[ext] %O, %O : %O = %O, %O" Q α t Q' θ'
+        r
 
     member Q.insert i =
         let rec R = function
@@ -348,6 +348,7 @@ let (|Q_Slice|_|) α (Q : prefix) = Q.slice_by (fst >> (=) α)
 
 
 type prefix with
+    // TODO: rewrite these update methods without the overcomplicated slicing thing
     member private Q.update f (α, t : ty) =
         match Q.split t.fv with
         | Q0, Q_Slice α (Q1, _, Q2) -> f (α, t, Q0, Q1, Q2)
@@ -358,13 +359,19 @@ type prefix with
         in
             Q0 + Q1 + subst_prefix θ Q2, θ
 
-    member this.update_prefix_with_bound =
-        this.update <| fun (α, t, Q0, Q1, Q2) ->
-            let t' = t.nf
-            in
-                if t'.is_unquantified then prefix.update_prefix__reusable_part (α, t', Q0, Q1, Q2)
-                else Q0 + Q1 + (α, t) + Q2, (tsubst.empty, ksubst.empty)
+    member this.update_prefix_with_bound (α, t : ty) =
+        let Q, θ as r =
+            this.update <| fun (α, t, Q0, Q1, Q2) ->
+                let t' = t.nf
+                in
+                    if t'.is_unquantified then prefix.update_prefix__reusable_part (α, t', Q0, Q1, Q2)
+                    else Q0 + Q1 + (α, t) + Q2, (tsubst.empty, ksubst.empty)
+            <| (α, t)
+        L.debug Normal "[up-Q] %O, %O : %O = %O, %O" this α t Q θ
+        r
 
     member this.update_prefix_with_subst (α, t : ty) =
         assert t.is_ftype
-        this.update prefix.update_prefix__reusable_part (α, t)
+        let Q, θ as r = this.update prefix.update_prefix__reusable_part (α, t)
+        L.debug Normal "[up-S] %O, %O : %O = %O, %O" this α t Q θ
+        r

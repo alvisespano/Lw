@@ -229,12 +229,11 @@ type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] scheme =
 type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] prefix =
     | Q_Nil
     | Q_Cons of prefix * (var * ty)
-with
     interface IEnumerable<var * ty> with
         member this.GetEnumerator () = this.toSeq.GetEnumerator ()
 
     interface Collections.IEnumerable with
-        member this.GetEnumerator () = (this :> IEnumerable<_>).GetEnumerator () :> Collections.IEnumerator
+        member this.GetEnumerator () = (this :> IEnumerable<_>).GetEnumerator () :> Collections.IEnumerator   
 
     member this.toSeq =
         let rec R Q =
@@ -263,7 +262,7 @@ with
         | Q_Nil         -> z
         | Q_Cons (Q, i) -> f (Q.fold f z) i
 
-    static member (+) (Q : prefix, (α, t)) = Q_Cons (Q, (α, t))
+    static member (+) (Q : prefix, (α, t : ty)) = Q_Cons (Q, (α, t))
     static member (+) (Q1 : prefix, Q2 : prefix) = Q2.fold (fun (Q : prefix) (α, t) -> Q + (α, t)) Q1
 
 
@@ -372,13 +371,6 @@ let (|T_Foralls|) = (|Foralls|) (function T_Forall ((α, t1), t2) -> Some ((α, 
 let T_ForallsQ (Q : prefix, t) = T_Foralls (Seq.toList Q, t)
 let (|T_ForallsQ|) = function T_Foralls (qs, t) -> prefix.ofSeq qs, t
 
-// for System-F types
-let (|T_Forall_F|_|) = function
-    | T_Forall ((α, T_Bottom k), t) -> Some ((α, k), t)
-    | _ -> None
-
-let (|T_Foralls_F|) = (|Foralls|) (|T_Forall_F|_|)
-
 let T_ConsApps ((x, k), ts) = T_Apps (T_Cons (x, k) :: ts)
 let (|T_ConsApps|_|) = function
     | T_Apps (T_Cons (x, k) :: ts) -> Some ((x, k), ts)
@@ -440,6 +432,7 @@ let T_Open_Variant xts = T_Variant (xts, Some var.fresh)
 let T_Closed_Variant xts = T_Variant (xts, None)
 
 
+
 // substitutions
 //
 
@@ -476,6 +469,7 @@ type [< NoComparison; NoEquality >] subst<'t> (env : Env.t<var, 't>) =
 type ksubst = subst<kind>
 type tsubst = subst<ty>
 type vasubst = subst<var>
+// TODO: refactor tksubst as a record so there can be a custom pretty printer
 type tksubst = tsubst * ksubst
 
 let empty_θ = tsubst.empty, ksubst.empty
@@ -568,7 +562,6 @@ type var with
 
 
 type ty with
-
     member this.pretty =
         let (|T_Sym_Cons|_|) = (|Sym|_|) (function T_Cons (x, k) -> Some (x, (x, k)) | _ -> None)
         let (|A|_|) = function
@@ -576,25 +569,29 @@ type ty with
             | T_Var _ | T_Record _ | T_Variant _ | T_Cons _ | T_Closure _ | T_Row _ as e -> Some e
             | _ -> None
         let (|App|) = (|Application|) (function T_App (t1, t2) -> Some (t1, t2) | _ -> None) (|A|_|)
+        let rec (|LArrow|_|) = function
+            | T_Forall (_, LArrow _)
+            | T_Arrow _ as e -> Some e
+            | _ -> None
         let expected_kind_of t = K_Star
-        let rec P = function
+        let rec R' = function
             | T_Var (α, _)            -> sprintf "%O" α
 
             | T_Tuple ([] | [_]) as t -> unexpected "empty or unary tuple: %O" __SOURCE_FILE__ __LINE__ t
             | T_Tuple ts              -> mappen_strings (fun t -> (match t with A _ -> sprintf "%s" | _ -> sprintf "(%s)") (R t))  " * " ts
 
-            | T_Record row  -> sprintf "{ %s }" (pretty_row "; " Config.Printing.type_annotation_sep row)
-            | T_Variant row -> sprintf "< %s >" (pretty_row " | " Config.Printing.type_annotation_sep row)
-            | T_Row row     -> sprintf "(| %s |)" (pretty_row " | " Config.Printing.type_annotation_sep row)
+            | T_Record row            -> sprintf "{ %s }" (pretty_row "; " Config.Printing.type_annotation_sep row)
+            | T_Variant row           -> sprintf "< %s >" (pretty_row " | " Config.Printing.type_annotation_sep row)
+            | T_Row row               -> sprintf "(| %s |)" (pretty_row " | " Config.Printing.type_annotation_sep row)
 
             | T_HTuple ([] | [_]) as t -> unexpected "empty or unary htuple: %O" __SOURCE_FILE__ __LINE__ t
             | T_HTuple ts              -> mappen_strings (fun t -> (match t with A _ -> sprintf "%s" | _ -> sprintf "(%s)") (R t))  ", " ts
 
-            | T_Sym_Cons (x, __)     -> sprintf "(%s)" x
-            | T_Cons (x, _)          -> x
+            | T_Sym_Cons (x, __)      -> sprintf "(%s)" x
+            | T_Cons (x, _)           -> x
 
-            | T_Arrow (T_Arrow _ as t1, t2) -> sprintf "(%s) -> %s" (R t1) (R t2)
-            | T_Arrow (t1, t2)              -> sprintf "%s -> %s" (R t1) (R t2)
+            | T_Arrow (LArrow _ as t1, t2) -> sprintf "(%s) -> %s" (R t1) (R t2)
+            | T_Arrow (t1, t2)             -> sprintf "%s -> %s" (R t1) (R t2)
 
             | T_App (App s)          -> s
             | T_Closure (x, _, τ, _) -> sprintf "<[%O]>" (Te_Lambda ((x, None), τ))
@@ -604,15 +601,17 @@ type ty with
         and R t =
             let k = t.kind
             in
-                if k = expected_kind_of t then P t
-                else sprintf "(%s :: %O)" (P t) k
+                if k = expected_kind_of t then R' t
+                else sprintf "(%s :: %O)" (R' t) k
         in
             R this
 
 
     override this.ToString () = this.pretty    
-    static member fresh_star_var = T_Star_Var var.fresh
-    static member fresh_star_var_and_ty = let α = var.fresh in α, T_Star_Var α
+    static member fresh_var k = T_Var (var.fresh, k)
+    static member fresh_var_and_ty k = let α = var.fresh in α, T_Var (α, k)
+    static member fresh_star_var = ty.fresh_var K_Star
+    static member fresh_star_var_and_ty = ty.fresh_var_and_ty K_Star
 
     // this mixes type variables with kind variables in the same set
     member this.fv =
