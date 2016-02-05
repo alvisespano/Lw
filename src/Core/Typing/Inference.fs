@@ -1,7 +1,7 @@
 ﻿(*
  * Lw
- * Typing/Inference.fs: principal type inference
- * (C) 2000-2014 Alvise Spano' @ Universita' Ca' Foscari di Venezia
+ * Typing/Inference.fs: principal type inference algortihms
+ * (C) 2000-2016 Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
 
 module Lw.Core.Typing.Inference
@@ -21,7 +21,7 @@ open Lw.Core.Typing.Defs
 open Lw.Core.Typing.StateMonad
 open Lw.Core.Typing.Unify
 open Lw.Core.Typing.Resolve
-open Lw.Core.Typing.Utils
+open Lw.Core.Typing.Ops
 open Lw.Core.Typing.Meta
 
 
@@ -34,7 +34,7 @@ let desugar (M : translator_typing_builder<_, _>) f (e0 : node<_, _>) (e : node<
     }
 
 
-// inference algorithm
+// type inference algorithms
 //
 
 let W_lit = function
@@ -45,22 +45,22 @@ let W_lit = function
     | Char _      -> T_Char
     | Unit        -> T_Unit
 
-let W_typed_param ctx = function
-    | _, None ->
-        let M = new basic_builder (new location ())
-        M {
-            return ty.fresh_star_var            
-        }
-    | _, Some τ ->
-        let K = new kinding_builder<_> (τ)
-        K {
-            let! t, k = Wk_and_eval_ty_expr ctx τ
-            do! K.kunify τ.loc K_Star k
-            return t
-        }
+//let W_typed_param ctx = function
+//    | _, None ->
+//        let M = new basic_builder (new location ())
+//        M {
+//            return ty.fresh_star_var            
+//        }
+//    | _, Some τ ->
+//        let K = new kinding_builder<_> (τ)
+//        K {
+//            let! t, k = Wk_and_eval_ty_expr ctx τ
+//            do! K.kunify τ.loc K_Star k
+//            return t
+//        }
 
 
-// wrappers
+// some wrappers
 //
 
 let rec W_expr (ctx : context) (e0 : expr) =
@@ -96,9 +96,9 @@ and W_decl ctx d =
         }
     }  
 
-//
-// end of wrappers
 
+// main W functions
+//
 
 and W_expr' ctx e0 =
     let Lo x = Lo e0.loc x
@@ -201,7 +201,7 @@ and W_expr' ctx e0 =
             let β, tβ = ty.fresh_star_var_and_ty
             let Q3', θ3' = Q3.extend (β, t)
             do! M.update_θ θ3'
-            yield! M.ForallsQ (Q3', T_Arrow (tx, tβ))
+            yield Q3', T_Arrow (tx, tβ)
 
         | App (e1, e2) -> 
             let! Q0 = M.get_Q
@@ -213,7 +213,7 @@ and W_expr' ctx e0 =
             do! M.extend [α1, t1; α2, t2; β, T_Bottom K_Star]
             do! M.unify e1.loc (T_Arrow (tα2, tβ)) tα1
             let! Q5 = M.split_prefix Q0.dom
-            yield! M.ForallsQ (Q5, tβ)
+            yield Q5, tβ
            
         | Tuple ([] | [_]) as e ->
             return unexpected "empty or unary tuple: %O" __SOURCE_FILE__ __LINE__ e
@@ -441,20 +441,41 @@ and W_decl' (ctx : context) (d0 : decl) =
         | D_Bind bs ->
             do! M.fork_constraints <| M {
                 let! l =
+                    // TODO: refactor this crap an write shorter code
                     M.List.collect (fun ({ patt = p; expr = e } as b) -> M {
                                 do! M.clear_constraints
                                 let! te = W_expr ctx e
                                 return! M.fork_Γ <| M {
-                                    match p.value with
-                                    | P_Var x ->
+                                    let (|B_Unannot|B_Annot|B_Patt|) = function
+                                        | ULo (P_Var x)                    -> B_Unannot x
+                                        | ULo (P_Annot (ULo (P_Var x), τ)) -> B_Annot (x, τ)
+                                        | p                                -> B_Patt p
+                                    match p with
+                                    | B_Unannot x ->
                                         let! cs = M.get_constraints
-                                        return [b, x, cs, te]
-                                    | _ ->
+                                        yield [b, x, cs, te.ftype]  // by default bind inferred types as F-types
+
+                                    | B_Annot (x, τ) ->
+                                        let! tx, k = Wk_and_eval_ty_expr ctx τ
+                                        do! M.kunify τ.loc K_Star k
+                                        // TODO: another possible behaviour: always bind the flex type even if an F-type has been annotated: this means that ANY annotation would bind flex types
+                                        let! te = M {
+                                            if tx.is_flex then
+                                                do! M.subsume τ.loc te.ftype tx
+                                                yield te                        // bind the inferred type when a flex annotation is provided
+                                            else
+                                                do! M.unify τ.loc te.ftype tx
+                                                yield te.ftype                  // bind inferred type as an F-type when the annotation is an F-type
+                                        }
+                                        let! cs = M.get_constraints
+                                        yield [b, x, cs, te]
+
+                                    | B_Patt p ->
                                         let! tp = W_patt ctx p
                                         do! M.unify e.loc tp te
                                         do! resolve_constraints ctx e
                                         let! cs = M.get_constraints
-                                        return! vars_in_patt p |> Set.toList |> M.List.map (fun x -> M { let! { scheme = Ungeneralized t } = M.lookup_Γ (Jk_Var x) in return b, x, cs, t })
+                                        yield! vars_in_patt p |> Set.toList |> M.List.map (fun x -> M { let! { scheme = Ungeneralized t } = M.lookup_Γ (Jk_Var x) in return b, x, cs, t })
                                 }
                             }) bs
                 let! bs' = M.List.map (fun (b : binding, x, cs, t) -> M { let! () = M.set_constraints cs in return! gen_bind Config.Printing.Prompt.value_decl_prefixes b.qual b.expr x t }) l
@@ -467,7 +488,19 @@ and W_decl' (ctx : context) (d0 : decl) =
                     M.fork_Γ <| M {
                         do! M.clear_constraints
                         let! l = M.List.map (fun ({ qual = q; par = x, _; expr = e } as b) -> M {
-                                        let! tx = W_typed_param ctx b.par
+                                        // TODO: verify how let rec works
+                                        let! tx = M {
+                                            match b.par with
+                                            | _, None ->
+                                                let α, tα = ty.fresh_star_var_and_ty
+                                                do! M.add_prefix α (T_Bottom K_Star)
+                                                yield tα
+
+                                            | _, Some τ -> 
+                                                let! t, k = Wk_and_eval_ty_expr ctx τ
+                                                do! M.kunify τ.loc K_Star k
+                                                yield t                                                
+                                        }
                                         let! _ = M.bind_Γ (jk q.over x tx) { mode = Jm_Normal; scheme = Ungeneralized tx }
                                         return b, x, tx
                                     }) bs
@@ -584,7 +617,7 @@ and W_patt ctx (p0 : patt) =
             yield T_Tuple ts
 
         | P_Record xps ->
-            let! xts = M.List.map (fun (x, p) -> M { let! t = R p in yield x, t }) xps
+            let! xts = M.List.map (fun (x : id, p) -> M { let! t = R p in yield x, t }) xps
             yield T_Open_Record xts
 
         | P_Or (p1, p2) ->

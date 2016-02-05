@@ -1,10 +1,10 @@
 ﻿(*
  * Lw
- * Typing/Utils.fs: typing utilities
+ * Typing/Ops.fs: typing utilities
  * (C) 2000-2014 Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
  
-module Lw.Core.Typing.Utils
+module Lw.Core.Typing.Ops
 
 open FSharp.Common.Prelude
 open FSharp.Common.Log
@@ -206,21 +206,29 @@ let (|F_Foralls|) = (|Foralls|) (|F_Forall|_|)
 //
 
 let rec (|Flex_F_Ty|Flex_Bottom|Flex_Forall|) = function
-    | T_App _   // TOOD: [CONTINUA] do we need to check subnodes to be F-types?
     | T_Cons _
     | T_Var _
     | T_Closure _
-    | T_HTuple _
-    | T_Forall ((_, T_Bottom _), Flex_F_Ty _) as t -> Flex_F_Ty t
-    | T_Bottom k                                   -> Flex_Bottom k
-    | T_Forall ((α, t1), t2)                       -> Flex_Forall ((α, t1), t2)
-
+    | T_App (Flex_F_Ty _, Flex_F_Ty _) 
+    | T_Forall ((_, T_Bottom _), Flex_F_Ty _) as t         -> Flex_F_Ty t
+    | T_HTuple ts as t
+        when Seq.forall (function Flex_F_Ty _ -> true
+                                          | _ -> false) ts -> Flex_F_Ty t
+    | T_Bottom k                                           -> Flex_Bottom k
+    | T_Forall ((α, t1), t2)                               -> Flex_Forall ((α, t1), t2)
+    | t                                                    -> unexpected "ill-formed flexible type: %O" __SOURCE_FILE__ __LINE__ t
 
 
 // type augmentations
 //
 
 type ty with
+    member this.is_unquantified =   // TODO: verify is_unquantied: is it ok to check just this?
+        match this with
+        | T_Bottom _         
+        | T_Forall _ -> false
+        | _          -> true
+
     member this.nf =
         match this with
         | Flex_F_Ty _
@@ -264,6 +272,7 @@ type ty with
         | Flex_F_Ty _ -> true
         | _           -> false
 
+    member t.is_flex = not t.is_ftype
 
 
 // operations over kinds

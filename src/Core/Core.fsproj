@@ -107,7 +107,7 @@
     <Compile Include="Parsing.fs" />
     <Compile Include="Typing\Defs.fs" />
     <Compile Include="Typing\Report.fs" />
-    <Compile Include="Typing\Utils.fs" />
+    <Compile Include="Typing\Ops.fs" />
     <Compile Include="Typing\StateMonad.fs" />
     <Compile Include="Typing\Meta.fs" />
     <Compile Include="Typing\Unify.fs" />

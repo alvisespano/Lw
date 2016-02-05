@@ -12,7 +12,7 @@ open FSharp.Common
 open Lw.Core
 open Lw.Core.Absyn
 open Lw.Core.Typing.Defs
-open Lw.Core.Typing.Utils
+open Lw.Core.Typing.Ops
 open Lw.Core.Globals
 
 
@@ -297,11 +297,32 @@ type basic_builder (loc : location) =
 
 type typing_builder (loc) =
     inherit basic_builder (loc)
-    member __.Yield (t : ty) = fun (s : state) -> subst_ty s.θ t, s
-    member __.Yield<'a> ((x : 'a, t : ty)) = fun (s : state) -> (x, subst_ty s.θ t), s
-    member M.YieldFrom f = M { let! (r : ty) = f in yield r }
 
-    member M.ForallsQ (Q, t) = M { let! t = M.update_ty t in yield T_ForallsQ (Q, t) }  // this is a shortcut for yielding foralls where the type part have been substituted
+    member M.Yield (t : ty) = M { let! t = M.update_ty t in return t }
+    
+    // used when inferring let bindings    
+    member M.Yield l =
+        M {
+            return! M.List.map (fun (b : _, x : id, cs, t : ty) -> M {
+                        let! t = M.update_ty t
+                        let! cs = M.update_constraints cs
+                        return b, x, cs, t
+                    }) l                    
+        }
+
+    // used by some HML rules inferring foralls where the type part have been substituted
+    member M.Yield ((Q : prefix, t : ty)) = M { let! t = M.update_ty t in return T_ForallsQ (Q, t) }
+
+    // used for typing row types
+    member M.Yield ((x : id, t : ty)) = M { let! t = M.update_ty t in return x, t }
+
+    // banged version of Yields above
+    member M.YieldFrom f = M { let! (r : ty) = f in yield r }
+    member M.YieldFrom f = M { let! (r : list<_ * id * constraints * ty>) = f in yield r }
+
+//  member __.Yield (t : ty) = fun (s : state) -> subst_ty s.θ t, s
+//  member __.Yield<'a> ((x : 'a, t : ty)) = fun (s : state) -> (x, subst_ty s.θ t), s
+//    member M.ForallsQ (Q, t) = M { let! t = M.update_ty t in yield T_ForallsQ (Q, t) }  // this is a shortcut for yielding foralls where the type part have been substituted
 
     member M.fork_Q f =
         M {
@@ -315,6 +336,12 @@ type typing_builder (loc) =
         M {
             let! θ = M.get_θ
             return subst_ty θ t
+        }
+
+    member M.update_constraints cs =
+        M {
+            let! θ = M.get_θ
+            return subst_constraints θ cs
         }
 
     member M.split_prefix αs =

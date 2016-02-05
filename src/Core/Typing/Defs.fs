@@ -33,10 +33,8 @@ type tenv = Env.t<id, ty>
 
 and [< NoComparison; CustomEquality; DebuggerDisplay("{ToString()}") >] ty =
     | T_Cons of id * kind
-    | T_Var of var * kind
-    // TODO: T_Huple stands for higher-order tuple (i.e. tuples of types, not to be confused with the type of tuples of values), and it's not encoded
-    //       using rows because each row field must have kind star. Try to design a more general Rowed type which does not expect star on fields, and encode htuples with it
-    | T_HTuple of ty list
+    | T_Var of var * kind    
+    | T_HTuple of ty list   // TODO: try to design a more general Rowed type which does not expect star on fields, and encode htuples with it
     | T_App of (ty * ty)
     | T_Forall of (var * ty) * ty
     | T_Closure of id * tenv ref * ty_expr * kind
@@ -633,12 +631,6 @@ type ty with
         | T_Closure _       -> true
         | T_App (t1, t2)    -> t1.is_monomorphic && t2.is_monomorphic
         | T_HTuple ts       -> List.fold (fun r (t : ty) -> r && t.is_monomorphic) true ts
-
-    member this.is_unquantified =
-        match this with
-        | T_Bottom _         
-        | T_Forall _        -> false
-        | _                 -> true
 
 
 

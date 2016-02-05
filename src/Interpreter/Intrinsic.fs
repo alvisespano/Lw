@@ -16,7 +16,7 @@ open Lw.Core.Absyn
 open Lw.Core.Globals
 open Lw.Core.Typing
 open Lw.Core.Typing.Defs
-open Lw.Core.Typing.Utils
+open Lw.Core.Typing.Ops
 
 module C = Lw.Core.Config
 

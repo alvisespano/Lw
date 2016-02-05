@@ -13,7 +13,7 @@ open Lw.Core.Absyn
 open Lw.Core.Globals
 open Lw.Core.Typing.Defs
 open Lw.Core.Typing.StateMonad
-open Lw.Core.Typing.Utils
+open Lw.Core.Typing.Ops
 open Lw.Core.Typing.Unify
 open Lw.Core.Typing.Meta
 

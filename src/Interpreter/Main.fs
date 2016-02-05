@@ -76,7 +76,7 @@ let print_env_diffs (Γ1 : jenv) Γ2 (Δ1 : Eval.env) Δ2 =
         L.print_line (Config.Interactive.pretty_prompt_decl x σ v)
 
 let print_decl_bindings (Γ : jenv) (Δ : Eval.env) d =
-    for x in Typing.Utils.vars_in_decl d do
+    for x in Typing.Ops.vars_in_decl d do
         let σ = Γ.lookup (Jk_Var x)
         let v = Δ.lookup x
         L.print_line (Config.Interactive.pretty_prompt_decl x σ v)

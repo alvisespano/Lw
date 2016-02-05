@@ -48,6 +48,7 @@ let private other s =
 
 let private infos =
   [|
+//    Entry.flag "flex-let" (fun b -> Core.Config.Typing.flex_let <- true)  "do not instantiate let-bound inferred flexible types to System-F types"
     Entry.bool "unicode" (fun b -> Core.Config.Printing.dynamic.unicode <- b)  "enable/disable Unicode output" (Some Core.Config.Printing.dynamic.unicode)
     Entry.flag "greek" (fun b -> Core.Config.Printing.dynamic.greek_tyvars <- true)  "enable greek letters for type variables"
     Entry.flag "interactive" (fun () -> Config.Interactive.interactive_mode <- true)  "enable interactive mode, possibly after interpretation of a given source file"

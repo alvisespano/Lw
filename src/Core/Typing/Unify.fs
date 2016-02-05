@@ -14,7 +14,7 @@ open Lw.Core.Globals
 open Lw.Core.Typing.Defs
 open Lw.Core.Typing.StateMonad
 open Lw.Core.Typing.Meta
-open Lw.Core.Typing.Utils
+open Lw.Core.Typing.Ops
 open Lw.Core
 open System.Diagnostics
 
@@ -98,7 +98,7 @@ module internal Mgu =
             in
                 if Set.contains c cons then Report.Error.skolemized_type_variable_escaped ctx.loc c
 
-        let check_skolems_escape ctx cs θ Q =
+        let inline check_skolems_escape ctx cs θ Q =
             for c in cs do
                 check_skolem_escape ctx c θ Q
 
@@ -124,15 +124,14 @@ module internal Mgu =
             assert t1_.is_ftype
             let t1_ = t1_.nf
             let t2_ = t2_.nf
-            match t1_, t2_ with
-            // this case comes from HML implementation - it is not in the paper
-            | _, T_Bottom k ->
+            match t1_, t2_ with            
+            | _, T_Bottom k ->          // this case comes from HML implementation - it is not in the paper
                 Q, kmgu ctx t1_.kind k   
 
             | F_Foralls (αs, t1), T_ForallsQ (Q', t2) ->            
                 assert Q.is_disjoint Q'
                 let skcs, t1' = skolemize_ty αs t1
-                let Q1, (tθ1, kθ1) = mgu ctx (Q + Q') t1' t2    // TODO: does this unify kinds automatically?
+                let Q1, (tθ1, kθ1) = mgu ctx (Q + Q') t1' t2
                 let Q2, Q3 = Q1.split Q.dom
                 let θ2 = tθ1.remove Q3.dom, kθ1
                 check_skolems_escape ctx skcs θ2 Q2
@@ -183,8 +182,8 @@ module internal Mgu =
                     check_skolems_escape ctx (skcs1 + skcs2) θ1 Q1
                     Q1, θ1 ** θ0
 
-//                | T_Var (α1, k1), T_NamedVar (α2, k2) // prefer named over anonymous when unifying var vs. var
-//                | T_NamedVar (α2, k2), T_Var (α1, k1)
+                | T_Var (α1, k1), T_NamedVar (α2, k2) // prefer named over anonymous when unifying var vs. var
+                | T_NamedVar (α2, k2), T_Var (α1, k1)
                 | T_Var (α1, k1), T_Var (α2, k2) ->
                     let θ0 = kmgu ctx k1 k2
                     let α1t = Q0.lookup α1
@@ -231,22 +230,26 @@ module internal Mgu =
        
 
 let mgu = Mgu.Pure.mgu
+let subsume = Mgu.Pure.subsume
 
 let try_mgu ctx Q t1 t2 =
     try Some (mgu ctx Q t1 t2)
     with :? Report.type_error -> None
     
 type typing_builder with
-    member M.unify loc t1 t2 =
+    member private M.unification f loc t1 t2 =
         M {
             let! γ = M.get_γ
             let! Q = M.get_Q
             let! t1 = M.update_ty t1
             let! t2 = M.update_ty t2
-            let Q, θ = mgu { loc = loc; γ = γ } Q t1 t2
+            let Q, θ = f { loc = loc; γ = γ } Q t1 t2
             do! M.set_Q Q
             do! M.update_θ θ
         }
+
+    member M.unify = M.unification mgu
+    member M.subsume = M.unification subsume
 
     member M.attempt_unify loc t1 t2 =
         M {

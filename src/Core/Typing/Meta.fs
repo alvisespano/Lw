@@ -14,7 +14,7 @@ open Lw.Core.Absyn
 open Lw.Core.Globals
 open Lw.Core.Typing.Defs
 open Lw.Core.Typing.StateMonad
-open Lw.Core.Typing.Utils
+open Lw.Core.Typing.Ops
 
 
 type [< NoComparison; NoEquality >] mgu_context =
@@ -139,7 +139,7 @@ module private Eval =
                 }
 
             | Te_Row (xτs, τo) ->
-                let! xts = M.List.map (fun (x, τ) -> M { let! t = E τ in yield x, t }) xτs
+                let! xts = M.List.map (fun (x : id, τ) -> M { let! t = E τ in yield x, t }) xτs
                 let! too = M.Option.map (fun τ -> M { yield! E τ }) τo
                 match too with
                 | Some (T_Row_Var α)        -> yield T_Row (xts, Some α)

@@ -43,13 +43,16 @@ module Typing =
 
     let skolemized_tyvar_fmt : StringFormat<string -> string> = "|%O|"
 
+//    let mutable flex_let = false
+
+
 module Printing =
 
     let unicode_encoding = Text.Encoding.Unicode
 
     // dynamic configuration
 
-    type cfg () =
+    type dynamic_cfg () =
         let mutable greek_tyvars_ = false
 
         member __.unicode
@@ -76,7 +79,7 @@ module Printing =
         member this.tyvar_quantified_fmt : Printf.StringFormat<_> = if this.greek_tyvars then "%s" else "'%s"
         member this.tyvar_unquantified_fmt : Printf.StringFormat<_> = if this.greek_tyvars then "_%s" else "'_%s"
 
-    let dynamic = new cfg ()
+    let dynamic = new dynamic_cfg ()
 
     // static configuration bindings
 

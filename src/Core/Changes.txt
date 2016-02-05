@@ -1,4 +1,10 @@
 ﻿
+5/2/2016:
+* REFACT: let bindings support for annotation has been rewritten
+* FIX: rec bindings support for HML has been introduced - need testing
+* NEW: let bindings convert flex types to F-types by default, unless a flexible type annotation is provided by the user
+
+
 4/2/2016:
 * FIX: tonight I had a revelation and I fixed HML :) Method ty.nf did not adhere precisely to the specification, as it didn't detect types of form "forall ('a :> _|_). 'a" as System-F types,
        but it rather treated them as flexible, reducing always to _|_. This was the source of all problems, as it made type inference lose type variable information. Now nf works as intended

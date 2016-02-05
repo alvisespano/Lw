@@ -267,9 +267,9 @@ kinded_param:
   
 ty_forall_param:
   | TICK_ID                                             { ($1, None), None }
-  | BRA TICK_ID COLON2 kind_annotation KET              { ($2, Some $4), None } 
-  | BRA TICK_ID GEQ ty_expr KET                         { ($2, None), Some $4 } 
-  | BRA TICK_ID COLON2 kind_annotation GEQ ty_expr KET  { ($2, Some $4), Some $6 } 
+  | BRA TICK_ID COLON2 kind_annotation KET              { ($2, Some $4), None }
+  | BRA TICK_ID GEQ ty_expr KET                         { ($2, None), Some $4 }
+  | BRA TICK_ID COLON2 kind_annotation GEQ ty_expr KET  { ($2, Some $4), Some $6 }
 
 ty_forall_params:
     ty_forall_param                    { [$1] }
