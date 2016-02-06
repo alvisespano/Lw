@@ -137,28 +137,14 @@ module Log =
         l.show_datetime <- false
         l.show_urgency <- false
         l.show_thread <- true
-        #if DEBUG
-        l.all_thresholds <- Min
-        #else
         #if RELEASE
         l.debug_threshold <- Unmaskerable
         l.msg_threshold <- High
         l.warn_threshold <- Low
         l.hint_threshold <- Normal
         #else
-        #if TEST_PERFORMANCE
-        l.debug_threshold <- Unmaskerable
-        l.msg_threshold <- Normal
-        l.warn_threshold <- Low
-        l.hint_threshold <- Low
-        #else
-        #if TEST_FEATURES
-        l.debug_threshold <- Low
-        l.msg_threshold <- Low
-        l.warn_threshold <- Min
-        l.hint_threshold <- Min
-        #endif
-        #endif
+        #if DEBUG
+        l.all_thresholds <- Min
         #endif
         #endif
         l

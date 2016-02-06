@@ -23,5 +23,5 @@ let parse_line rd name =
 
 let parse_from_string what p s = parse_from_string s what p Lexer.tokenize Parser.tokenTagToTokenId
 let parse_decl = parse_from_string "DECL" Parser.top_decl
-let parse_ty = parse_from_string "TYPE" Parser.ty_expr
-
+let parse_ty_expr = parse_from_string "TYPE-EXPR" Parser.ty_expr
+let parse_expr = parse_from_string "EXPR" Parser.expr

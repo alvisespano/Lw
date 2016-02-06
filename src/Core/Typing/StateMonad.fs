@@ -16,21 +16,6 @@ open Lw.Core.Typing.Ops
 open Lw.Core.Globals
 
 
-type resolution = Res_Strict | Res_Loose | Res_No
-
-type [< NoComparison; NoEquality >] context =
-    { 
-        top_level_decl  : bool
-        resolution      : resolution
-//        strict          : bool
-    }
-with
-    static member top_level = {
-        top_level_decl  = true
-        resolution      = Res_Strict
-//        strict          = true
-    }
-
 type [< NoComparison; NoEquality; System.Diagnostics.DebuggerDisplayAttribute("{ToString()}") >] state =
     {
         // environments
@@ -93,7 +78,7 @@ type basic_builder (loc : location) =
 
     member __.lift_Γ f st = (), { st with Γ = f st.Γ |> subst_jenv st.θ }
     member __.lift_Δ f st = (), { st with δ = f st.δ }
-    member __.lift_γ f st = (), { st with γ = f st.γ |> subst_kjenv st.kθ }
+    member __.lift_γ f st = (), { st with state.γ = f st.γ |> subst_kjenv st.kθ }
     member __.lift_Q f st = (), { st with Q = f st.Q }
     member __.lift_θ f st = (), { st with θ = f st.θ }
     member __.lift_constraints f (st : state) = (), { st with constraints = subst_constraints st.θ (f st.constraints) }
@@ -244,7 +229,7 @@ type basic_builder (loc : location) =
             do! M.lift_constraints (fun cs -> cs.remove c)
         }
 
-    member M.instantiante_and_inherit_constraints (ctx : context) σ =
+    member M.instantiante_and_inherit_constraints σ =
         M {
             let cs, Q, t = instantiate σ
             do! M.add_constraints cs

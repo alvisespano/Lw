@@ -7,11 +7,112 @@
 module Lw.Interpreter.UnitTest
 
 open System
+open FSharp.Common
 open FSharp.Common.Prelude
 open FSharp.Common.Log
-open FSharp.Common
-open Lw.Core.Typing.Defs
 open Lw.Core.Globals
+open Lw.Core
+open Lw.Core.Parsing
+open Lw.Core.Absyn
+open Lw.Core.Typing.Defs
+open Lw.Core.Typing.Inference
+open Lw.Core.Typing.Meta
+open Lw.Core.Typing.Report
+
+type [< NoComparison; NoEquality >] test_result  =
+    | Ok of ty * kind
+    | Wrong
+
+let ctx0 = context.top_level
+let envs0 = Intrinsic.envs.envs0
+let st0 = { Typing.StateMonad.state.empty with Γ = envs0.Γ; γ = envs0.γ }
+
+let unM f x = f ctx0 x st0 |> fst    
+
+let parse_ty s =
+    let τ =
+        try parse_ty_expr s
+        with :? Parsing.syntax_error as e -> unexpected "syntax error while parsing type expr: %s\n%O" __SOURCE_FILE__ __LINE__ s e
+    in
+        unM Wk_and_eval_ty_expr τ
+        
+let ok s =
+    let t, k = parse_ty s
+    L.test Min "parsed: %s  =  %O" s t
+    Ok (t, k)
+
+let test_ok msg =
+    L.test Low "ok %s" msg
+    0
+
+let test_failed msg =
+    L.test High "%s" msg
+    1
+
+let inference s =
+    let e = parse_expr s
+    let t = unM W_expr e
+    L.test Normal "%O : %O" e t
+    t
+
+let is_test_ok t (et : ty, ek) = et = t && ek = t.kind
+    
+
+let test1 (input, res) =
+    match res with
+    | Ok (t, k) as res ->
+        try
+            let tr = inference input
+            if is_test_ok tr (t, k) then test_ok ""
+            else test_failed <| sprintf "test was expected to have type: %O" t
+        with e ->
+            test_failed <| sprintf "test should be accepted with type %O. An exception was caught: %s" res (pretty_exn_and_inners e)
+
+    | Wrong ->
+        try
+           let _ = inference input
+           unexpected "a type error was expected from testing expression: %s" __SOURCE_FILE__ __LINE__ input
+        with :? type_error as e ->
+            L.test High "%s" (pretty_exn_and_inners e)
+            test_ok "(the input was justly rejected)"
+
+
+let test ts =
+    let xs = Seq.map test1 ts
+    L.test Normal "tested: %d\nfailed: %d" (Seq.length ts) (Seq.sum xs)
+
+
+
+
+
+
+module HM =
+    
+    let tests =
+      [
+        "fun x -> x",                               ok "forall 'a. 'a -> 'a"
+        "fun f x -> f x",                           ok "forall 'a 'b. ('a -> 'b) -> 'a -> 'b"
+        "inc true",                                 Wrong
+        "let i = fun x -> x in i i",                ok "forall 'a. 'a -> 'a"
+        "fun i -> i i",                             Wrong // infinite type
+        "fun i -> (i 1, i true)",                   Wrong // polymorphic use of parameter
+//        "single id",                                ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
+//        "choose (fun x y -> x) (fun x y -> y)",     ok "forall 'a. 'a -> 'a -> 'a"
+//        "choose id",                                ok "forall ('a :> forall 'b. 'b -> 'b). 'a -> 'a"
+      ]
+    
+let all_tests =
+    List.concat [
+        HM.tests
+    ]
+
+let test_all () =
+    test all_tests
+    
+let main () =
+    test_all ()
+    0
+
 
 
 // TODO: translate these HML tests written in Haskell into F#
@@ -245,74 +346,3 @@ testOk msg
 
 *)
 
-
-module Lazyness =
-
-    type [<NoComparison>] llist<'a> = 
-        | Nil
-        | Cons of Lazy<'a> * Lazy<llist<'a>>
-    with
-        override this.ToString() = 
-            let rec R = function 
-                | Nil -> ""
-                | Cons(x, l) -> sprintf "%O; %O" x.Value l
-            in
-                sprintf "[%s]" (R this)
-    
-    let rec lmap f = function 
-        | Nil -> Nil
-        | Cons (x, l) -> Cons (f x, lazy lmap f l.Value)
-    
-    let rec lzip l1 l2 = 
-        match l1, l2 with
-        | Nil, Nil -> Nil
-        | Cons (x1, xs1), Cons (x2, xs2) -> Cons (lazy (x1.Value, x2.Value), lazy lzip xs1.Value xs2.Value)
-        | _ -> unexpected "zip" __SOURCE_FILE__ __LINE__
-    
-    let lmap2 f l1 l2 = lmap (function Lazy (x, y) -> f x y) (lzip l1 l2)
-    
-    let ltail = function
-        | Nil -> unexpected "empty list" __SOURCE_FILE__ __LINE__
-        | Cons (_, xs) -> xs.Value
-
-// NOTE: non riesco neanche a scriverla: ci sono troppi lazy! :P
-//    let rec fibs = Cons (lazy 0, lazy Cons (lazy 1, lazy lmap2 (fun (x : Lazy<_>) (y : Lazy<_>) -> lazy x.Value + y.Value) fibs (ltail fibs.Value)))
-//    
-//    let fibi i = List.nth fibs.Value i
-
-
-module Computations =
-
-    open Computation
-
-    let main () =
-        L.debug Normal "start" 
-        let s3 =
-            B.string {
-                yield 'a'
-                yield 'b'
-                yield! "ciao"
-                let a = byte_of_char 'A'
-                for c in [1uy .. 10uy] do
-                    yield char_of_byte (a + c)
-                yield! "end"
-            }
-        L.debug Normal "s3 = %O" s3
-        0
-        
-
-
-module Patterns =
-
-    let t1, t2, t3 = T_Int, T_Bool, T_Unit
-    let arr = T_Arrows [t1; t2; t3]
-    let ap = T_Apps [t1; t2; t3]
-    
-    let main () =
-        L.debug Normal "arr = %O" arr
-        L.debug Normal "ap = %O" ap
-        0
-
-
-let main = Computations.main
-    

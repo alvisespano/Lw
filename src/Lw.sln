@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
-VisualStudioVersion = 14.0.23107.0
+VisualStudioVersion = 14.0.24720.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Core", "Core\Core.fsproj", "{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -20,10 +20,6 @@ Global
 		Interactive|x64 = Interactive|x64
 		Release|Any CPU = Release|Any CPU
 		Release|x64 = Release|x64
-		Test Features|Any CPU = Test Features|Any CPU
-		Test Features|x64 = Test Features|x64
-		Test Performance|Any CPU = Test Performance|Any CPU
-		Test Performance|x64 = Test Performance|x64
 		UnitTest|Any CPU = UnitTest|Any CPU
 		UnitTest|x64 = UnitTest|x64
 	EndGlobalSection
@@ -34,24 +30,16 @@ Global
 		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Debug|x64.Build.0 = Debug|Any CPU
 		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Interactive|Any CPU.ActiveCfg = Debug|Any CPU
 		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Interactive|Any CPU.Build.0 = Debug|Any CPU
-		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Interactive|x64.ActiveCfg = Test Performance|Any CPU
-		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Interactive|x64.Build.0 = Test Performance|Any CPU
+		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Interactive|x64.ActiveCfg = Release|Any CPU
+		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Interactive|x64.Build.0 = Release|Any CPU
 		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Release|Any CPU.Build.0 = Release|Any CPU
 		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Release|x64.ActiveCfg = Release|Any CPU
 		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Release|x64.Build.0 = Release|Any CPU
-		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Test Features|Any CPU.ActiveCfg = Test Features|Any CPU
-		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Test Features|Any CPU.Build.0 = Test Features|Any CPU
-		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Test Features|x64.ActiveCfg = Test Features|Any CPU
-		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Test Features|x64.Build.0 = Test Features|Any CPU
-		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Test Performance|Any CPU.ActiveCfg = Test Performance|Any CPU
-		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Test Performance|Any CPU.Build.0 = Test Performance|Any CPU
-		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Test Performance|x64.ActiveCfg = Test Performance|Any CPU
-		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.Test Performance|x64.Build.0 = Test Performance|Any CPU
 		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.UnitTest|Any CPU.ActiveCfg = Debug|Any CPU
 		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.UnitTest|Any CPU.Build.0 = Debug|Any CPU
-		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.UnitTest|x64.ActiveCfg = Test Performance|Any CPU
-		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.UnitTest|x64.Build.0 = Test Performance|Any CPU
+		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.UnitTest|x64.ActiveCfg = Release|Any CPU
+		{0D6B7FFA-A1F1-4FAE-AD8D-0DA3888F5953}.UnitTest|x64.Build.0 = Release|Any CPU
 		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -64,14 +52,6 @@ Global
 		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Release|Any CPU.Build.0 = Release|Any CPU
 		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Release|x64.ActiveCfg = Release|Any CPU
 		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Release|x64.Build.0 = Release|Any CPU
-		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Test Features|Any CPU.ActiveCfg = Test Features|Any CPU
-		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Test Features|Any CPU.Build.0 = Test Features|Any CPU
-		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Test Features|x64.ActiveCfg = Test Features|Any CPU
-		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Test Features|x64.Build.0 = Test Features|Any CPU
-		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Test Performance|Any CPU.ActiveCfg = Test Performance|Any CPU
-		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Test Performance|Any CPU.Build.0 = Test Performance|Any CPU
-		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Test Performance|x64.ActiveCfg = Test Performance|Any CPU
-		{6890CE86-3856-467A-B3B5-EF307B7695F8}.Test Performance|x64.Build.0 = Test Performance|Any CPU
 		{6890CE86-3856-467A-B3B5-EF307B7695F8}.UnitTest|Any CPU.ActiveCfg = UnitTest|Any CPU
 		{6890CE86-3856-467A-B3B5-EF307B7695F8}.UnitTest|Any CPU.Build.0 = UnitTest|Any CPU
 		{6890CE86-3856-467A-B3B5-EF307B7695F8}.UnitTest|x64.ActiveCfg = UnitTest|Any CPU
@@ -88,16 +68,8 @@ Global
 		{7C493012-2911-43FE-8AD3-F052C3084E3C}.Release|Any CPU.Build.0 = Release|Any CPU
 		{7C493012-2911-43FE-8AD3-F052C3084E3C}.Release|x64.ActiveCfg = Release|x64
 		{7C493012-2911-43FE-8AD3-F052C3084E3C}.Release|x64.Build.0 = Release|x64
-		{7C493012-2911-43FE-8AD3-F052C3084E3C}.Test Features|Any CPU.ActiveCfg = Release|Any CPU
-		{7C493012-2911-43FE-8AD3-F052C3084E3C}.Test Features|Any CPU.Build.0 = Release|Any CPU
-		{7C493012-2911-43FE-8AD3-F052C3084E3C}.Test Features|x64.ActiveCfg = Release|x64
-		{7C493012-2911-43FE-8AD3-F052C3084E3C}.Test Features|x64.Build.0 = Release|x64
-		{7C493012-2911-43FE-8AD3-F052C3084E3C}.Test Performance|Any CPU.ActiveCfg = Release|Any CPU
-		{7C493012-2911-43FE-8AD3-F052C3084E3C}.Test Performance|Any CPU.Build.0 = Release|Any CPU
-		{7C493012-2911-43FE-8AD3-F052C3084E3C}.Test Performance|x64.ActiveCfg = Release|x64
-		{7C493012-2911-43FE-8AD3-F052C3084E3C}.Test Performance|x64.Build.0 = Release|x64
-		{7C493012-2911-43FE-8AD3-F052C3084E3C}.UnitTest|Any CPU.ActiveCfg = Release|Any CPU
-		{7C493012-2911-43FE-8AD3-F052C3084E3C}.UnitTest|Any CPU.Build.0 = Release|Any CPU
+		{7C493012-2911-43FE-8AD3-F052C3084E3C}.UnitTest|Any CPU.ActiveCfg = Debug|Any CPU
+		{7C493012-2911-43FE-8AD3-F052C3084E3C}.UnitTest|Any CPU.Build.0 = Debug|Any CPU
 		{7C493012-2911-43FE-8AD3-F052C3084E3C}.UnitTest|x64.ActiveCfg = Release|x64
 		{7C493012-2911-43FE-8AD3-F052C3084E3C}.UnitTest|x64.Build.0 = Release|x64
 	EndGlobalSection

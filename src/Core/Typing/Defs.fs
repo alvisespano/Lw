@@ -18,6 +18,7 @@ open Lw.Core
 open Lw.Core.Globals
 open Lw.Core.Absyn
 
+
 // types, schemes, predicates, constraints, environments, etc.
 //
 
@@ -82,6 +83,31 @@ with
                     | T_Closure _, _
                     | _, T_Closure _                    -> L.unexpected_error "comparing type closures: %O = %O" x y; false
                     | _                                 -> false
+
+
+// pure contexts
+//
+
+type resolution = Res_Strict | Res_Loose | Res_No
+
+type [< NoComparison; NoEquality >] context =
+    { 
+        top_level_decl  : bool
+        resolution      : resolution
+//        strict          : bool
+    }
+with
+    static member top_level = {
+        top_level_decl  = true
+        resolution      = Res_Strict
+//        strict          = true
+    }
+
+type [< NoComparison; NoEquality >] mgu_context =
+    { 
+        loc            : location
+        γ              : kjenv
+    }
 
 
 // overloaded symbol constraints
@@ -450,7 +476,6 @@ type [< NoComparison; NoEquality >] subst<'t> (env : Env.t<var, 't>) =
     member __.search = env.search
     member __.dom = env.dom
     member __.restrict αs = new subst<'t> (env.filter (fun α _ -> Set.contains α αs))
-//    member __.restrict αks = new subst<'t> (env.filter (fun α _ -> Set.exists (fun (α', _) -> α = α') αks))
     member __.remove αs = new subst<'t> (Seq.fold (fun env α -> env.remove α) env αs)
     member __.map f = new subst<'t> (env.map f)
     member __.search_by f = env.search_by f

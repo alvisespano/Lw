@@ -193,13 +193,13 @@ let (|Ungeneralized|) = function
 // System-F shortcuts
 //
 
-let F_Forall ((α, k), t) = T_Forall ((α, T_Bottom k), t)
-let (|F_Forall|_|) = function
+let T_Forall_F ((α, k), t) = T_Forall ((α, T_Bottom k), t)
+let (|T_Forall_F|_|) = function
     | T_Forall ((α, T_Bottom k), t) -> Some ((α, k), t)
     | _ -> None
 
-let F_Foralls = Foralls F_Forall
-let (|F_Foralls|) = (|Foralls|) (|F_Forall|_|)
+let T_Foralls_F = Foralls T_Forall_F
+let (|T_Foralls_F|) = (|Foralls|) (|T_Forall_F|_|)
 
 
 // flexible types as active pattenrs
@@ -253,7 +253,7 @@ type ty with
             | Flex_Bottom k ->
                 let α, tα = ty.fresh_var_and_ty k   // TODO: is this fresh var really the case?
                 in
-                    F_Forall ((α, k), tα)
+                    T_Forall_F ((α, k), tα)
 
             | Flex_Forall ((α, T_Bottom k), t2) ->
                 T_Forall ((α, T_Bottom k), R t2)
@@ -318,7 +318,7 @@ type prefix with
                     in
                         Q1, Q_Cons (Q2, (α, t))
         let Q1, Q2 as r = R Q αs
-        L.debug Normal "[split] %O, { %s } = %O, %O" Q (flatten_stringables ", " αs) Q1 Q2
+        L.debug Normal "[split] %O, { %s }\n        = %O, %O" Q (flatten_stringables ", " αs) Q1 Q2
         r
 
 
@@ -328,7 +328,7 @@ type prefix with
             in
                 if t'.is_unquantified then Q, (new tsubst (α, t'), ksubst.empty)
                 else Q + (α, t), empty_θ
-        L.debug Normal "[ext] %O, %O : %O = %O, %O" Q α t Q' θ'
+        L.debug Normal "[ext] %O, %O : %O\n      = %O, %O" Q α t Q' θ'
         r
 
     member Q.insert i =
@@ -376,11 +376,11 @@ type prefix with
                     if t'.is_unquantified then prefix.update_prefix__reusable_part (α, t', Q0, Q1, Q2)
                     else Q0 + Q1 + (α, t) + Q2, (tsubst.empty, ksubst.empty)
             <| (α, t)
-        L.debug Normal "[up-Q] %O, %O : %O = %O, %O" this α t Q θ
+        L.debug Normal "[up-Q] %O, %O : %O\n       = %O, %O" this α t Q θ
         r
 
     member this.update_prefix_with_subst (α, t : ty) =
         assert t.is_ftype
         let Q, θ as r = this.update prefix.update_prefix__reusable_part (α, t)
-        L.debug Normal "[up-S] %O, %O : %O = %O, %O" this α t Q θ
+        L.debug Normal "[up-S] %O, %O : %O\n       = %O, %O" this α t Q θ
         r

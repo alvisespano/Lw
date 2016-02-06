@@ -67,6 +67,7 @@ type token =
   | PIPE
   | AMP
   | BANG
+  | COLONGT
   | COLON
   | COLON2
   | SEMICOLON
@@ -152,6 +153,7 @@ type tokenId =
     | TOKEN_PIPE
     | TOKEN_AMP
     | TOKEN_BANG
+    | TOKEN_COLONGT
     | TOKEN_COLON
     | TOKEN_COLON2
     | TOKEN_SEMICOLON
@@ -174,6 +176,7 @@ type tokenId =
     | TOKEN_error
 type nonTerminalId = 
     | NONTERM__startinteractive_line
+    | NONTERM__startexpr
     | NONTERM__startprogram
     | NONTERM__starttop_decl
     | NONTERM__startty_expr
@@ -307,6 +310,7 @@ val prodIdxToNonTerminal: int -> nonTerminalId
 /// This function gets the name of a token as a string
 val token_to_string: token -> string
 val interactive_line : (Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> token) -> Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> ( Lw.Core.Absyn.interactive_line ) 
+val expr : (Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> token) -> Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> ( Lw.Core.Absyn.expr ) 
 val program : (Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> token) -> Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> ( Lw.Core.Absyn.program ) 
 val top_decl : (Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> token) -> Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> ( Lw.Core.Absyn.decl ) 
 val ty_expr : (Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> token) -> Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> ( Lw.Core.Absyn.ty_expr ) 

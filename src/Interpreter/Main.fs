@@ -15,6 +15,7 @@ open Lw.Core.Globals
 open Lw.Core.Typing.Defs
 open System.Threading
 open System.Diagnostics
+open Lw.Interpreter.Intrinsic
 
 module A = Lw.Core.Absyn
 
@@ -23,13 +24,13 @@ module A = Lw.Core.Absyn
 Console.CancelKeyPress.AddHandler (fun _ _ -> ())
 
 let typecheck_prg (envs : Intrinsic.envs) prg =
-    let st = { Typing.StateMonad.state.empty with Γ = envs.Γ; γ = envs.γ }
+    let st =  Typing.StateMonad.state.state0
     let (), st = Typing.Inference.W_program prg st
     in
         { envs with Γ = st.Γ; γ = st.γ; δ = st.δ }
 
 let eval_prg (envs : Intrinsic.envs) prg =
-    let Δ, vo = Eval.eval_prg Eval.context.non_cancellable envs.Δ prg
+    let Δ, vo = Eval.eval_prg Eval.context.uncancellable envs.Δ prg
     in
         { envs with Δ = Δ }, vo
 
@@ -82,7 +83,7 @@ let print_decl_bindings (Γ : jenv) (Δ : Eval.env) d =
         L.print_line (Config.Interactive.pretty_prompt_decl x σ v)
 
 let interactive (envs : Intrinsic.envs) =
-    print_env_diffs Intrinsic.envs0.Γ envs.Γ Intrinsic.envs0.Δ envs.Δ
+    print_env_diffs Intrinsic.envs.envs0.Γ envs.Γ Intrinsic.envs.envs0.Δ envs.Δ
     L.msg Low "entering interactive mode"
 
     let default_ctrl_c_handler = new ConsoleCancelEventHandler (fun _ _ ->
@@ -93,7 +94,7 @@ let interactive (envs : Intrinsic.envs) =
     let rΔ = ref envs.Δ
     let st = ref { Typing.StateMonad.state.empty with Γ = envs.Γ; γ = envs.γ }
     let unM f x =
-        let ctx = Typing.StateMonad.context.top_level
+        let ctx = Typing.Defs.context.top_level
         let r, st' = f ctx x !st
         st := st'
         r
@@ -168,7 +169,7 @@ let main _ =
             #else
             if Config.Interactive.interactive_mode then
                 Config.Log.set_thresholds_for_interactive ()
-            let envs = ref Intrinsic.envs0
+            let envs = ref Intrinsic.envs.envs0
             try
                 if not (String.IsNullOrWhiteSpace Args.filename) then
                     envs := interpret !envs Args.filename

@@ -19,7 +19,7 @@ let parse_error_rich = Some (fun ctx -> raise (ParseErrorContextException ctx))
        LET REC IN IF THEN ELSE FUN MATCH WHEN WITH FUNCTION TRUE FALSE AS OF NAMESPACE OPEN WHERE OVERLOAD
        DOUBLEAMP DOUBLEPIPE UNDERSCORE BACKSLASH KIND QUESTION
        BRA KET CURBRA CURKET SQBRA SQKET 
-       PLUS MINUS SLASH PLUSDOT MINUSDOT MOD NEQ LT GT LEQ GEQ AND NOT PIPE AMP BANG	   
+       PLUS MINUS SLASH PLUSDOT MINUSDOT MOD NEQ LT GT LEQ GEQ AND NOT PIPE AMP BANG COLONGT   
        COLON COLON2 SEMICOLON SEMICOLON2 DOT COMMA ASSIGN 
 %token EOF
 
@@ -46,6 +46,7 @@ let parse_error_rich = Some (fun ctx -> raise (ParseErrorContextException ctx))
 
 %type < Lw.Core.Absyn.ty_patt > ty_patt
 %type < Lw.Core.Absyn.ty_expr > ty_expr
+%type < Lw.Core.Absyn.expr > expr
 %type < Lw.Core.Absyn.decl > top_decl
 %type < Lw.Core.Absyn.program > program
 %type < Lw.Core.Absyn.interactive_line > interactive_line
@@ -53,6 +54,7 @@ let parse_error_rich = Some (fun ctx -> raise (ParseErrorContextException ctx))
 %start ty_expr
 %start top_decl
 %start program
+%start expr
 %start interactive_line
 
 %%
@@ -268,7 +270,7 @@ kinded_param:
 ty_forall_param:
   | TICK_ID                                             { ($1, None), None }
   | BRA TICK_ID COLON2 kind_annotation KET              { ($2, Some $4), None }
-  | BRA TICK_ID GEQ ty_expr KET                         { ($2, None), Some $4 }
+  | BRA TICK_ID COLONGT ty_expr KET                     { ($2, None), Some $4 }
   | BRA TICK_ID COLON2 kind_annotation GEQ ty_expr KET  { ($2, Some $4), Some $6 }
 
 ty_forall_params:

@@ -23,7 +23,7 @@ type [< NoComparison; NoEquality >] context = {
 
 }
 with
-    static member non_cancellable = { cancellation_token = CancellationToken.None }
+    static member uncancellable = { cancellation_token = CancellationToken.None }
 
 type env = Env.t<id, value>
 

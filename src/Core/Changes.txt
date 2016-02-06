@@ -1,4 +1,10 @@
 ﻿
+6/2/2016:
+* NEW: Unit test module written with a simple system for testing type inference
+* NEW: most tests have been taked from HML prototype tests
+* BUG: discovered a bug in typing "let f = id id", where id : forall 'a. 'a -> 'a
+
+
 5/2/2016:
 * REFACT: let bindings support for annotation has been rewritten
 * FIX: rec bindings support for HML has been introduced - need testing
@@ -735,7 +741,7 @@
 10/9/2014:
 * FIX: normalization of type variables in printing of schemes is now working
 * FIX: when missing a label in a row type, a special error is shown
-* TEST_FEATURES_FEATURESED: unification of record type have been tested quite widely: open records passed as arguments to functions with open records parameters, viceversa and other combinations
+* TEST: unification of record type have been tested quite widely: open records passed as arguments to functions with open records parameters, viceversa and other combinations
 
 
 9/9/2014:

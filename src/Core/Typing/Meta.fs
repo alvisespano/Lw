@@ -17,13 +17,6 @@ open Lw.Core.Typing.StateMonad
 open Lw.Core.Typing.Ops
 
 
-type [< NoComparison; NoEquality >] mgu_context =
-    { 
-        loc            : location
-        γ              : kjenv
-    }
-
-
 // kind unification
 //
 

@@ -117,13 +117,6 @@ module Builtin =
                 C.Typing.negate_symbol,   un_ii (~-)
             ]
 
-type [< NoEquality; NoComparison >] envs = {
-    Γ : jenv
-    Δ : Eval.env
-    γ : kjenv
-    δ : tenv
-}
-
 let private Γ0, Δ0 =
     List.fold (fun (Γ : jenv, Δ : Eval.env) (x, f) ->
                     let t, v = f x
@@ -139,5 +132,15 @@ let private γ0, δ0 =
                         γ.bind x (kgeneralize k γ),
                         δ.bind x t) (Env.empty, Env.empty) Builtin.Types.γ0
 
-let envs0 = { Γ = Γ0; Δ = Δ0; γ = γ0; δ = δ0 }
+type [< NoEquality; NoComparison >] envs = {
+    Γ : jenv
+    Δ : Eval.env
+    γ : kjenv
+    δ : tenv
+}
+with
+    static member envs0 = { Γ = Γ0; Δ = Δ0; γ = γ0; δ = δ0 }
+
+type StateMonad.state with
+    static member state0 = { StateMonad.state.empty with Γ = envs.envs0.Γ; γ = envs.envs0.γ }
 

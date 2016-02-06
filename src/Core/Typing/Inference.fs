@@ -45,20 +45,6 @@ let W_lit = function
     | Char _      -> T_Char
     | Unit        -> T_Unit
 
-//let W_typed_param ctx = function
-//    | _, None ->
-//        let M = new basic_builder (new location ())
-//        M {
-//            return ty.fresh_star_var            
-//        }
-//    | _, Some τ ->
-//        let K = new kinding_builder<_> (τ)
-//        K {
-//            let! t, k = Wk_and_eval_ty_expr ctx τ
-//            do! K.kunify τ.loc K_Star k
-//            return t
-//        }
-
 
 // some wrappers
 //
@@ -80,7 +66,7 @@ let rec W_expr (ctx : context) (e0 : expr) =
         let! tθ', kθ' = M.get_θ
         let! cs' = M.get_constraints
         // TODO: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)
-        L.debug Low "[e]  %O\n[:T] %O\n[nf] %O\n[Ft] %O\n[e*] %O\n[C'] %O\n[Q'] %O\n[S'] %O\n     %O" e t t.nf t.ftype e0 cs' Q' tθ' kθ'
+        L.debug Low "[e]  %O\n[:T] %O\n[nf] %O\n[Ft] %O\n[e*] %O\n[C]  %O\n[Q]  %O\n[S]  %O\n     %O\n[C'] %O\n[Q'] %O\n[S'] %O\n     %O" e t t.nf t.ftype e0 cs Q tθ kθ cs' Q' tθ' kθ'
         #if DEBUG_BEFORE_INFERENCE
         L.undo_tabulate
         #endif
@@ -138,7 +124,7 @@ and W_expr' ctx e0 =
                 yield α
 
             | Jb_Var σ ->
-                let! cs, _, t = M.instantiante_and_inherit_constraints ctx σ
+                let! cs, _, t = M.instantiante_and_inherit_constraints σ
                 if cs.is_empty then yield t
                 else
                     let e1 = Id x
@@ -147,7 +133,7 @@ and W_expr' ctx e0 =
                     yield t
 
             | Jb_Data σ ->
-                let! _, _, t = M.instantiante_and_inherit_constraints ctx σ
+                let! _, _, t = M.instantiante_and_inherit_constraints σ
                 M.translated <- Reserved_Cons x
                 yield t
                 
@@ -581,7 +567,7 @@ and W_patt ctx (p0 : patt) =
                     return Report.Error.unbound_data_constructor loc0 x
                     
                 | Jb_Data σ ->
-                    let! _, _, t = M.instantiante_and_inherit_constraints ctx σ
+                    let! _, _, t = M.instantiante_and_inherit_constraints σ
                     yield t
 
                 | Jb_Overload t ->

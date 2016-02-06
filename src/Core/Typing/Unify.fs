@@ -128,12 +128,12 @@ module internal Mgu =
             | _, T_Bottom k ->          // this case comes from HML implementation - it is not in the paper
                 Q, kmgu ctx t1_.kind k   
 
-            | F_Foralls (αs, t1), T_ForallsQ (Q', t2) ->            
+            | T_Foralls_F (αs, t1), T_ForallsQ (Q', t2) ->            
                 assert Q.is_disjoint Q'
                 let skcs, t1' = skolemize_ty αs t1
                 let Q1, (tθ1, kθ1) = mgu ctx (Q + Q') t1' t2
                 let Q2, Q3 = Q1.split Q.dom
-                let θ2 = tθ1.remove Q3.dom, kθ1
+                let θ2 = tθ1.remove (Q3.dom (*+ Q'.dom*)), kθ1      // TODO: WARNING: this has been fixed by me! the "+ Q'.dom" part does not come from the HML paper
                 check_skolems_escape ctx skcs θ2 Q2
                 Q2, θ2
 
@@ -171,7 +171,6 @@ module internal Mgu =
                     in
                         Q3, θ3 ** θ2 ** θ1
 
-//                | T_Forall_F ((α1, k1), t1), T_Forall_F ((α2, k2), t2) ->
                 | T_Forall ((α1, tb1), t1), T_Forall ((α2, tb2), t2) ->
                     let k1 = tb1.kind
                     let k2 = tb2.kind
