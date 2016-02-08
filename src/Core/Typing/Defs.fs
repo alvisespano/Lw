@@ -392,9 +392,6 @@ let rec (|Foralls|) (|Forall|_|) = function
 let T_Foralls = Foralls T_Forall
 let (|T_Foralls|) = (|Foralls|) (function T_Forall ((α, t1), t2) -> Some ((α, t1), t2) | _ -> None)
 
-let T_ForallsQ (Q : prefix, t) = T_Foralls (Seq.toList Q, t)
-let (|T_ForallsQ|) = function T_Foralls (qs, t) -> prefix.ofSeq qs, t
-
 let T_ConsApps ((x, k), ts) = T_Apps (T_Cons (x, k) :: ts)
 let (|T_ConsApps|_|) = function
     | T_Apps (T_Cons (x, k) :: ts) -> Some ((x, k), ts)
@@ -480,7 +477,7 @@ type [< NoComparison; NoEquality >] subst<'t> (env : Env.t<var, 't>) =
     member __.map f = new subst<'t> (env.map f)
     member __.search_by f = env.search_by f
 
-    member __.pretty = env.pretty_by_binding (fun α t -> sprintf "[%O = %O]" α t) ""
+    member __.pretty = if env.is_empty then "0" else env.pretty_by_binding (fun α t -> sprintf "[%O = %O]" α t) ""
     override this.ToString () = this.pretty
       
     member private θ1.append (θ2 : subst<_>) = new subst<'t> (θ1.env + θ2.env)
@@ -496,6 +493,8 @@ type vasubst = subst<var>
 type tksubst = tsubst * ksubst
 
 let empty_θ = tsubst.empty, ksubst.empty
+
+let var_refresher αs = new vasubst (Seq.fold (fun (env : Env.t<_, _>) (α : var) -> env.bind α α.refresh) Env.empty αs)
 
 
 // type and kind augmentations for substituting variables
@@ -529,25 +528,29 @@ type ty with
 
     member this.on_given_var f α = this.on_var (fun β k -> if α = β then Some (f k) else None)
     
-    member internal t.apply_to_vars f (tθ : subst<_>) S Sk =
+    member internal t.apply_to_vars on_ty_var on_var (αθ : subst<_>) S Sk =
+        let Sα α =
+            match αθ.search α with
+            | Some β -> on_var α β
+            | None   -> α
         match t with
         | T_Var (α, k) ->
-            match tθ.search α with
-            | Some x -> f x k
+            match αθ.search α with
+            | Some x -> on_ty_var x k
             | None   -> T_Var (α, Sk k)
 
         | T_Bottom _                -> t
         | T_Cons (x, k)             -> T_Cons (x, Sk k)
         | T_App (t1, t2)            -> T_App (S t1, S t2)
         | T_HTuple ts               -> T_HTuple (List.map S ts)
-        | T_Forall ((α, t1), t2)    -> T_Forall ((α, S t1), S t2)
+        | T_Forall ((α, t1), t2)    -> T_Forall ((Sα α, S t1), S t2)
         | T_Closure (x, Δ, τ, k)    -> T_Closure (x, Δ, τ, Sk k)
 
-    member t.subst_vars (tθ : vasubst) =
-        let S (t : ty) = t.subst_vars tθ
-        let Sk (k : kind) = k.subst_vars tθ
+    member t.subst_vars (αθ : vasubst) =
+        let S (t : ty) = t.subst_vars αθ
+        let Sk (k : kind) = k.subst_vars αθ
         in
-            t.apply_to_vars (fun β k -> T_Var (β, Sk k)) tθ S Sk
+            t.apply_to_vars (fun β k -> T_Var (β, Sk k)) (fun _ β -> β) αθ S Sk
 
        
 
@@ -580,6 +583,17 @@ type kscheme with
 // augmentations for types
 //
     
+let T_ForallsQ (Q : prefix, t) = T_Foralls (Seq.toList Q, t)
+let (|T_ForallsQ'|) (T_Foralls (qs, t)) = prefix.ofSeq qs, t    // this has the normal behaviou: quantified vars are not touched
+
+let (|T_ForallsQ|) (T_Foralls (qs, _) as t) =   // this has a special behaviour: quantified types are refreshed
+    let θ = var_refresher <| Seq.map fst qs
+    in
+        match t.subst_vars θ with
+        | T_ForallsQ' (Q, t) -> (Q, t)
+
+
+
 type var with
     static member add_quantified (Q : prefix) = var.add_quantified (Seq.map fst Q)
 
@@ -620,7 +634,7 @@ type ty with
             | T_Closure (x, _, τ, _) -> sprintf "<[%O]>" (Te_Lambda ((x, None), τ))
 
             | T_Bottom _             -> Config.Printing.dynamic.bottom
-            | T_ForallsQ (Q, t)      -> use N = var.add_quantified Q in sprintf "forall %O. %O" Q t
+            | T_Foralls (qs, t)      -> let Q = prefix.ofSeq qs in use N = var.add_quantified Q in sprintf "forall %O. %O" Q t
         and R t =
             let k = t.kind
             in

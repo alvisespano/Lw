@@ -112,7 +112,7 @@ let rec subst_ty (tθ : tsubst, kθ : ksubst) (t :ty) =
     let S = subst_ty (tθ, kθ)
     let Sk = subst_kind kθ
     in
-        t.apply_to_vars (fun t _ -> t) tθ S Sk
+        t.apply_to_vars (fun t _ -> t) (fun α -> function T_Var (β, _) -> β | _ -> α) tθ S Sk
 
 //// first argument is the NEW subst, second argument is the OLD one
 let compose_ksubst (kθ' : ksubst) (kθ : ksubst) = kθ.compose subst_kind kθ'
@@ -144,51 +144,6 @@ let subst_jenv θ (env : jenv) = env.map (fun _ ({ scheme = σ } as jv) -> { jv 
 let subst_kjenv kθ (env : kjenv) = env.map (fun _ -> subst_kscheme kθ)
 let subst_tenv θ (env : tenv) = env.map (fun _ -> subst_ty θ)
 
-// operations over types, schemes and prefixes
-
-let internal fv_env fv (env : Env.t<_, _>) = env.fold (fun αs _ v -> Set.union αs (fv v)) Set.empty
-
-let fv_Γ (Γ : jenv) = fv_env (fun { scheme = σ } -> σ.fv) Γ
-
-let private var_refresher αs = new vasubst (Set.fold (fun (env : Env.t<_, _>) (α : var) -> env.bind α α.refresh) Env.empty αs)
-
-[< System.Obsolete("HidleyMilner version of instantiate and generalize functions are bugged. Do not use them.") >]
-module HindleyMilner =
-    type constraintt with
-        member this.refresh = { this with num = fresh_int () }
-
-    let instantiate { constraints = cs; ty = T_ForallsQ (Q, t) } =
-        let αs = Q.dom
-        let tθ = var_refresher αs
-        let cs = constraints.B { for c in cs do yield { c.refresh with ty = c.ty.subst_vars tθ } }
-        in
-            cs, Q, t.subst_vars tθ
-          
-    let generalize (cs : constraints, Q, t : ty) Γ restricted_vars =
-        let αs = (t.fv + cs.fv) - (fv_Γ Γ) - restricted_vars
-        let Q = [ for α, t in Q do if Set.contains α αs then yield α, t ]
-        in
-            { constraints = cs; ty = T_Foralls (Q, t) }
-
-module HML =
-    let instantiante { constraints = cs; ty = t } = cs, Q_Nil, t
-    let generalize (cs : constraints, Q, t : ty) Γ restricted_vars = { constraints = cs; ty = t }
-
-let instantiate = HML.instantiante
-let generalize = HML.generalize
-
-let refresh_ty (t : ty) =
-    let _, _, t = instantiate { constraints = constraints.empty; ty = t }
-    in
-        t
-
-let Ungeneralized t = { constraints = constraints.empty; ty = t }
-
-let (|Ungeneralized|) = function
-    | { constraints = cs; ty = t } when cs.is_empty -> t
-    | σ -> unexpected "expected an ungeneralized type scheme but got: %O" __SOURCE_FILE__ __LINE__ σ
-
-
 
 // System-F shortcuts
 //
@@ -219,7 +174,7 @@ let rec (|Flex_F_Ty|Flex_Bottom|Flex_Forall|) = function
     | t                                                    -> unexpected "ill-formed flexible type: %O" __SOURCE_FILE__ __LINE__ t
 
 
-// type augmentations
+// ty augmentation
 //
 
 type ty with
@@ -245,13 +200,29 @@ type ty with
                     if t1'.is_unquantified then (subst_ty (new tsubst (α, t1'), ksubst.empty) t2).nf
                     else T_Forall ((α, t1'), t2.nf)
 
+//    member t.instantiate =
+//        match t with
+//        | T_Forall ((α, _), t2) ->
+//            let θ = new vasubst (α, var.fresh)
+//            in
+//                t2.subst_vars(θ).instantiate
+//
+//        | t -> t
+
+//    member t.refresh =
+//        let qv = function
+//            | T_Forall ((α, t1), t2) -> Set.singleton α + (qv t1 + t2.fv
+//            | t                      -> t.fv
+//        let θ = var_refresher (all_vars t)
+//        in
+//            t.subst_vars θ
 
     member t.ftype =
         let rec R = function
             | Flex_F_Ty t -> t
 
             | Flex_Bottom k ->
-                let α, tα = ty.fresh_var_and_ty k   // TODO: is this fresh var really the case?
+                let α, tα = ty.fresh_var_and_ty k   // TODO: is this fresh var really correct?
                 in
                     T_Forall_F ((α, k), tα)
 
@@ -272,7 +243,53 @@ type ty with
         | Flex_F_Ty _ -> true
         | _           -> false
 
-    member t.is_flex = not t.is_ftype
+// operations over types, schemes and prefixes
+
+let internal fv_env fv (env : Env.t<_, _>) = env.fold (fun αs _ v -> Set.union αs (fv v)) Set.empty
+
+let fv_Γ (Γ : jenv) = fv_env (fun { scheme = σ } -> σ.fv) Γ
+
+
+//[< System.Obsolete("HidleyMilner version of instantiate and generalize functions are bugged. Do not use them.") >]
+//[< RequireQualifiedAccess >]
+//module HindleyMilner =
+//    type constraintt with
+//        member this.refresh = { this with num = fresh_int () }
+//
+//    let instantiate { constraints = cs; ty = T_Foralls (qs, t) } =
+//        let αs = Q.dom
+//        let tθ = var_refresher αs
+//        let cs = constraints.B { for c in cs do yield { c.refresh with ty = c.ty.subst_vars tθ } }
+//        in
+//            cs, Q, t.subst_vars tθ
+//          
+//    let generalize (cs : constraints, Q, t : ty) Γ restricted_vars =
+//        let αs = (t.fv + cs.fv) - (fv_Γ Γ) - restricted_vars
+//        let Q = [ for α, t in Q do if Set.contains α αs then yield α, t ]
+//        in
+//            { constraints = cs; ty = T_Foralls (Q, t) }
+
+[< RequireQualifiedAccess >]
+module HML =
+    let instantiate { constraints = cs; ty = t } = cs, Q_Nil, t // TODO: don't we need to refresh the fv in contraints?
+
+    let generalize (cs : constraints, Q, t : ty) Γ restricted_vars = { constraints = cs; ty = t }
+
+let instantiate = HML.instantiate
+let generalize = HML.generalize
+
+let refresh_ty (t : ty) =
+    let _, _, t = instantiate { constraints = constraints.empty; ty = t }
+    in
+        t
+
+let Ungeneralized t = { constraints = constraints.empty; ty = t }
+
+let (|Ungeneralized|) = function
+    | { constraints = cs; ty = t } when cs.is_empty -> t
+    | σ -> unexpected "expected an ungeneralized type scheme but got: %O" __SOURCE_FILE__ __LINE__ σ
+
+
 
 
 // operations over kinds
@@ -318,7 +335,7 @@ type prefix with
                     in
                         Q1, Q_Cons (Q2, (α, t))
         let Q1, Q2 as r = R Q αs
-        L.debug Normal "[split] %O, { %s }\n        = %O, %O" Q (flatten_stringables ", " αs) Q1 Q2
+        L.debug Normal "[split] [%O][{ %s }]\n        = [%O][%O]" Q (flatten_stringables ", " αs) Q1 Q2
         r
 
 
@@ -328,7 +345,7 @@ type prefix with
             in
                 if t'.is_unquantified then Q, (new tsubst (α, t'), ksubst.empty)
                 else Q + (α, t), empty_θ
-        L.debug Normal "[ext] %O, %O : %O\n      = %O, %O" Q α t Q' θ'
+        L.debug Normal "[ext] [%O][%O : %O]\n      = [%O][%O]" Q α t Q' θ'
         r
 
     member Q.insert i =
@@ -376,11 +393,15 @@ type prefix with
                     if t'.is_unquantified then prefix.update_prefix__reusable_part (α, t', Q0, Q1, Q2)
                     else Q0 + Q1 + (α, t) + Q2, (tsubst.empty, ksubst.empty)
             <| (α, t)
-        L.debug Normal "[up-Q] %O, %O : %O\n       = %O, %O" this α t Q θ
+        L.debug Normal "[up-Q] [%O][%O :> %O]\n       = [%O][%O]" this α t Q θ
         r
 
     member this.update_prefix_with_subst (α, t : ty) =
         assert t.is_ftype
         let Q, θ as r = this.update prefix.update_prefix__reusable_part (α, t)
-        L.debug Normal "[up-S] %O, %O : %O\n       = %O, %O" this α t Q θ
+        L.debug Normal "[up-S] [%O][%O := %O]\n       = [%O][%O]" this α t Q θ
         r
+
+[< CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix) >]
+module prefix =
+    let B = new Computation.Builder.itemized_collection<_, _> (empty = Q_Nil, plus1 = (fun i Q -> Q_Cons (Q, i)), plus = (+))

@@ -22,7 +22,10 @@ SHORT-TERM
                   `X        = PolyCons =>  polymorphic variant
                   `x        = ?        =>  does it make sense? can it be used for something?
 
-(++)    [Multiple overload..and bindings] Consider supporting multiple overload principal type declarations and study the relation with scoped named type variables.
+(++)    [Record label and variant overloading] Design and implement rewrite_row and unification with multiple types per label and unleash the power of overloading
+            even on row types in a context-dependent fashion.
+
+(++)    [Multiple overload..and = typeclasses] Consider supporting multiple overload principal type declarations and study the relation with scoped named type variables.
             Could they resemble a form of implicit type classes? E.g. all symbols within an overload..and group could be put into the constraints even if only one of them actually appear in code.
             The pragmatic benefit is that type variables can be shared between multiple overloaded symbols, like in type classes.
             One could even give a name to a set of overload principal types with a suffix "as". Or also: one could declare to overload a record type, and give birth to a real type class.
@@ -32,13 +35,10 @@ SHORT-TERM
               It actually matches the 'either' function, but it is infix: let (or) a b = either b a
               Also, design a special if-like construct for optionals: when e1 is x then e2 ~~~> match e1 with None -> () | Some x -> e2 x
 
-(-)     [First-class polymorphism] Implement annotation-based first-class type schemes. Evaluate rank-1 inference for ordinary expressions and introduce generalization for
-            record field definitions (i.e. each field is treated like a let).
-
 (--)    [Type scheme annotations] Type scheme annotations should disable automatic generalization of the WHOLE type, while plain type annotations disables quantification
             only of type variables which are in scope [http://research.microsoft.com/pubs/67012/scoped.pdf]
                 
-(-)     [Suspension of automatic resolution] Resolution can be suspended indeterminately until explicit val construct is used; e.g. double-ticked identifiers could do that.
+(-)     [Suspension of automatic resolution] Resolution can be suspended indeterminately until explicit val construct is used; e.g. double-ticked identifiers (in the expression language) could do that.
 
 (-)     [Ticked infix operators] Support ticked infix operators: '+ for example, as well as '`myinfix` for infixex backticked operators à la Haskell.
 

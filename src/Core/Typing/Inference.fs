@@ -57,8 +57,15 @@ let rec W_expr (ctx : context) (e0 : expr) =
         let! Q = M.get_Q
         let! tθ, kθ = M.get_θ
         let! cs = M.get_constraints
+        let rule =
+            match e with
+            | Var _     -> "VAR"
+            | Lambda _  -> "ABS"
+            | App _     -> "APP"
+            | Let _     -> "LET"
+            | _         -> "e"
         L.tabulate 2
-        L.debug Min "[e]  %O\n[C]  %O\n[Q]  %O\n[S]  %O\n     %O" e cs Q tθ kθ
+        L.debug Min "(%-3s) %O\n[C]   %O\n[Q]   %O\n[S]   %O\n      %O" rule e cs Q tθ kθ
         #endif
         let! (t : ty) = W_expr' ctx e0
         do! resolve_constraints ctx e0
@@ -66,7 +73,7 @@ let rec W_expr (ctx : context) (e0 : expr) =
         let! tθ', kθ' = M.get_θ
         let! cs' = M.get_constraints
         // TODO: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)
-        L.debug Low "[e]  %O\n[:T] %O\n[nf] %O\n[Ft] %O\n[e*] %O\n[C]  %O\n[Q]  %O\n[S]  %O\n     %O\n[C'] %O\n[Q'] %O\n[S'] %O\n     %O" e t t.nf t.ftype e0 cs Q tθ kθ cs' Q' tθ' kθ'
+        L.debug Low "(%-3s) %O\n[:T]  %O\n[nf]  %O\n[F-t] %O\n[e*]  %O\n[C]   %O\n[Q]   %O\n[S]   %O\n      %O\n[C']  %O\n[Q']  %O\n[S']  %O\n      %O" rule e t t.nf t.ftype e0 cs Q tθ kθ cs' Q' tθ' kθ'
         #if DEBUG_BEFORE_INFERENCE
         L.undo_tabulate
         #endif
@@ -163,6 +170,7 @@ and W_expr' ctx e0 =
             yield T_Open_Variant [x, T_Arrow (α, β)]
 
         | Lambda ((x, τo), e) ->
+            // TODO: make the code for Lambda a generic "on_bind" function and use it every time a similar scenario is needed
             let α, tα = ty.fresh_star_var_and_ty
             let! Q0 = M.get_Q
             let! tx = M {
@@ -446,12 +454,12 @@ and W_decl' (ctx : context) (d0 : decl) =
                                         do! M.kunify τ.loc K_Star k
                                         // TODO: another possible behaviour: always bind the flex type even if an F-type has been annotated: this means that ANY annotation would bind flex types
                                         let! te = M {
-                                            if tx.is_flex then
-                                                do! M.subsume τ.loc te.ftype tx
-                                                yield te                        // bind the inferred type when a flex annotation is provided
-                                            else
+                                            if tx.is_ftype then
                                                 do! M.unify τ.loc te.ftype tx
                                                 yield te.ftype                  // bind inferred type as an F-type when the annotation is an F-type
+                                            else
+                                                do! M.subsume τ.loc te.ftype tx
+                                                yield te                        // bind the inferred type when annotation is a flex type instead
                                         }
                                         let! cs = M.get_constraints
                                         yield [b, x, cs, te]

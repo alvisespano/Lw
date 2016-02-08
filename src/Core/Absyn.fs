@@ -136,13 +136,19 @@ with
         match this with
         | Va (n, _) -> n
 
-    static member fresh = Va (fresh_int (), None)
+    static member fresh =
+        let r = Va (fresh_int (), None)
+        #if DEBUG_UNIFY
+        L.hint Low "new fresh var: %O" r
+        #endif
+        r
 
     static member fresh_named s = Va (fresh_int (), Some s)
 
     member this.refresh =
         match this with
-        | Va (_, so) -> Va (fresh_int (), so)
+        | Va (_, Some s) -> var.fresh_named s
+        | Va (_, None)   -> var.fresh
 
     static member private letterize n =
         let start, endd = Config.Printing.dynamic.tyvar_range

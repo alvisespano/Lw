@@ -17,7 +17,7 @@ open FSharp.Common.Prelude
  *
  * DEBUG_NO_TYVAR_NORM      // turn off variable normalization
  * DEBUG_TYVAR_NAMES        // print var number and make it clear whether it is named or anonymous
- * DEBUG_MGU
+ * DEBUG_UNIFY
  * DEBUG_CONSTRAINTS
  * DEBUG_PERF
  * DEBUG_RESOLVE

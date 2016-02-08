@@ -48,12 +48,6 @@ let rec rewrite_row loc t1 t2 r0 l =
     | T_NoRow _ ->
         unexpected "row type expected: %O" __SOURCE_FILE__ __LINE__ r0
                 
-// this implementation differs from HML definition in the paper, but it should be equivalent
-let dom_wrt Q (t : ty) = 
-    let αs = t.fv
-    in
-        Computation.B.set { for α, t : ty in Q do if Set.contains α αs then yield! t.fv }
-
 
 [< RequireQualifiedAccess >]
 module internal Mgu =
@@ -102,129 +96,175 @@ module internal Mgu =
             for c in cs do
                 check_skolem_escape ctx c θ Q
 
-        let rec mgu ctx Q t1_ t2_ =
-            L.mgu "[mgu] %O == %O\n      Q = %O" t1_ t2_ Q
-            let Q, (tθ, kθ) as r = mgu' ctx Q t1_ t2_
-            L.mgu "[mgu] %O\n      %O\n      Q' = %O" tθ kθ Q
-            r
+        let check_circularity_wrt α Q t =
+            match Q with
+            | Q_Slice α (_, _, Q2) -> Set.contains α (T_ForallsQ (Q2, t)).fv
+            | _                    -> false
+    
+//
+//        let rec mgu ctx Q t1_ t2_ =
+//            #if DEBUG_UNIFY
+//            L.mgu "[mgu] %O == %O\n      Q = %O" t1_ t2_ Q
+//            #endif
+//            let Q, (tθ, kθ) as r = mgu' ctx Q t1_ t2_
+//            #if DEBUG_UNIFY
+//            L.mgu "[mgu] %O == %O\n      = %O\n      %O\n      Q' = %O" t1_ t2_ tθ kθ Q
+//            #endif
+//            r
 
-        and subsume ctx Q t1_ t2_ =
-            L.mgu "[sub] %O :> %O\n      Q = %O\n" t1_ t2_ Q
-            let Q, (tθ, kθ) as r = subsume' ctx Q t1_ t2_
-            L.mgu "[sub] %O\n      %O\n      Q' = %O" tθ kθ Q
-            r
+//        let rec subsume ctx Q t1_ t2_ =
+//            #if DEBUG_UNIFY
+//            L.mgu "[sub] %O :> %O\n      Q = %O\n" t1_ t2_ Q
+//            #endif
+//            let Q, (tθ, kθ) as r = subsume' ctx Q t1_ t2_
+//            #if DEBUG_UNIFY
+//            L.mgu "[sub=] %O :> %O\n       %O\n       %O\n       Q' = %O" t1_ t2_ tθ kθ Q
+//            #endif
+//            r
 
-        and mgu_scheme ctx Q t1_ t2_ =
-            L.mgu "[mgu-scheme] %O == %O\n             Q = %O" t1_ t2_ Q
-            let Q, (tθ, kθ), t as r = mgu_scheme' ctx Q t1_ t2_
-            L.mgu "[mgu-scheme] %O\n             %O\n             Q' = %O\n             t = %O" tθ kθ Q t
-            r
+//        and mgu_scheme ctx Q t1_ t2_ =
+//            #if DEBUG_UNIFY
+//            L.mgu "[mgu-scheme] %O == %O\n             Q = %O" t1_ t2_ Q
+//            #endif
+//            let Q, (tθ, kθ), t as r = mgu_scheme' ctx Q t1_ t2_
+//            #if DEBUG_UNIFY
+//            L.mgu "[mgu-scheme=] %O == %O\n              %O\n              %O\n              Q' = %O\n              t = %O" t1_ t2_ tθ kθ Q t
+//            #endif
+//            r
 
-        and subsume' ctx (Q : prefix) (t1_ : ty) (t2_ : ty) =
+        let rec subsume ctx (Q : prefix) (t1_ : ty) (t2_ : ty) =
             assert t1_.is_ftype
             let t1_ = t1_.nf
             let t2_ = t2_.nf
-            match t1_, t2_ with            
-            | _, T_Bottom k ->          // this case comes from HML implementation - it is not in the paper
-                Q, kmgu ctx t1_.kind k   
+            #if DEBUG_UNIFY
+            L.mgu "[sub] %O :> %O\n      Q = %O\n" t1_ t2_ Q
+            #endif
+            let Q, (tθ, kθ) as r =
+                match t1_, t2_ with            
+                | _, T_Bottom k ->          // this case comes from HML implementation - it is not in the paper
+                    assert false
+                    Q, kmgu ctx t1_.kind k   
 
-            | T_Foralls_F (αs, t1), T_ForallsQ (Q', t2) ->            
-                assert Q.is_disjoint Q'
-                let skcs, t1' = skolemize_ty αs t1
-                let Q1, (tθ1, kθ1) = mgu ctx (Q + Q') t1' t2
-                let Q2, Q3 = Q1.split Q.dom
-                let θ2 = tθ1.remove (Q3.dom (*+ Q'.dom*)), kθ1      // TODO: WARNING: this has been fixed by me! the "+ Q'.dom" part does not come from the HML paper
-                check_skolems_escape ctx skcs θ2 Q2
-                Q2, θ2
+                | T_Foralls_F (αs, t1), T_ForallsQ (Q', t2) ->            
+                    assert Q.is_disjoint Q' // TODO: perhaps this actually means that Q' must be refreshed! if this assert is triggered consider to remove it and just refresh the flex type
+                    let skcs, t1' = skolemize_ty αs t1
+                    let Q1, (tθ1, kθ1) = mgu ctx (Q + Q') t1' t2
+                    let Q2, Q3 = Q1.split Q.dom
+                    let θ2 = tθ1.remove (Q3.dom (*+ Q'.dom*)), kθ1      // TODO: WARNING: this has been fixed by me! the "+ Q'.dom" part does not come from the HML paper
+                    check_skolems_escape ctx skcs θ2 Q2
+                    Q2, θ2
+            #if DEBUG_UNIFY
+            L.mgu "[sub=] %O :> %O\n       %O\n       %O\n       Q' = %O" t1_ t2_ tθ kθ Q
+            #endif
+            r
 
-        and mgu_scheme' ctx (Q : prefix) (t1_ : ty)  (t2_ : ty) =
+
+        and mgu_scheme ctx (Q : prefix) (t1_ : ty)  (t2_ : ty) =
             let t1_ = t1_.nf
             let t2_ = t2_.nf
-            match t1_, t2_ with
-            | (T_Bottom k, (_ as t))
-            | (_ as t, T_Bottom k) -> Q, kmgu ctx k t.kind, t
+            #if DEBUG_UNIFY
+            L.mgu "[mgu-scheme] %O == %O\n             Q = %O" t1_ t2_ Q
+            #endif
+            let Q, (tθ, kθ), t as r =
+                match t1_, t2_ with
+                | (T_Bottom k, (_ as t))
+                | (_ as t, T_Bottom k) -> Q, kmgu ctx k t.kind, t
 
-            | T_ForallsQ (Q1, t1), T_ForallsQ (Q2, t2) ->
-                assert (let p (a : prefix) b = a.is_disjoint b in p Q Q1 && p Q1 Q2 && p Q Q2)
-                let Q3, θ3 = mgu ctx (Q + Q1 + Q2) t1 t2
-                let Q4, Q5 = Q3.split Q.dom
-                in
-                    Q4, θ3, T_ForallsQ (Q5, S θ3 t1)
+                | T_ForallsQ (Q1, t1), T_ForallsQ (Q2, t2) ->
+                    assert (let p (a : prefix) b = a.is_disjoint b in p Q Q1 && p Q1 Q2 && p Q Q2)  //  TODO: remove this where unnecessary thanks to refreshment of Q1 and Q2
+                    let Q3, θ3 = mgu ctx (Q + Q1 + Q2) t1 t2
+                    let Q4, Q5 = Q3.split Q.dom
+                    in
+                        Q4, θ3, T_ForallsQ (Q5, S θ3 t1)
+            #if DEBUG_UNIFY
+            L.mgu "[mgu-scheme=] %O == %O\n              %O\n              %O\n              Q' = %O\n              t = %O" t1_ t2_ tθ kθ Q t
+            #endif
+            r
 
-        and mgu' (ctx : mgu_context) Q t1_ t2_ : prefix * tksubst =
+
+        and mgu (ctx : mgu_context) Q0 t1_ t2_ : prefix * tksubst =
             let loc = ctx.loc
             let rec R (Q0 : prefix) (t1 : ty) (t2 : ty) =
                 assert t1.is_ftype
                 assert t2.is_ftype
                 let t1 = t1.nf
                 let t2 = t2.nf
-                match t1, t2 with
-                | T_Cons (x, k1), T_Cons (y, k2) when x = y -> Q0, kmgu ctx k1 k2
-                | T_Var (α, k1), T_Var (β, k2) when α = β   -> Q0, kmgu ctx k1 k2
+                #if DEBUG_UNIFY
+                L.mgu "[mgu] %O == %O\n      Q = %O" t1 t2 Q0
+                #endif
+                let Q, (tθ, kθ) as r =
+                    match t1, t2 with
+                    | T_Cons (x, k1), T_Cons (y, k2) when x = y -> Q0, kmgu ctx k1 k2
+                    | T_Var (α, k1), T_Var (β, k2) when α = β   -> Q0, kmgu ctx k1 k2
                                       
-                | (T_Row _ as s), T_Row_Ext (l, t, (T_Row (_, ρo) as r)) ->
-                    let t', s', tθ1 = rewrite_row loc t1 t2 s l
-                    let θ1 = tθ1, ksubst.empty
-                    Option.iter (fun ρ -> if Set.contains ρ tθ1.dom then Report.Error.row_tail_circularity loc ρ tθ1) ρo
-                    let Q2, θ2 = R Q0 (S θ1 t) (S θ1 t')
-                    let Q3, θ3 = let θ = θ2 ** θ1 in R Q2 (S θ r) (S θ s')
-                    in
-                        Q3, θ3 ** θ2 ** θ1
+                    | (T_Row _ as s), T_Row_Ext (l, t, (T_Row (_, ρo) as r)) ->
+                        let t', s', tθ1 = rewrite_row loc t1 t2 s l
+                        let θ1 = tθ1, ksubst.empty
+                        Option.iter (fun ρ -> if Set.contains ρ tθ1.dom then Report.Error.row_tail_circularity loc ρ tθ1) ρo
+                        let Q2, θ2 = R Q0 (S θ1 t) (S θ1 t')
+                        let Q3, θ3 = let θ = θ2 ** θ1 in R Q2 (S θ r) (S θ s')
+                        in
+                            Q3, θ3 ** θ2 ** θ1
 
-                | T_Forall ((α1, tb1), t1), T_Forall ((α2, tb2), t2) ->
-                    let k1 = tb1.kind
-                    let k2 = tb2.kind
-                    let θ0 = kmgu ctx k1 k2 ** kmgu ctx t1.kind t2.kind
-                    let skcs1, t1 = skolemize_ty [α1, k1] (S θ0 t1)
-                    let skcs2, t2 = skolemize_ty [α2, k2] (S θ0 t2)
-                    let Q1, θ1 = let S = S θ0 in R Q0 (S t1) (S t2)
-                    check_skolems_escape ctx (skcs1 + skcs2) θ1 Q1
-                    Q1, θ1 ** θ0
+                    | T_Forall ((α1, tb1), t1), T_Forall ((α2, tb2), t2) ->
+                        let k1 = tb1.kind
+                        let k2 = tb2.kind
+                        let θ0 = kmgu ctx k1 k2 ** kmgu ctx t1.kind t2.kind
+                        let skcs1, t1 = skolemize_ty [α1, k1] (S θ0 t1)
+                        let skcs2, t2 = skolemize_ty [α2, k2] (S θ0 t2)
+                        let Q1, θ1 = let S = S θ0 in R Q0 (S t1) (S t2)
+                        check_skolems_escape ctx (skcs1 + skcs2) θ1 Q1
+                        Q1, θ1 ** θ0
 
-                | T_Var (α1, k1), T_NamedVar (α2, k2) // prefer named over anonymous when unifying var vs. var
-                | T_NamedVar (α2, k2), T_Var (α1, k1)
-                | T_Var (α1, k1), T_Var (α2, k2) ->
-                    let θ0 = kmgu ctx k1 k2
-                    let α1t = Q0.lookup α1
-                    let α2t = Q0.lookup α2
-                    // occurs check between one tyvar into the other's type bound and the other way round
-                    let check α t = if Set.contains α (dom_wrt Q0 t) then let S = S θ0 in Report.Error.circularity loc (S t1_) (S t2_) (T_Var (α, t.kind)) (S t2_)
-                    check α1 α2t
-                    check α2 α1t
-                    let Q1, θ1, t = mgu_scheme ctx Q (S θ0 α1t) (S θ0 α2t)  // TODO: this θ0 subst should be applied also on the 2 types involved in the 2 updates below?
-                    let Q2, θ2 = Q1.update_prefix_with_subst (α1, t2)
-                    let Q3, θ3 = Q2.update_prefix_with_bound (α2, t)
-                    in
-                        Q3, θ3 ** θ2 ** θ1 ** θ0
+                    | T_Var (α1, k1), T_NamedVar (α2, k2) // prefer named over anonymous when unifying var vs. var
+                    | T_NamedVar (α2, k2), T_Var (α1, k1)
+                    | T_Var (α1, k1), T_Var (α2, k2) ->
+                        let θ0 = kmgu ctx k1 k2
+                        let α1t = Q0.lookup α1
+                        let α2t = Q0.lookup α2
+                        // occurs check between one tyvar into the other's type bound and the other way round
+                        let check α t = if check_circularity_wrt α Q0 t then let S = S θ0 in Report.Error.circularity loc (S t1_) (S t2_) (T_Var (α, t.kind)) (S t2_)
+                        check α1 α2t
+                        check α2 α1t
+                        let Q1, θ1, t = mgu_scheme ctx Q0 (S θ0 α1t) (S θ0 α2t)  // TODO: this θ0 subst should be applied also on the 2 types involved in the 2 updates below?
+                        let Q2, θ2 = Q1.update_prefix_with_subst (α1, t2)
+                        let Q3, θ3 = Q2.update_prefix_with_bound (α2, t)
+                        in
+                            Q3, θ3 ** θ2 ** θ1 ** θ0
 
-                | T_Var (α, k), t
-                | t, T_Var (α, k) ->
-                    let αt = Q0.lookup α
-                    let θ0 = kmgu ctx k t.kind
-                    // occurs check
-                    if Set.contains α (dom_wrt Q t) then let S = S θ0 in Report.Error.circularity loc (S t1_) (S t2_) (S (T_Var (α, k))) (S t)
-                    let Q1, θ1 = subsume ctx Q (S θ0 t) (S θ0 αt)
-                    let Q2, θ2 = let S = S <| θ1 ** θ0 in Q1.update_prefix_with_subst (α, S t)
-                    in
-                        Q2, θ2 ** θ1 ** θ0
+                    | T_Var (α, k), t
+                    | t, T_Var (α, k) ->
+                        let αt = Q0.lookup α
+                        let θ0 = kmgu ctx k t.kind
+                        // occurs check
+                        if check_circularity_wrt α Q0 t then let S = S θ0 in Report.Error.circularity loc (S t1_) (S t2_) (S (T_Var (α, k))) (S t)
+                        let Q1, θ1 = subsume ctx Q0 (S θ0 t) (S θ0 αt)
+                        let Q2, θ2 = let S = S <| θ1 ** θ0 in Q1.update_prefix_with_subst (α, S t)
+                        in
+                            Q2, θ2 ** θ1 ** θ0
 
-                | T_App (t1, t2), T_App (t1', t2') ->
-                    let θ0 = kmgu ctx (K_Arrow (t2.kind, kind.fresh_var)) t1.kind ** kmgu ctx (K_Arrow (t2'.kind, kind.fresh_var)) t1'.kind
-                    let Q1, θ1 = let S = S θ0 in R Q0 (S t1) (S t1')
-                    let Q2, θ2 = let S = S <| θ1 ** θ0 in R Q1 (S t2) (S t2')
-                    in
-                        Q2, θ2 ** θ1 ** θ0
+                    | T_App (t1, t2), T_App (t1', t2') ->
+    //                    let θ0 = kmgu ctx (K_Arrow (t2.kind, kind.fresh_var)) t1.kind ** kmgu ctx (K_Arrow (t2'.kind, kind.fresh_var)) t1'.kind   // TODO: is this line needed?
+                        let Q1, θ1 = R Q0 t1 t1'
+                        let Q2, θ2 = let S = S θ1 in R Q1 (S t2) (S t2')
+                        in
+                            Q2, θ2 ** θ1
                                                            
-                | t1, t2 -> 
-                    raise (Mismatch (t1, t2))
+                    | t1, t2 -> 
+                        raise (Mismatch (t1, t2))
 
-            try
-                let Q, (tθ, _ as θ) = R Q t1_ t2_
-                // check post-condition of HML unify function
-                for _, t in tθ do
-                    assert t.nf.is_ftype
-                Q, θ
-            with Mismatch (t1, t2) -> Report.Error.type_mismatch loc t1_ t2_ t1 t2
+                #if DEBUG_UNIFY
+                L.mgu "[mgu=] %O == %O\n       %O\n       %O\n       Q' = %O" t1 t2 tθ kθ Q
+                #endif
+                r
+            in
+                try
+                    let Q, (tθ, _ as θ) = R Q0 t1_ t2_
+                    // check post-condition of HML unify function
+                    for _, t in tθ do
+                        assert t.nf.is_ftype
+                    Q, θ
+                with Mismatch (t1, t2) -> Report.Error.type_mismatch loc t1_ t2_ t1 t2
 
        
 
