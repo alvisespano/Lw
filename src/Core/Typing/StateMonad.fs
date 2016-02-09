@@ -29,7 +29,7 @@ type [< NoComparison; NoEquality; System.Diagnostics.DebuggerDisplayAttribute("{
 
         // extras
         constraints     : constraints       // global constraints
-        named_tyvars    : Env.t<id, int>    // named type variables
+        scoped_vars    : Env.t<id, int>    // named type variables
     }
 with
     override this.ToString () = this.pretty
@@ -48,7 +48,7 @@ with
             Q   = Q_Nil
 
             constraints     = constraints.empty
-            named_tyvars    = Env.empty
+            scoped_vars    = Env.empty
         }
 
     member this.kθ = snd this.θ 
@@ -57,7 +57,7 @@ with
 type K<'a> = Monad.M<'a, state>
 
 let (|Jb_Overload|Jb_Var|Jb_Data|Jb_OverVar|Jb_Unbound|) = function
-    | Some (Jk_Var _, { mode = Jm_Overloadable; scheme = Ungeneralized t }) -> Jb_Overload (refresh_ty t)
+    | Some (Jk_Var _, { mode = Jm_Overloadable; scheme = Ungeneralized t }) -> Jb_Overload t.refresh_fv
     | Some (Jk_Var _, { mode = Jm_Normal; scheme = σ })                     -> Jb_Var σ
     | Some (Jk_Inst _, { mode = Jm_Overloadable; scheme = _ })              -> Jb_OverVar
     | Some (Jk_Data _, { mode = Jm_Normal; scheme = σ })                    -> Jb_Data σ
@@ -74,7 +74,7 @@ type basic_builder (loc : location) =
     member __.get_Q st = st.Q, st
     member __.get_constraints st = st.constraints, st
     member M.get_θ = M { let! s = M.get_state in return s.θ }
-    member __.get_named_tyvars st = st.named_tyvars, st
+    member __.get_scoped_vars st = st.scoped_vars, st
 
     member __.lift_Γ f st = (), { st with Γ = f st.Γ |> subst_jenv st.θ }
     member __.lift_Δ f st = (), { st with δ = f st.δ }
@@ -82,7 +82,7 @@ type basic_builder (loc : location) =
     member __.lift_Q f st = (), { st with Q = f st.Q }
     member __.lift_θ f st = (), { st with θ = f st.θ }
     member __.lift_constraints f (st : state) = (), { st with constraints = subst_constraints st.θ (f st.constraints) }
-    member __.lift_named_tyvars f (st : state) = (), { st with named_tyvars = f st.named_tyvars }
+    member __.lift_scoped_vars f (st : state) = (), { st with scoped_vars = f st.scoped_vars }
 
     member M.set_Γ x = M.lift_Γ (fun _ -> x)
     member M.set_Δ x = M.lift_Δ (fun _ -> x)
@@ -91,7 +91,7 @@ type basic_builder (loc : location) =
     [< System.Obsolete("Global substitution should never be set explicitly: use update_θ method instead.") >]
     member M.set_θ x = M.lift_θ (fun _ -> x)
     member M.set_constraints x = M.lift_constraints (fun _ -> x)
-    member M.set_named_tyvars x = M.lift_named_tyvars (fun _ -> x)
+    member M.set_scoped_vars x = M.lift_scoped_vars (fun _ -> x)
 
     member M.clear_constraints = M.set_constraints constraints.empty
 
@@ -110,36 +110,30 @@ type basic_builder (loc : location) =
                           Γ = subst_jenv θ s.Γ
                           Q = subst_prefix θ s.Q
                           constraints = subst_constraints θ s.constraints
-                          named_tyvars = s.named_tyvars })
+                          scoped_vars = s.scoped_vars })
             let! tθ', _ = M.get_θ
             L.debug Normal "[S+] %O\n     = %O" tθ tθ'
         }
 
-    member private M.gen t =
-        M {
-            let! { Γ = Γ; constraints = cs; Q = Q; θ = tθ, kθ } as st = M.get_state
-            let vas = Computation.B.set { for x, n in st.named_tyvars do yield Va (n, Some x) }
-            return generalize (cs, Q, subst_ty (tθ, kθ) t) Γ vas
-        }
-
-    member private M.kgen k =
-        M {
-            let! { γ = γ; θ = _, kθ } = M.get_state
-            return kgeneralize (subst_kind kθ k) γ
-        }
 
     member private __.lookup report (env : Env.t<_, _>) x =
         try env.lookup x
         with Env.UnboundSymbol x -> report loc x
 
-    member M.add_named_tyvar x =
+    member M.add_scoped_var x =
         M {
-            let! vas = M.get_named_tyvars
+            let! vas = M.get_scoped_vars
             match vas.search x with
             | Some n -> return Va (n, Some x)
             | None   -> let Va (n, _) as α = var.fresh_named x
-                        do! M.lift_named_tyvars (fun vas -> vas.bind x n)
+                        do! M.lift_scoped_vars (fun vas -> vas.bind x n)
                         return α
+        }
+
+    member M.get_scoped_vars_as_set =
+        M {
+            let! vas = M.get_scoped_vars
+            return Computation.B.set { for x, n in vas do yield Va (n, Some x) }
         }
 
     member M.bind_γ x kσ =
@@ -152,7 +146,9 @@ type basic_builder (loc : location) =
         
     member M.gen_bind_γ x k =
         M {
-            let! kσ = M.kgen k
+            let! { γ = γ; θ = _, kθ } = M.get_state
+            let! αs = M.get_scoped_vars_as_set
+            let kσ = kgeneralize (subst_kind kθ k) γ αs
             return! M.bind_γ x kσ
         }
 
@@ -203,12 +199,17 @@ type basic_builder (loc : location) =
             return! M.bind_Γ (Jk_Var x) { mode = Jm_Normal; scheme = Ungeneralized t }
         }
 
-    member M.gen_bind_Γ jk jm (t : ty) =
+    // TODO: check generalization and finalization
+    member M.gen_bind_Γ jk jm (Fx_ForallsQ (Q, ϕ1)) =
         M {
-            let! σ = M.gen t
+            let! cs = M.get_constraints
+            let! αs = M.get_scoped_vars_as_set
+            let _, Q2 = Q.split αs
+            let! ϕ = M.updated (Fx_ForallsQ (Q2, ϕ1))
+            let σ = { constraints = cs; fxty = ϕ }
             return! M.bind_Γ jk { mode = jm; scheme = σ }
         }
-
+        
     member M.add_prefix α t =
         M {
             do! M.lift_Q (fun Q -> Q + (α, t))
@@ -229,18 +230,29 @@ type basic_builder (loc : location) =
             do! M.lift_constraints (fun cs -> cs.remove c)
         }
 
-    member M.instantiante_and_inherit_constraints σ =
+    member M.inherit_constraints { constraints = cs; fxty = ϕ } =
         M {
-            let cs, Q, t = instantiate σ
             do! M.add_constraints cs
-            return cs, Q, t
+            return cs, ϕ
         }
 
-    member M.fork_named_tyvars f =
+    member M.updated (t : ty) =
         M {
-            let! Γ = M.get_named_tyvars
+            let! θ = M.get_θ
+            return subst_ty θ t
+        }
+
+    member M.updated (ϕ : fxty) =
+        M {
+            let! θ = M.get_θ
+            return subst_fxty θ ϕ
+        }
+
+    member M.fork_scoped_vars f =
+        M {
+            let! Γ = M.get_scoped_vars
             let! r = f
-            do! M.set_named_tyvars Γ
+            do! M.set_scoped_vars Γ
             return r
         }
 
@@ -283,31 +295,29 @@ type basic_builder (loc : location) =
 type typing_builder (loc) =
     inherit basic_builder (loc)
 
-    member M.Yield (t : ty) = M { let! t = M.update_ty t in return t }
+    member M.Yield (ϕ : fxty) = M { let! ϕ = M.updated ϕ in return ϕ }
+    member M.Yield (t : ty) = M { yield Fx_F_Ty t }
     
     // used when inferring let bindings    
     member M.Yield l =
         M {
-            return! M.List.map (fun (b : _, x : id, cs, t : ty) -> M {
-                        let! t = M.update_ty t
+            return! M.List.map (fun (b : _, x : id, cs, ϕ : fxty) -> M {
+                        let! ϕ = M.updated ϕ
                         let! cs = M.update_constraints cs
-                        return b, x, cs, t
+                        return b, x, cs, ϕ
                     }) l                    
         }
 
     // used by some HML rules inferring foralls where the type part have been substituted
-    member M.Yield ((Q : prefix, t : ty)) = M { let! t = M.update_ty t in return T_ForallsQ (Q, t) }
+    member M.Yield ((Q : prefix, t : ty)) = M { let! t = M.updated t in return Fx_ForallsQ (Q, Fx_F_Ty t) }   // TODO: can we just use update_fxty here?
 
     // used for typing row types
-    member M.Yield ((x : id, t : ty)) = M { let! t = M.update_ty t in return x, t }
+    member M.Yield ((x : id, ϕ : fxty)) = M { let! ϕ = M.updated ϕ in return x, ϕ }
 
     // banged version of Yields above
-    member M.YieldFrom f = M { let! (r : ty) = f in yield r }
-    member M.YieldFrom f = M { let! (r : list<_ * id * constraints * ty>) = f in yield r }
+    member M.YieldFrom f = M { let! (r : fxty) = f in yield r }
+    member M.YieldFrom f = M { let! (r : list<_ * id * constraints * fxty>) = f in yield r }
 
-//  member __.Yield (t : ty) = fun (s : state) -> subst_ty s.θ t, s
-//  member __.Yield<'a> ((x : 'a, t : ty)) = fun (s : state) -> (x, subst_ty s.θ t), s
-//    member M.ForallsQ (Q, t) = M { let! t = M.update_ty t in yield T_ForallsQ (Q, t) }  // this is a shortcut for yielding foralls where the type part have been substituted
 
     member M.fork_Q f =
         M {
@@ -315,12 +325,6 @@ type typing_builder (loc) =
             let! r = f
             do! M.set_Q Q
             return r
-        }
-
-    member M.update_ty t =
-        M {
-            let! θ = M.get_θ
-            return subst_ty θ t
         }
 
     member M.update_constraints cs =
@@ -354,17 +358,17 @@ type typing_builder (loc) =
                 do! M.extend (α, t)
         }
 
-    member M.update_prefix_with_bound (Q : prefix) (α, t) =
+    member M.update_prefix_with_bound (Q : prefix) (α, ϕ : fxty) =
         M {
-            let! t = M.update_ty t
-            let Q, θ = Q.update_prefix_with_bound (α, t)
+            let! ϕ = M.updated ϕ
+            let Q, θ = Q.update_prefix_with_bound (α, ϕ)
             do! M.set_Q Q
             do! M.update_θ θ
         }
 
-    member M.update_prefix_with_subst (Q : prefix) (α, t) =
+    member M.update_prefix_with_subst (Q : prefix) (α, t : ty) =
         M {
-            let! t = M.update_ty t
+            let! t = M.updated t
             let Q, θ = Q.update_prefix_with_subst (α, t)
             do! M.set_Q Q
             do! M.update_θ θ            

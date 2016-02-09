@@ -19,7 +19,7 @@ open Lw.Core.Globals
 open Lw.Core.Absyn
 
 
-// types, schemes, predicates, constraints, environments, etc.
+// types, schemes, constraints, environments, etc.
 //
 
 type kscheme = { forall : Set<var>; kind : kind }
@@ -32,24 +32,26 @@ type kconsenv = Env.t<id, var list * kind>
 
 type tenv = Env.t<id, ty>
 
+
+// System-F types
+
 and [< NoComparison; CustomEquality; DebuggerDisplay("{ToString()}") >] ty =
     | T_Cons of id * kind
     | T_Var of var * kind    
     | T_HTuple of ty list   // TODO: try to design a more general Rowed type which does not expect star on fields, and encode htuples with it
     | T_App of (ty * ty)
-    | T_Forall of (var * ty) * ty
+    | T_Forall of var * ty
     | T_Closure of id * tenv ref * ty_expr * kind
-    | T_Bottom of kind
+//    | T_Bottom of kind
 with
     static member binding_separator = Config.Printing.type_annotation_sep
-    static member reduction_separator = Config.Printing.ftype_instance_sep
+//    static member reduction_separator = Config.Printing.ftype_instance_sep
 
     member this.kind =
         match this with
         | T_Cons (_, k)
         | T_Var (_, k)
-        | T_Closure (_, _, _, k)
-        | T_Bottom k             -> k
+        | T_Closure (_, _, _, k) -> k
         | T_HTuple ts            -> K_HTuple [for t in ts do yield t.kind]
         | T_Forall (_, t)        -> t.kind
         | T_App (t1, _)          -> match t1.kind with
@@ -60,29 +62,61 @@ with
 
     override this.GetHashCode () =
         match this with
-        | T_Bottom k                -> k.GetHashCode ()
         | T_Cons (x, k)             -> (x, k).GetHashCode ()
         | T_Var (α, k)              -> (α, k).GetHashCode ()
         | T_HTuple ts               -> ts.GetHashCode ()
         | T_App (t1, t2)            -> (t1, t2).GetHashCode ()
-        | T_Forall ((α, t1), t2)    -> (α, t1, t2).GetHashCode ()
+        | T_Forall (α, t)           -> (α, t).GetHashCode ()
         | T_Closure (_, _, _, _)    -> unexpected "hashing type closure: %O" __SOURCE_FILE__ __LINE__ this
 
     interface IEquatable<ty> with
         member x.Equals y =
             x.kind = y.kind
                  && match x, y with
-                    | T_Cons (x, _), T_Cons (y, _)      -> x = y
-                    | T_Var (α, _), T_Var (β, _)        -> α = β
-                    | T_App (t1, t2), T_App (t1', t2')  -> t1 = t1' && t2 = t2'
-                    | T_Forall ((α, t1), t2),
-                        T_Forall ((α', t1'), t2')       -> α = α' && t1 = t1' && t2 = t2'
-                    | T_Bottom _, T_Bottom _            -> true
+                    | T_Cons (x, _), T_Cons (y, _)          -> x = y
+                    | T_Var (α, _), T_Var (β, _)            -> α = β
+                    | T_App (t1, t2), T_App (t1', t2')      -> t1 = t1' && t2 = t2'
+                    | T_Forall (α, t1), T_Forall (β, t2)    -> α = β && t1 = t2
                     | T_HTuple ts, T_HTuple ts'
-                        when ts.Length = ts'.Length     -> List.fold2 (fun b t t' -> b && t = t') true ts ts'
+                        when ts.Length = ts'.Length         -> List.fold2 (fun b t t' -> b && t = t') true ts ts'
                     | T_Closure _, _
-                    | _, T_Closure _                    -> L.unexpected_error "comparing type closures: %O = %O" x y; false
-                    | _                                 -> false
+                    | _, T_Closure _                        -> L.unexpected_error "comparing type closures: %O = %O" x y; false
+                    | _                                     -> false
+
+
+// flexible types
+
+type [< NoComparison; CustomEquality; DebuggerDisplay("{ToString()}") >] fxty =
+    | Fx_Forall of (var * fxty) * fxty
+    | Fx_Bottom of kind
+    | Fx_F_Ty of ty
+with
+    static member binding_separator = Config.Printing.type_annotation_sep
+    static member reduction_separator = Config.Printing.ftype_instance_sep
+
+    member this.kind =
+        match this with
+        | Fx_Bottom k             -> k
+        | Fx_Forall (_, ϕ)        -> ϕ.kind
+        | Fx_F_Ty t               -> t.kind
+
+    override x.Equals y = CustomCompare.equals_with (fun x y -> (x :> IEquatable<fxty>).Equals y) x y
+
+    override this.GetHashCode () =
+        match this with
+        | Fx_Bottom k                -> k.GetHashCode ()
+        | Fx_Forall ((α, ϕ1), ϕ2)    -> (α, ϕ1, ϕ2).GetHashCode ()
+        | Fx_F_Ty t                  -> t.GetHashCode ()
+
+    interface IEquatable<fxty> with
+        member x.Equals y =
+            x.kind = y.kind
+                 && match x, y with
+                    | Fx_Forall ((α, t1), t2),
+                        Fx_Forall ((α', t1'), t2')  -> α = α' && t1 = t1' && t2 = t2'
+                    | Fx_Bottom k1, Fx_Bottom k2    -> k1 = k2
+                    | Fx_F_Ty t1, Fx_F_Ty t2        -> t1 = t2
+                    | _                             -> false
 
 
 // pure contexts
@@ -245,15 +279,15 @@ with
     
 type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] scheme =
     {
-        constraints      : constraints
 //        type_constraints : type_constraints
-        ty               : ty
+        constraints      : constraints
+        fxty               : fxty
     }
 
 type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] prefix =
     | Q_Nil
-    | Q_Cons of prefix * (var * ty)
-    interface IEnumerable<var * ty> with
+    | Q_Cons of prefix * (var * fxty)
+    interface IEnumerable<var * fxty> with
         member this.GetEnumerator () = this.toSeq.GetEnumerator ()
 
     interface Collections.IEnumerable with
@@ -273,10 +307,10 @@ type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] prefix =
     member Q.is_disjoint (Q' : prefix) = (Set.intersect Q.dom Q'.dom).IsEmpty
 
     static member pretty_item = function
-        | α, T_Bottom K_Star        -> sprintf "%O" α
-        | α, T_Bottom k             -> sprintf "(%O :: %O)" α k
-        | α, t when t.kind = K_Star -> sprintf "(%O %s %O)" α Config.Printing.flexible_quantified_tyvar_sep t
-        | α, t                      -> sprintf "(%O :: %O >= %O)" α t.kind t
+        | α, Fx_Bottom K_Star        -> sprintf "%O" α
+        | α, Fx_Bottom k             -> sprintf "(%O :: %O)" α k
+        | α, t when t.kind = K_Star  -> sprintf "(%O %s %O)" α Config.Printing.flexible_quantified_tyvar_sep t
+        | α, t                       -> sprintf "(%O :: %O >= %O)" α t.kind t
 
     member Q.pretty = mappen_strings_or_nothing prefix.pretty_item Config.Printing.empty_prefix Config.Printing.forall_prefix_sep Q
     override this.ToString () = this.pretty
@@ -286,7 +320,7 @@ type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] prefix =
         | Q_Nil         -> z
         | Q_Cons (Q, i) -> f (Q.fold f z) i
 
-    static member (+) (Q : prefix, (α, t : ty)) = Q_Cons (Q, (α, t))
+    static member (+) (Q : prefix, (α, t : fxty)) = Q_Cons (Q, (α, t))
     static member (+) (Q1 : prefix, Q2 : prefix) = Q2.fold (fun (Q : prefix) (α, t) -> Q + (α, t)) Q1
 
 
@@ -390,7 +424,10 @@ let rec (|Foralls|) (|Forall|_|) = function
     | t                                        -> ([], t)
 
 let T_Foralls = Foralls T_Forall
-let (|T_Foralls|) = (|Foralls|) (function T_Forall ((α, t1), t2) -> Some ((α, t1), t2) | _ -> None)
+let (|T_Foralls|) = (|Foralls|) (function T_Forall (α, t) -> Some (α, t) | _ -> None)
+
+let Fx_Foralls = Foralls Fx_Forall
+let (|Fx_Foralls|) = (|Foralls|) (function Fx_Forall (αt, t) -> Some (αt, t) | _ -> None)
 
 let T_ConsApps ((x, k), ts) = T_Apps (T_Cons (x, k) :: ts)
 let (|T_ConsApps|_|) = function
@@ -477,7 +514,8 @@ type [< NoComparison; NoEquality >] subst<'t> (env : Env.t<var, 't>) =
     member __.map f = new subst<'t> (env.map f)
     member __.search_by f = env.search_by f
 
-    member __.pretty = if env.is_empty then "0" else env.pretty_by_binding (fun α t -> sprintf "[%O = %O]" α t) ""
+    static member pretty_item (α : var) (t : 't) = sprintf "[%O %s %O]" α Config.Printing.substitution_sep t
+    member __.pretty = if env.is_empty then "0" else env.pretty_by_binding subst.pretty_item ""
     override this.ToString () = this.pretty
       
     member private θ1.append (θ2 : subst<_>) = new subst<'t> (θ1.env + θ2.env)
@@ -494,63 +532,85 @@ type tksubst = tsubst * ksubst
 
 let empty_θ = tsubst.empty, ksubst.empty
 
-let var_refresher αs = new vasubst (Seq.fold (fun (env : Env.t<_, _>) (α : var) -> env.bind α α.refresh) Env.empty αs)
+//let var_refresher αs = new vasubst (Seq.fold (fun (env : Env.t<_, _>) (α : var) -> env.bind α α.refresh) Env.empty αs)
 
 
 // type and kind augmentations for substituting variables
 //
+//type kind with
+//    member internal k.map_vars on_kvar (αθ : subst<_>) S =
+//        match k with
+//        | K_Var α ->
+//            match αθ.search α with
+//            | Some β -> on_kvar α β
+//            | None   -> k
+//
+//        | K_Cons (x, ks) -> K_Cons (x, List.map S ks)
+//
+//    member k.subst_vars (αθ : vasubst) =
+//        let S (k : kind) = k.subst_vars αθ
+//        in
+//            k.map_vars (fun _ β -> K_Var β) αθ S
+//
+//type ty with
+//    member this.on_var f =
+//        let rec l ts = List.fold (function None -> R | Some _ as r -> fun _ -> r) None ts
+//        and R = function
+//            | T_Var (α, k)              -> f α k
+//            | T_HTuple ts               -> l ts
+//            | T_Forall (_, t)           -> l [t]
+//            | T_App (t1, t2)            -> l [t1; t2]
+//            | T_Closure _
+//            | T_Var _
+//            | T_Cons _                  -> None
+//        in
+//            R this
+//
+//    member this.on_given_var f α = this.on_var (fun β k -> if α = β then Some (f k) else None)
+//    
+//    member internal t.map_vars on_tyvar on_var (αθ : subst<_>) S Sk =
+//        let Sα α =
+//            match αθ.search α with
+//            | Some β -> on_var α β
+//            | None   -> α
+//        match t with
+//        | T_Var (α, k) ->
+//            match αθ.search α with
+//            | Some x -> on_tyvar x k
+//            | None   -> T_Var (α, Sk k)
+//
+//        | T_Cons (x, k)             -> T_Cons (x, Sk k)
+//        | T_App (t1, t2)            -> T_App (S t1, S t2)
+//        | T_HTuple ts               -> T_HTuple (List.map S ts)
+//        | T_Forall (α, t)           -> T_Forall (Sα α, S t)
+//        | T_Closure (x, Δ, τ, k)    -> T_Closure (x, Δ, τ, Sk k)
+//
+//    member t.subst_vars (αθ : vasubst) =
+//        let S (t : ty) = t.subst_vars αθ
+//        let Sk (k : kind) = k.subst_vars αθ
+//        in
+//            t.map_vars (fun β k -> T_Var (β, Sk k)) (fun _ β -> β) αθ S Sk
+//
+//type fxty with
+//    member internal ϕ.map_vars on_var (αθ : subst<_>) S St Sk =
+//        let Sα α =
+//            match αθ.search α with
+//            | Some β -> on_var α β
+//            | None   -> α
+//        match ϕ with
+//        | Fx_Bottom k             -> Fx_Bottom (Sk k)
+//        | Fx_F_Ty t               -> Fx_F_Ty (St t)
+//        | Fx_Forall ((α, ϕ1), ϕ2) -> Fx_Forall ((Sα α, S ϕ1), S ϕ2)
+//
+//    member ϕ.subst_vars (αθ : vasubst) =
+//        let S (ϕ :fxty) = ϕ.subst_vars αθ
+//        let St (t : ty) = t.subst_vars αθ
+//        let Sk (k : kind) = k.subst_vars αθ
+//        in
+//            ϕ.map_vars (fun _ β -> β) αθ S St Sk
 
-type kind with
-    member internal k.map_vars f R =
-        match k with
-        | K_Var α          -> f α
-        | K_Cons (x, ks)   -> K_Cons (x, List.map R ks)
 
-    member k.subst_vars (tθ : vasubst) =
-        let R (k : kind) = k.subst_vars tθ
-        in
-            k.map_vars (fun α -> match tθ.search α with Some β -> K_Var β | None -> k) R
 
-type ty with
-    member this.on_var f =
-        let rec l ts = List.fold (function None -> R | Some _ as r -> fun _ -> r) None ts
-        and R = function
-            | T_Var (α, k)              -> f α k
-            | T_HTuple ts               -> l ts
-            | T_Forall ((_, t1), t2)
-            | T_App (t1, t2)            -> l [t1; t2]
-            | T_Bottom _      
-            | T_Closure _
-            | T_Var _
-            | T_Cons _                  -> None
-        in
-            R this
-
-    member this.on_given_var f α = this.on_var (fun β k -> if α = β then Some (f k) else None)
-    
-    member internal t.apply_to_vars on_ty_var on_var (αθ : subst<_>) S Sk =
-        let Sα α =
-            match αθ.search α with
-            | Some β -> on_var α β
-            | None   -> α
-        match t with
-        | T_Var (α, k) ->
-            match αθ.search α with
-            | Some x -> on_ty_var x k
-            | None   -> T_Var (α, Sk k)
-
-        | T_Bottom _                -> t
-        | T_Cons (x, k)             -> T_Cons (x, Sk k)
-        | T_App (t1, t2)            -> T_App (S t1, S t2)
-        | T_HTuple ts               -> T_HTuple (List.map S ts)
-        | T_Forall ((α, t1), t2)    -> T_Forall ((Sα α, S t1), S t2)
-        | T_Closure (x, Δ, τ, k)    -> T_Closure (x, Δ, τ, Sk k)
-
-    member t.subst_vars (αθ : vasubst) =
-        let S (t : ty) = t.subst_vars αθ
-        let Sk (k : kind) = k.subst_vars αθ
-        in
-            t.apply_to_vars (fun β k -> T_Var (β, Sk k)) (fun _ β -> β) αθ S Sk
 
        
 
@@ -583,26 +643,24 @@ type kscheme with
 // augmentations for types
 //
     
-let T_ForallsQ (Q : prefix, t) = T_Foralls (Seq.toList Q, t)
-let (|T_ForallsQ'|) (T_Foralls (qs, t)) = prefix.ofSeq qs, t    // this has the normal behaviou: quantified vars are not touched
-
-let (|T_ForallsQ|) (T_Foralls (qs, _) as t) =   // this has a special behaviour: quantified types are refreshed
-    let θ = var_refresher <| Seq.map fst qs
-    in
-        match t.subst_vars θ with
-        | T_ForallsQ' (Q, t) -> (Q, t)
-
-
-
 type var with
     static member add_quantified (Q : prefix) = var.add_quantified (Seq.map fst Q)
 
+let inline wrap_pretty_with_kind R' t =
+    let R t =
+        let k = (^t : (member kind : kind) t)
+        in
+            if k = K_Star then R' t
+            else sprintf "(%s :: %O)" (R' t) k
+    in
+        R t
 
 type ty with
+    override this.ToString () = this.pretty    
     member this.pretty =
         let (|T_Sym_Cons|_|) = (|Sym|_|) (function T_Cons (x, k) -> Some (x, (x, k)) | _ -> None)
         let (|A|_|) = function
-            | T_Tuple _ -> None // tuples are encoded using row types with integer labels, so they must be matched before
+            | T_Tuple _ -> None // tuples are encoded using row types with integer labels, so they must be matched before generic row types
             | T_Var _ | T_Record _ | T_Variant _ | T_Cons _ | T_Closure _ | T_Row _ as e -> Some e
             | _ -> None
         let (|App|) = (|Application|) (function T_App (t1, t2) -> Some (t1, t2) | _ -> None) (|A|_|)
@@ -610,66 +668,71 @@ type ty with
             | T_Forall (_, LArrow _)
             | T_Arrow _ as e -> Some e
             | _ -> None
-        let expected_kind_of t = K_Star
         let rec R' = function
             | T_Var (α, _)            -> sprintf "%O" α
-
             | T_Tuple ([] | [_]) as t -> unexpected "empty or unary tuple: %O" __SOURCE_FILE__ __LINE__ t
             | T_Tuple ts              -> mappen_strings (fun t -> (match t with A _ -> sprintf "%s" | _ -> sprintf "(%s)") (R t))  " * " ts
-
             | T_Record row            -> sprintf "{ %s }" (pretty_row "; " Config.Printing.type_annotation_sep row)
             | T_Variant row           -> sprintf "< %s >" (pretty_row " | " Config.Printing.type_annotation_sep row)
             | T_Row row               -> sprintf "(| %s |)" (pretty_row " | " Config.Printing.type_annotation_sep row)
-
             | T_HTuple ([] | [_]) as t -> unexpected "empty or unary htuple: %O" __SOURCE_FILE__ __LINE__ t
             | T_HTuple ts              -> mappen_strings (fun t -> (match t with A _ -> sprintf "%s" | _ -> sprintf "(%s)") (R t))  ", " ts
-
             | T_Sym_Cons (x, __)      -> sprintf "(%s)" x
             | T_Cons (x, _)           -> x
-
             | T_Arrow (LArrow _ as t1, t2) -> sprintf "(%s) -> %s" (R t1) (R t2)
             | T_Arrow (t1, t2)             -> sprintf "%s -> %s" (R t1) (R t2)
-
             | T_App (App s)          -> s
             | T_Closure (x, _, τ, _) -> sprintf "<[%O]>" (Te_Lambda ((x, None), τ))
-
-            | T_Bottom _             -> Config.Printing.dynamic.bottom
-            | T_Foralls (qs, t)      -> let Q = prefix.ofSeq qs in use N = var.add_quantified Q in sprintf "forall %O. %O" Q t
-        and R t =
-            let k = t.kind
-            in
-                if k = expected_kind_of t then R' t
-                else sprintf "(%s :: %O)" (R' t) k
+            | T_Foralls (αs, t)      -> use N = var.add_quantified αs in sprintf "forall %s. %O" (flatten_stringables Config.Printing.forall_prefix_sep αs) t
+        and R = wrap_pretty_with_kind R'
         in
             R this
 
-
-    override this.ToString () = this.pretty    
     static member fresh_var k = T_Var (var.fresh, k)
     static member fresh_var_and_ty k = let α = var.fresh in α, T_Var (α, k)
     static member fresh_star_var = ty.fresh_var K_Star
     static member fresh_star_var_and_ty = ty.fresh_var_and_ty K_Star
 
-    // this mixes type variables with kind variables in the same set
     member this.fv =
         match this with
-        | T_Bottom k                -> k.fv
         | T_Var (α, k)              -> Set.singleton α + k.fv
         | T_Cons (_, k)             -> k.fv
         | T_HTuple ts               -> List.fold (fun r (t : ty) -> Set.union r t.fv) Set.empty ts
         | T_App (t1, t2)            -> Set.union t1.fv t2.fv
-        | T_Forall ((α, t1), t2)    -> let r2 = t2.fv in if Set.contains α r2 then t1.fv + (Set.remove α r2) else r2
+        | T_Forall (α, t)           -> t.fv - Set.singleton α
         | T_Closure (_, _, _, k)    -> k.fv
 
     member this.is_monomorphic =
         match this with
-        | T_Bottom _          
         | T_Forall _        -> false
         | T_Var _
         | T_Cons _             
         | T_Closure _       -> true
         | T_App (t1, t2)    -> t1.is_monomorphic && t2.is_monomorphic
         | T_HTuple ts       -> List.fold (fun r (t : ty) -> r && t.is_monomorphic) true ts
+
+type fxty with
+    override this.ToString () = this.pretty    
+    member this.pretty =
+        let rec R' = function
+            | Fx_Bottom _             -> Config.Printing.dynamic.bottom
+            | Fx_F_Ty t               -> t.pretty
+            | Fx_Foralls (qs, t)      -> let Q = prefix.ofSeq qs in use N = var.add_quantified Q in sprintf "forall %O. %O" Q t
+        and R = wrap_pretty_with_kind R'
+        in
+            R this
+
+    member this.fv =
+        match this with
+        | Fx_Bottom k             -> k.fv
+        | Fx_Forall ((α, ϕ1), ϕ2) -> let r2 = ϕ2.fv in if Set.contains α r2 then ϕ1.fv + (Set.remove α r2) else r2
+        | Fx_F_Ty t               -> t.fv
+
+    member this.is_monomorphic =
+        match this with
+        | Fx_Bottom _
+        | Fx_Forall _ -> false
+        | Fx_F_Ty t   -> t.is_monomorphic
 
 
 
@@ -681,7 +744,7 @@ type scheme with
     override this.ToString () = this.pretty
 
     member σ.pretty =
-        let { constraints = cs; ty = t } = σ
+        let { constraints = cs; fxty = t } = σ
         // TODO: deal with variables in the constraints and choose how to show them, either detecting the outer-most foralls or something like that
 //        let αs = Q.dom
 //        let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_sep αs)
@@ -690,7 +753,7 @@ type scheme with
             sprintf "%s%O" cspart t
                         
     member this.fv =
-        let { constraints = cs; ty = t } = this
+        let { constraints = cs; fxty = t } = this
         in
             cs.fv + t.fv
 

@@ -9,6 +9,7 @@ module Lw.Core.Typing.Ops
 open FSharp.Common.Prelude
 open FSharp.Common.Log
 open FSharp.Common
+open Lw.Core
 open Lw.Core.Absyn
 open Lw.Core.Globals
 open Lw.Core.Typing
@@ -102,17 +103,68 @@ let possibly_tuple L0 e tuple cs =
 // substitution applications
 //
 
-let rec subst_kind (kθ : ksubst) (k : kind) = 
-    let Sk = subst_kind kθ
-    in
-        k.map_vars (fun α -> match kθ.search α with Some k -> k | None -> K_Var α) Sk
+let rec subst_kind (kθ : ksubst) =
+    let S = subst_kind kθ
+    in function
+    | K_Cons (x, ks) -> K_Cons (x, List.map S ks)
+    | K_Var α as k ->
+        match kθ.search α with
+        | Some β -> β
+        | None   -> k
 
+let subst_var (tθ : tsubst) α =
+    match tθ.search α with
+    #if DEBUG
+    | Some (T_Var (β, _)) as t -> L.warn Min "substituting quantified var: %s" (subst.pretty_item α t); β
+    | None                     -> α
+    | t                        -> unexpected "substituting quantified var to non-var type: %s" __SOURCE_FILE__ __LINE__ (subst.pretty_item α t)
+    #else
+    | Some (T_Var (β, _)) -> β
+    | _                   -> α
+    #endif
 
-let rec subst_ty (tθ : tsubst, kθ : ksubst) (t :ty) =
+let rec subst_ty (tθ : tsubst, kθ : ksubst) =
     let S = subst_ty (tθ, kθ)
     let Sk = subst_kind kθ
-    in
-        t.apply_to_vars (fun t _ -> t) (fun α -> function T_Var (β, _) -> β | _ -> α) tθ S Sk
+    in function
+    | T_Var (α, _) as t ->
+        match tθ.search α with
+        | Some t' -> t'
+        | None    -> t
+
+    | T_Forall (α, t)           -> T_Forall (subst_var tθ α, S t)
+    | T_Cons (x, k)             -> T_Cons (x, Sk k)
+    | T_App (t1, t2)            -> T_App (S t1, S t2)
+    | T_HTuple ts               -> T_HTuple (List.map S ts)
+    | T_Closure (x, Δ, τ, k)    -> T_Closure (x, Δ, τ, Sk k)
+
+let rec subst_fxty (tθ : tsubst, kθ : ksubst) =
+    let S = subst_fxty (tθ, kθ)
+    let St = subst_ty (tθ, kθ)
+    let Sk = subst_kind kθ
+    in function
+    | Fx_Bottom k             -> Fx_Bottom (Sk k)
+    | Fx_F_Ty t               -> Fx_F_Ty (St t)
+    | Fx_Forall ((α, ϕ1), ϕ2) -> Fx_Forall (( α, S ϕ1), S ϕ2)
+
+
+//let rec subst_kind (kθ : ksubst) (k : kind) = 
+//    let Sk = subst_kind kθ
+//    in
+//        k.map_vars (fun _ k -> k) Sk
+//
+//let rec subst_ty (tθ : tsubst, kθ : ksubst) (t : ty) =
+//    let S = subst_ty (tθ, kθ)
+//    let Sk = subst_kind kθ
+//    in
+//        t.map_vars (fun t _ -> t) (fun α -> function T_Var (β, _) -> β | _ -> α) tθ S Sk
+//
+//let rec subst_fxty (tθ : tsubst, kθ : ksubst) (ϕ : fxty) =
+//    let S = subst_fxty (tθ, kθ)
+//    let St = subst_ty (tθ, kθ)
+//    let Sk = subst_kind kθ
+//    in
+//        ϕ.map_vars (fun t _ -> t) (fun α -> function T_Var (β, _) -> β | _ -> α) tθ S St Sk
 
 //// first argument is the NEW subst, second argument is the OLD one
 let compose_ksubst (kθ' : ksubst) (kθ : ksubst) = kθ.compose subst_kind kθ'
@@ -123,16 +175,16 @@ let compose_tksubst (tθ' : tsubst, kθ') (tθ : tsubst, kθ) =
     in
         tθ, kθ
 
-let subst_prefix θ Q = prefix.B { for α, t in Q do yield α, subst_ty θ t }
+let subst_prefix θ Q = prefix.B { for α, ϕ in Q do yield α, subst_fxty θ ϕ }
 
 let subst_type_constraints _ tcs = tcs
 
 let subst_constraints θ (cs : constraints) = cs.map (fun c -> { c with ty = subst_ty θ c.ty })
 
 let subst_scheme θ σ =
-    let { constraints = cs; ty = t } = σ
+    let { constraints = cs; fxty = ϕ } = σ
     in
-        { constraints = subst_constraints θ cs; ty = subst_ty θ t }
+        { constraints = subst_constraints θ cs; fxty = subst_fxty θ ϕ }
         
 let subst_kscheme (kθ : ksubst) σκ =
     let { forall = αs; kind = k } = σκ
@@ -145,103 +197,98 @@ let subst_kjenv kθ (env : kjenv) = env.map (fun _ -> subst_kscheme kθ)
 let subst_tenv θ (env : tenv) = env.map (fun _ -> subst_ty θ)
 
 
-// System-F shortcuts
+// active patterns for unquantification, instantiation etc. 
 //
 
-let T_Forall_F ((α, k), t) = T_Forall ((α, T_Bottom k), t)
-let (|T_Forall_F|_|) = function
-    | T_Forall ((α, T_Bottom k), t) -> Some ((α, k), t)
-    | _ -> None
+let (|Fx_Unquantified_Ty|_|) = function
+    | Fx_Bottom _         
+    | Fx_Forall _ 
+    | Fx_F_Ty (T_Forall _) -> None
+    | Fx_F_Ty t            -> Some t
 
-let T_Foralls_F = Foralls T_Forall_F
-let (|T_Foralls_F|) = (|Foralls|) (|T_Forall_F|_|)
+// this has the normal behaviour: quantified vars are not touched
+let Fx_ForallsQ (Q : prefix, ϕ) = Fx_Foralls (Seq.toList Q, ϕ)
+let (|Fx_ForallsQ|) (Fx_Foralls (qs, ϕ)) = prefix.ofSeq qs, ϕ
 
+let (|Fx_Inst_ForallsQ|) (Fx_ForallsQ (Q, ϕ1) as ϕ0) =   // this has a special behaviour: quantified types are refreshed and right-hand is guaranteed an unquantified F-type
+    match ϕ1 with
+    | Fx_Unquantified_Ty t -> 
+        let θ = new tsubst (Env.t.B { for α, ϕ in Q do yield α, T_Var (var.fresh, ϕ.kind) }), ksubst.empty
+        in
+            subst_prefix θ Q, subst_ty θ t
 
-// flexible types as active pattenrs
-//
+    | _ -> unexpected "right-hand of %O is not unquantified: %O" __SOURCE_FILE__ __LINE__ ϕ0 ϕ1
 
-let rec (|Flex_F_Ty|Flex_Bottom|Flex_Forall|) = function
-    | T_Cons _
-    | T_Var _
-    | T_Closure _
-    | T_App (Flex_F_Ty _, Flex_F_Ty _) 
-    | T_Forall ((_, T_Bottom _), Flex_F_Ty _) as t         -> Flex_F_Ty t
-    | T_HTuple ts as t
-        when Seq.forall (function Flex_F_Ty _ -> true
-                                          | _ -> false) ts -> Flex_F_Ty t
-    | T_Bottom k                                           -> Flex_Bottom k
-    | T_Forall ((α, t1), t2)                               -> Flex_Forall ((α, t1), t2)
-    | t                                                    -> unexpected "ill-formed flexible type: %O" __SOURCE_FILE__ __LINE__ t
 
 
 // ty augmentation
 //
 
 type ty with
-    member this.is_unquantified =   // TODO: verify is_unquantied: is it ok to check just this?
-        match this with
-        | T_Bottom _         
-        | T_Forall _ -> false
-        | _          -> true
+    member t.refresh_fv =
+        let env = Env.t.B { for α in t.fv do yield α, var.fresh }
+        let Sk = subst_kind (new ksubst (env.map (fun _ β -> K_Var β)))
+        let rec S = function
+            | T_Var (α, k) -> 
+                let β =
+                    match env.search α with
+                    | Some β -> β
+                    | None   -> α
+                in
+                    T_Var (β, k)
+
+            | T_Cons (x, k)             -> T_Cons (x, Sk k)
+            | T_App (t1, t2)            -> T_App (S t1, S t2)
+            | T_HTuple ts               -> T_HTuple (List.map S ts)
+            | T_Forall (α, t)           -> T_Forall (α, S t)
+            | T_Closure (x, Δ, τ, k)    -> T_Closure (x, Δ, τ, Sk k)
+        in
+            S t
+
+
+type fxty with
+//    member this.is_unquantified =
+//        match this with
+//        | Fx_Unquantified_Ty _ -> true
+//        | _                    -> false
 
     member this.nf =
         match this with
-        | Flex_F_Ty _
-        | Flex_Bottom _ as t -> t
-        | Flex_Forall ((α, t1), t2) ->
-            if not <| Set.contains α t2.fv then t2.nf
-            elif match t2.nf with
-                 | T_Var (β, _) -> α = β
-                 | _            -> false
-            then t1.nf
+        | Fx_F_Ty _
+        | Fx_Bottom _ as t -> t
+        | Fx_Forall ((α, ϕ1), ϕ2) ->
+            if not <| Set.contains α ϕ2.fv then ϕ2.nf
+            elif match ϕ2.nf with
+                 | Fx_F_Ty (T_Var (β, _)) -> α = β
+                 | _                      -> false
+            then ϕ1.nf
             else
-                let t1' = t1.nf
-                in
-                    if t1'.is_unquantified then (subst_ty (new tsubst (α, t1'), ksubst.empty) t2).nf
-                    else T_Forall ((α, t1'), t2.nf)
-
-//    member t.instantiate =
-//        match t with
-//        | T_Forall ((α, _), t2) ->
-//            let θ = new vasubst (α, var.fresh)
-//            in
-//                t2.subst_vars(θ).instantiate
-//
-//        | t -> t
-
-//    member t.refresh =
-//        let qv = function
-//            | T_Forall ((α, t1), t2) -> Set.singleton α + (qv t1 + t2.fv
-//            | t                      -> t.fv
-//        let θ = var_refresher (all_vars t)
-//        in
-//            t.subst_vars θ
+                match ϕ1.nf with
+                | Fx_Unquantified_Ty t -> (subst_fxty (new tsubst (α, t), ksubst.empty) ϕ2).nf
+                | ϕ1'                  -> Fx_Forall ((α, ϕ1'), ϕ2.nf)
 
     member t.ftype =
         let rec R = function
-            | Flex_F_Ty t -> t
+            | Fx_F_Ty t -> t
 
-            | Flex_Bottom k ->
+            | Fx_Bottom k ->
                 let α, tα = ty.fresh_var_and_ty k   // TODO: is this fresh var really correct?
                 in
-                    T_Forall_F ((α, k), tα)
+                    T_Forall (α, tα)
 
-            | Flex_Forall ((α, T_Bottom k), t2) ->
-                T_Forall ((α, T_Bottom k), R t2)
-
-            | Flex_Forall ((α, T_ForallsQ (Q, t1)), t2) ->
+            | Fx_Forall ((α, Fx_Inst_ForallsQ (Q, t1)), ϕ2) ->
                 let θ = new tsubst (α, t1), ksubst.empty
                 in
-                    R (T_ForallsQ (Q, subst_ty θ t2))
+                    R (Fx_ForallsQ (Q, subst_fxty θ ϕ2))
 
         in
             R t.nf      // normalization can be left out of the recursion
 
-
     member t.is_ftype =
         match t with
-        | Flex_F_Ty _ -> true
-        | _           -> false
+        | Fx_F_Ty _ -> true
+        | _         -> false
+
 
 // operations over types, schemes and prefixes
 
@@ -269,24 +316,10 @@ let fv_Γ (Γ : jenv) = fv_env (fun { scheme = σ } -> σ.fv) Γ
 //        in
 //            { constraints = cs; ty = T_Foralls (Q, t) }
 
-[< RequireQualifiedAccess >]
-module HML =
-    let instantiate { constraints = cs; ty = t } = cs, Q_Nil, t // TODO: don't we need to refresh the fv in contraints?
-
-    let generalize (cs : constraints, Q, t : ty) Γ restricted_vars = { constraints = cs; ty = t }
-
-let instantiate = HML.instantiate
-let generalize = HML.generalize
-
-let refresh_ty (t : ty) =
-    let _, _, t = instantiate { constraints = constraints.empty; ty = t }
-    in
-        t
-
-let Ungeneralized t = { constraints = constraints.empty; ty = t }
+let Ungeneralized t = { constraints = constraints.empty; fxty = Fx_F_Ty t }
 
 let (|Ungeneralized|) = function
-    | { constraints = cs; ty = t } when cs.is_empty -> t
+    | { constraints = cs; fxty = Fx_F_Ty t } when cs.is_empty -> t
     | σ -> unexpected "expected an ungeneralized type scheme but got: %O" __SOURCE_FILE__ __LINE__ σ
 
 
@@ -298,13 +331,13 @@ let (|Ungeneralized|) = function
 let fv_γ (γ : kjenv) = fv_env (fun (kσ : kscheme) -> kσ.fv) γ
 
 let kinstantiate { forall = αs; kind = k } =
-    let tθ = var_refresher αs
+    let kθ = new ksubst (Env.t.B { for α in αs do yield α, K_Var α.refresh })
     in
-        k.subst_vars tθ
+        subst_kind kθ k
 
 // TODO: restricted named vars should be taken into account also for kind generalization? guess so
-let kgeneralize (k : kind) γ =
-    let αs = k.fv - (fv_γ γ)
+let kgeneralize (k : kind) γ named_tyvars =
+    let αs = k.fv - (fv_γ γ) - named_tyvars
     in
         { forall = αs; kind = k }
 
@@ -335,17 +368,20 @@ type prefix with
                     in
                         Q1, Q_Cons (Q2, (α, t))
         let Q1, Q2 as r = R Q αs
+        #if DEBUG_UNIFY
         L.debug Normal "[split] [%O][{ %s }]\n        = [%O][%O]" Q (flatten_stringables ", " αs) Q1 Q2
+        #endif
         r
 
 
-    member Q.extend (α, t : ty) =
+    member Q.extend (α, ϕ : fxty) =
         let Q', θ' as r =
-            let t' = t.nf
-            in
-                if t'.is_unquantified then Q, (new tsubst (α, t'), ksubst.empty)
-                else Q + (α, t), empty_θ
-        L.debug Normal "[ext] [%O][%O : %O]\n      = [%O][%O]" Q α t Q' θ'
+            match ϕ.nf with
+            | Fx_Unquantified_Ty t -> Q, (new tsubst (α, t), ksubst.empty)
+            | _                    -> Q + (α, ϕ), empty_θ
+        #if DEBUG_UNIFY
+        L.debug Normal "[ext] [%O][%O : %O]\n      = [%O][%O]" Q α ϕ Q' θ'
+        #endif
         r
 
     member Q.insert i =
@@ -375,31 +411,33 @@ let (|Q_Slice|_|) α (Q : prefix) = Q.slice_by (fst >> (=) α)
 
 type prefix with
     // TODO: rewrite these update methods without the overcomplicated slicing thing
-    member private Q.update f (α, t : ty) =
-        match Q.split t.fv with
-        | Q0, Q_Slice α (Q1, _, Q2) -> f (α, t, Q0, Q1, Q2)
-        | _                         -> unexpected "item %s is not in prefix: %O" __SOURCE_FILE__ __LINE__ (prefix.pretty_item (α, t)) Q
+    member inline private Q.update f (α, ty : ^t) =
+        match Q.split (^t : (member fv : _) ty) with
+        | Q0, Q_Slice α (Q1, _, Q2) -> f (α, ty, Q0, Q1, Q2)
+        | _                         -> unexpected "item %O : %O is not in prefix: %O" __SOURCE_FILE__ __LINE__ α ty Q
 
     static member private update_prefix__reusable_part (α, t : ty, Q0 : prefix, Q1, Q2) =
         let θ = new tsubst (α, t), ksubst.empty
         in
             Q0 + Q1 + subst_prefix θ Q2, θ
 
-    member this.update_prefix_with_bound (α, t : ty) =
+    member this.update_prefix_with_bound (α, ϕ) =
         let Q, θ as r =
-            this.update <| fun (α, t, Q0, Q1, Q2) ->
-                let t' = t.nf
-                in
-                    if t'.is_unquantified then prefix.update_prefix__reusable_part (α, t', Q0, Q1, Q2)
-                    else Q0 + Q1 + (α, t) + Q2, (tsubst.empty, ksubst.empty)
-            <| (α, t)
-        L.debug Normal "[up-Q] [%O][%O :> %O]\n       = [%O][%O]" this α t Q θ
+            this.update <| fun (α, ϕ : fxty, Q0, Q1, Q2) ->
+                match ϕ.nf with
+                | Fx_Unquantified_Ty t' -> prefix.update_prefix__reusable_part (α, t', Q0, Q1, Q2)
+                | _                     -> Q0 + Q1 + (α, ϕ) + Q2, (tsubst.empty, ksubst.empty)
+            <| (α, ϕ)
+        #if DEBUG_UNIFY
+        L.debug Normal "[up-Q] [%O][%O :> %O]\n       = [%O][%O]" this α ϕ Q θ
+        #endif
         r
 
     member this.update_prefix_with_subst (α, t : ty) =
-        assert t.is_ftype
         let Q, θ as r = this.update prefix.update_prefix__reusable_part (α, t)
+        #if DEBUG_UNIFY
         L.debug Normal "[up-S] [%O][%O := %O]\n       = [%O][%O]" this α t Q θ
+        #endif
         r
 
 [< CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix) >]

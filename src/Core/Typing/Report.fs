@@ -70,10 +70,10 @@ module Error =
     let unbound_type_symbol loc x =
         Ek 3 loc "type variable or constructor %s is undefined" x
 
-
     // type errors
     
-    let type_mismatch x = mismatch E 4 "expression" "type" x
+    let type_mismatch x =
+        mismatch E 4 "expression" "type" x
 
     let row_tail_circularity loc ρ tθ =
         E 5 loc "unification fails because row type variable type variable %O occurs in the domain of substituion %O" ρ tθ
@@ -137,7 +137,6 @@ module Error =
         E 24 loc "skolem type variable %O escaped" tsk
 
 
-
 [< RequireQualifiedAccess >]
 module Warn =
     let private W n loc pri fmt =
@@ -185,6 +184,8 @@ module Warn =
     let unused_quantified_type_variable loc α t =
         W 13 loc Normal "quantified type variable %O does not occur in type %O" α t
 
+    let lambda_annot_is_flex_type loc x ϕ t =
+        E 25 loc "function parameter %O has been annotated with a flexible type %O and had to be instantiated to the System-F type %O" x ϕ t
 
 
 [< RequireQualifiedAccess >]

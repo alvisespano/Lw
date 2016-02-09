@@ -67,24 +67,24 @@ let rec W_expr (ctx : context) (e0 : expr) =
         L.tabulate 2
         L.debug Min "(%-3s) %O\n[C]   %O\n[Q]   %O\n[S]   %O\n      %O" rule e cs Q tθ kθ
         #endif
-        let! (t : ty) = W_expr' ctx e0
+        let! (ϕ : fxty) = W_expr' ctx e0
         do! resolve_constraints ctx e0
         let! Q' = M.get_Q
         let! tθ', kθ' = M.get_θ
         let! cs' = M.get_constraints
         // TODO: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)
-        L.debug Low "(%-3s) %O\n[:T]  %O\n[nf]  %O\n[F-t] %O\n[e*]  %O\n[C]   %O\n[Q]   %O\n[S]   %O\n      %O\n[C']  %O\n[Q']  %O\n[S']  %O\n      %O" rule e t t.nf t.ftype e0 cs Q tθ kθ cs' Q' tθ' kθ'
+        L.debug Low "(%-3s) %O\n[:T]  %O\n[nf]  %O\n[F-t] %O\n[e*]  %O\n[C]   %O\n[Q]   %O\n[S]   %O\n      %O\n[C']  %O\n[Q']  %O\n[S']  %O\n      %O" rule e ϕ ϕ.nf ϕ.ftype e0 cs Q tθ kθ cs' Q' tθ' kθ'
         #if DEBUG_BEFORE_INFERENCE
         L.undo_tabulate
         #endif
-        return t
+        return ϕ
     } 
 
 and W_decl ctx d =
     let M = new translator_typing_builder<_, _> (d)
     M {
         L.debug Low "[decl] %O" d
-        return! (if ctx.top_level_decl then M.fork_named_tyvars else M.ReturnFrom) <| M { 
+        return! (if ctx.top_level_decl then M.fork_scoped_vars else M.ReturnFrom) <| M { 
             do! W_decl' ctx d
         }
     }  
@@ -103,15 +103,15 @@ and W_expr' ctx e0 =
             yield W_lit lit
 
         | Record (bs, eo) ->
-            let! bs = M.List.map (fun (l, e) -> M { let! t = W_expr ctx e in return l, t }) bs
+            let! bs = M.List.map (fun (l, e) -> M { let! ϕ = W_expr ctx e in return l, ϕ.ftype }) bs
             match eo with
             | None ->
                 yield T_Closed_Record bs
 
             | Some e ->
-                let! te = W_expr ctx e
+                let! ϕe = W_expr ctx e
                 let ρ = var.fresh
-                do! M.unify e.loc (T_Record ([], Some ρ)) te
+                do! M.unify e.loc (T_Record ([], Some ρ)) ϕe.ftype
                 yield T_Record (bs, Some ρ)
 
         | Var x ->
@@ -131,7 +131,7 @@ and W_expr' ctx e0 =
                 yield α
 
             | Jb_Var σ ->
-                let! cs, _, t = M.instantiante_and_inherit_constraints σ
+                let! cs, t = M.inherit_constraints σ
                 if cs.is_empty then yield t
                 else
                     let e1 = Id x
@@ -140,7 +140,7 @@ and W_expr' ctx e0 =
                     yield t
 
             | Jb_Data σ ->
-                let! _, _, t = M.instantiante_and_inherit_constraints σ
+                let! _, t = M.inherit_constraints σ
                 M.translated <- Reserved_Cons x
                 yield t
                 
@@ -176,19 +176,22 @@ and W_expr' ctx e0 =
             let! tx = M {
                 match τo with
                 | None ->
-                    do! M.add_prefix α (T_Bottom K_Star)
+                    do! M.add_prefix α (Fx_Bottom K_Star)
                     return tα
                 | Some τ ->
-                    let! t, k = Wk_and_eval_ty_expr ctx τ
-                    assert t.is_ftype
+                    let! ϕ, k = Wk_and_eval_ty_expr ctx τ
                     do! M.kunify τ.loc K_Star k
-                    yield t
+                    match ϕ with
+                    | Fx_F_Ty t -> return t
+                    | _         -> let t = ϕ.ftype
+                                   Report.Warn.lambda_annot_is_flex_type τ.loc x ϕ t
+                                   return t
             }
             let! t = M.fork_Γ <| M {
                 let! _ = M.bind_var_Γ x tx
                 yield! W_expr ctx e
             }            
-            let! tx = M.update_ty tx
+            let! tx = M.updated tx
             // check that the inferred type of parameter is a monotype when no annotation was provided
             if τo.IsNone && not tx.is_monomorphic then Report.Error.inferred_lambda_parameter_is_not_monomorphic e0.loc x t
             let! Q3 = M.split_prefix Q0.dom
@@ -373,7 +376,6 @@ and W_decl' (ctx : context) (d0 : decl) =
     let gen_bind prefixes decl_qual (e0 : node<_, _>) x (t : ty) =
         let loc = e0.loc
         let Lo x = Lo loc x
-//        let t = t.ftype     // TODO: this should be removed if we want to bind flexible types as well
         M {
             let! { γ = γ; constraints = cs } = M.get_state
             // check shadowing and relation with previous bindings
@@ -413,7 +415,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                 in
                     M.gen_bind_Γ jk jm t
             let e1 = if cs.is_empty then e0 else LambdaFun ([possibly_tuple Lo P_CId P_Tuple cs], Lo e0.value)
-            Report.prompt ctx (prefixes @ decl_qual.as_tokens) x σ (Some (Config.Printing.ftype_instance_sep, σ.ty.ftype))
+            Report.prompt ctx (prefixes @ decl_qual.as_tokens) x σ (Some (Config.Printing.ftype_instance_sep, σ.fxty.ftype))
             return jk, e1
         }
 
@@ -575,7 +577,7 @@ and W_patt ctx (p0 : patt) =
                     return Report.Error.unbound_data_constructor loc0 x
                     
                 | Jb_Data σ ->
-                    let! _, _, t = M.instantiante_and_inherit_constraints σ
+                    let! _, _, t = M.inherit_constraints σ
                     yield t
 
                 | Jb_Overload t ->

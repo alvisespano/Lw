@@ -1,4 +1,19 @@
 ﻿
+9/2/2016: [v0.9.1]
+* version bump due to major refactor
+* REFACT: flexible types reimplemented as a new datatype and former type "ty" stands now for System-F types
+* REFACT: substitution system cleaned up
+* REFACT: unquantified types are now detectable via an active pattern
+* REFACT: generalization and instantiation redesigned adn cleaned up, both monadic and not
+* UP: scoped variables now support kind variables as well
+
+
+8/2/2016:
+* REFACT: better printing of debug information on mgu, subsume and mgu_scheme
+* FIX: T_ForallsQ now refreshes quantified variables: it seems that in HML paper that is the expected behaviour
+* DEBUG: lots of debugging on HML
+
+
 6/2/2016:
 * NEW: Unit test module written with a simple system for testing type inference
 * NEW: most tests have been taked from HML prototype tests

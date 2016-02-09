@@ -280,8 +280,8 @@ type typing_builder with
         M {
             let! γ = M.get_γ
             let! Q = M.get_Q
-            let! t1 = M.update_ty t1
-            let! t2 = M.update_ty t2
+            let! t1 = M.updated t1
+            let! t2 = M.updated t2
             let Q, θ = f { loc = loc; γ = γ } Q t1 t2
             do! M.set_Q Q
             do! M.update_θ θ

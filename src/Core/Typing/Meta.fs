@@ -81,7 +81,7 @@ module private Eval =
             let k0 = τ0.typed
             match τ0.value with
             | Te_PolyVar x ->
-                let! α = M.add_named_tyvar x
+                let! α = M.add_scoped_var x
                 yield T_Var (α, k0)
 
             | Te_Id x ->
@@ -109,7 +109,7 @@ module private Eval =
                 yield! E τ
 
             | Te_Forall (((x, _), τo1), τ2) ->
-                let! α = M.add_named_tyvar x
+                let! α = M.add_scoped_var x
                 let! t2 = E τ2                
                 let! t1 = M {
                     match τo1 with
@@ -117,7 +117,7 @@ module private Eval =
                     | None ->
                         // check for unused quantified variable is here because it's done on types rather than on type expressions, which would not allows for easy controlling scoping of the var itself
                         let k =
-                            match t2.on_given_var identity α with
+                            match t2.search_var identity α with
                             | Some k -> k
                             | None   -> Report.Warn.unused_quantified_type_variable τ2.loc α t2; kind.fresh_var
                         in
