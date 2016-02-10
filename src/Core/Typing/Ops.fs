@@ -219,14 +219,19 @@ let (|Fx_Inst_ForallsQ|) (Fx_ForallsQ (Q, ϕ1) as ϕ0) =   // this has a special
 
     | _ -> unexpected "right-hand of %O is not unquantified: %O" __SOURCE_FILE__ __LINE__ ϕ0 ϕ1
 
+let (|T_ForallK|_|) = function
+    | T_Forall (α, t) -> let k = (t.search_var α).Value in Some ((α, k), t)
+    | _ -> None
+
+let (|T_ForallsK|) = (|Foralls|) (|T_ForallK|_|)
 
 
 // ty augmentation
 //
 
 type ty with
-    member t.refresh_fv =
-        let env = Env.t.B { for α in t.fv do yield α, var.fresh }
+    member t.instantiate αs =
+        let env = Env.t.B { for α in αs do yield α, var.fresh }
         let Sk = subst_kind (new ksubst (env.map (fun _ β -> K_Var β)))
         let rec S = function
             | T_Var (α, k) -> 
@@ -244,6 +249,8 @@ type ty with
             | T_Closure (x, Δ, τ, k)    -> T_Closure (x, Δ, τ, Sk k)
         in
             S t
+
+    member t.instantiate_fv = t.instantiate t.fv
 
 
 type fxty with
@@ -290,32 +297,6 @@ type fxty with
         | _         -> false
 
 
-// operations over types, schemes and prefixes
-
-let internal fv_env fv (env : Env.t<_, _>) = env.fold (fun αs _ v -> Set.union αs (fv v)) Set.empty
-
-let fv_Γ (Γ : jenv) = fv_env (fun { scheme = σ } -> σ.fv) Γ
-
-
-//[< System.Obsolete("HidleyMilner version of instantiate and generalize functions are bugged. Do not use them.") >]
-//[< RequireQualifiedAccess >]
-//module HindleyMilner =
-//    type constraintt with
-//        member this.refresh = { this with num = fresh_int () }
-//
-//    let instantiate { constraints = cs; ty = T_Foralls (qs, t) } =
-//        let αs = Q.dom
-//        let tθ = var_refresher αs
-//        let cs = constraints.B { for c in cs do yield { c.refresh with ty = c.ty.subst_vars tθ } }
-//        in
-//            cs, Q, t.subst_vars tθ
-//          
-//    let generalize (cs : constraints, Q, t : ty) Γ restricted_vars =
-//        let αs = (t.fv + cs.fv) - (fv_Γ Γ) - restricted_vars
-//        let Q = [ for α, t in Q do if Set.contains α αs then yield α, t ]
-//        in
-//            { constraints = cs; ty = T_Foralls (Q, t) }
-
 let Ungeneralized t = { constraints = constraints.empty; fxty = Fx_F_Ty t }
 
 let (|Ungeneralized|) = function
@@ -323,6 +304,31 @@ let (|Ungeneralized|) = function
     | σ -> unexpected "expected an ungeneralized type scheme but got: %O" __SOURCE_FILE__ __LINE__ σ
 
 
+// operations over constraints, schemes and environments
+//
+
+type constraintt with
+    member c.instantiate αs = { c with num = fresh_int (); ty = c.ty.instantiate αs }
+
+type constraints with
+    member this.fv = Computation.B.set { for c in this do yield! c.ty.fv }
+
+    member cs.instantiate αs = constraints.B { for c in cs do yield c.instantiate αs }
+
+type scheme with
+    member this.fv =
+        let { constraints = cs; fxty = t } = this
+        in
+            cs.fv + t.fv
+
+    member this.instantiate =
+        let { constraints = cs; fxty = Fx_ForallsQ (Q, _) as ϕ } = this
+        in
+            { constraints = cs.instantiate Q.dom; fxty = ϕ }
+
+let internal fv_env fv (env : Env.t<_, _>) = env.fold (fun αs _ v -> Set.union αs (fv v)) Set.empty
+
+let fv_Γ (Γ : jenv) = fv_env (fun { scheme = σ } -> σ.fv) Γ
 
 
 // operations over kinds
@@ -330,10 +336,12 @@ let (|Ungeneralized|) = function
 
 let fv_γ (γ : kjenv) = fv_env (fun (kσ : kscheme) -> kσ.fv) γ
 
-let kinstantiate { forall = αs; kind = k } =
-    let kθ = new ksubst (Env.t.B { for α in αs do yield α, K_Var α.refresh })
-    in
-        subst_kind kθ k
+type kscheme with
+    member this.instantiate =
+        let { forall = αs; kind = k } = this
+        let kθ = new ksubst (Env.t.B { for α in αs do yield α, K_Var α.refresh })
+        in
+            subst_kind kθ k
 
 // TODO: restricted named vars should be taken into account also for kind generalization? guess so
 let kgeneralize (k : kind) γ named_tyvars =
@@ -348,8 +356,7 @@ let (|KUngeneralized|) = function
 let KUngeneralized k = { forall = Set.empty; kind = k }
 
 
-
-// prefix augmentation
+// operations over prefix
 //
 
 type prefix with
@@ -372,7 +379,6 @@ type prefix with
         L.debug Normal "[split] [%O][{ %s }]\n        = [%O][%O]" Q (flatten_stringables ", " αs) Q1 Q2
         #endif
         r
-
 
     member Q.extend (α, ϕ : fxty) =
         let Q', θ' as r =
@@ -443,3 +449,5 @@ type prefix with
 [< CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix) >]
 module prefix =
     let B = new Computation.Builder.itemized_collection<_, _> (empty = Q_Nil, plus1 = (fun i Q -> Q_Cons (Q, i)), plus = (+))
+
+

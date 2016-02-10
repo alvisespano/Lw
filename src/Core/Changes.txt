@@ -1,4 +1,10 @@
 ﻿
+10/2/2016:
+* REFACT: constraint, types, schemes and flex types instantiation (i.e. variable refreshment) has been widely redesigned
+* REFACT: big refactor of monad builders
+* UP: more modules ported to the new design
+
+
 9/2/2016: [v0.9.1]
 * version bump due to major refactor
 * REFACT: flexible types reimplemented as a new datatype and former type "ty" stands now for System-F types

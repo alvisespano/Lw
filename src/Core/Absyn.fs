@@ -433,7 +433,7 @@ and ty_rec_binding = rec_qbinding<ty_decl_qual, kind, ty_uexpr, kind>
 
 and ty_expr = node<ty_uexpr, kind>
 and ty_patt = node<ty_upatt, kind>
-and ty_decl = node<ty_udecl, unit>
+and ty_decl = node<ty_udecl, kind>
 and ty_case = case<ty_upatt, ty_uexpr, kind>
 
 and typed_param = ty_expr id_param

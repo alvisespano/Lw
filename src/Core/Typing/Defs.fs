@@ -532,86 +532,6 @@ type tksubst = tsubst * ksubst
 
 let empty_θ = tsubst.empty, ksubst.empty
 
-//let var_refresher αs = new vasubst (Seq.fold (fun (env : Env.t<_, _>) (α : var) -> env.bind α α.refresh) Env.empty αs)
-
-
-// type and kind augmentations for substituting variables
-//
-//type kind with
-//    member internal k.map_vars on_kvar (αθ : subst<_>) S =
-//        match k with
-//        | K_Var α ->
-//            match αθ.search α with
-//            | Some β -> on_kvar α β
-//            | None   -> k
-//
-//        | K_Cons (x, ks) -> K_Cons (x, List.map S ks)
-//
-//    member k.subst_vars (αθ : vasubst) =
-//        let S (k : kind) = k.subst_vars αθ
-//        in
-//            k.map_vars (fun _ β -> K_Var β) αθ S
-//
-//type ty with
-//    member this.on_var f =
-//        let rec l ts = List.fold (function None -> R | Some _ as r -> fun _ -> r) None ts
-//        and R = function
-//            | T_Var (α, k)              -> f α k
-//            | T_HTuple ts               -> l ts
-//            | T_Forall (_, t)           -> l [t]
-//            | T_App (t1, t2)            -> l [t1; t2]
-//            | T_Closure _
-//            | T_Var _
-//            | T_Cons _                  -> None
-//        in
-//            R this
-//
-//    member this.on_given_var f α = this.on_var (fun β k -> if α = β then Some (f k) else None)
-//    
-//    member internal t.map_vars on_tyvar on_var (αθ : subst<_>) S Sk =
-//        let Sα α =
-//            match αθ.search α with
-//            | Some β -> on_var α β
-//            | None   -> α
-//        match t with
-//        | T_Var (α, k) ->
-//            match αθ.search α with
-//            | Some x -> on_tyvar x k
-//            | None   -> T_Var (α, Sk k)
-//
-//        | T_Cons (x, k)             -> T_Cons (x, Sk k)
-//        | T_App (t1, t2)            -> T_App (S t1, S t2)
-//        | T_HTuple ts               -> T_HTuple (List.map S ts)
-//        | T_Forall (α, t)           -> T_Forall (Sα α, S t)
-//        | T_Closure (x, Δ, τ, k)    -> T_Closure (x, Δ, τ, Sk k)
-//
-//    member t.subst_vars (αθ : vasubst) =
-//        let S (t : ty) = t.subst_vars αθ
-//        let Sk (k : kind) = k.subst_vars αθ
-//        in
-//            t.map_vars (fun β k -> T_Var (β, Sk k)) (fun _ β -> β) αθ S Sk
-//
-//type fxty with
-//    member internal ϕ.map_vars on_var (αθ : subst<_>) S St Sk =
-//        let Sα α =
-//            match αθ.search α with
-//            | Some β -> on_var α β
-//            | None   -> α
-//        match ϕ with
-//        | Fx_Bottom k             -> Fx_Bottom (Sk k)
-//        | Fx_F_Ty t               -> Fx_F_Ty (St t)
-//        | Fx_Forall ((α, ϕ1), ϕ2) -> Fx_Forall ((Sα α, S ϕ1), S ϕ2)
-//
-//    member ϕ.subst_vars (αθ : vasubst) =
-//        let S (ϕ :fxty) = ϕ.subst_vars αθ
-//        let St (t : ty) = t.subst_vars αθ
-//        let Sk (k : kind) = k.subst_vars αθ
-//        in
-//            ϕ.map_vars (fun _ β -> β) αθ S St Sk
-
-
-
-
        
 
 // augmentations for kinds
@@ -711,6 +631,22 @@ type ty with
         | T_App (t1, t2)    -> t1.is_monomorphic && t2.is_monomorphic
         | T_HTuple ts       -> List.fold (fun r (t : ty) -> r && t.is_monomorphic) true ts
 
+    member t.search p =
+        let l ts = List.tryFind p ts
+        match t with
+        | (T_Cons _
+        | T_Var _ as t)
+        | T_Forall (_, t)   -> l [t]
+        | T_App (t1, t2)    -> l [t1; t2]
+        | T_HTuple ts       -> l ts
+        | T_Closure _       -> None
+
+    member t.search_var α =
+        match t.search (function T_Var (β, _) -> α = β | _ -> false) with
+        | Some (T_Var (_, k)) -> Some k
+        | _ -> None
+
+
 type fxty with
     override this.ToString () = this.pretty    
     member this.pretty =
@@ -735,26 +671,16 @@ type fxty with
         | Fx_F_Ty t   -> t.is_monomorphic
 
 
-
-type constraints with
-    member this.fv = Computation.B.set { for c in this do yield! c.ty.fv }
-
-
 type scheme with    
     override this.ToString () = this.pretty
 
     member σ.pretty =
-        let { constraints = cs; fxty = t } = σ
+        let { constraints = cs; fxty = Fx_Foralls (qs, ϕ1) } = σ
         // TODO: deal with variables in the constraints and choose how to show them, either detecting the outer-most foralls or something like that
-//        let αs = Q.dom
-//        let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_sep αs)
+        let αs = Computation.B.set { for α, _ in qs do yield α }
+        let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_prefix_sep αs)
         let cspart = if cs.is_empty then "" else sprintf "{ %O } => " cs
         in
-            sprintf "%s%O" cspart t
+            sprintf "%s%s%O" αspart cspart ϕ1
                         
-    member this.fv =
-        let { constraints = cs; fxty = t } = this
-        in
-            cs.fv + t.fv
-
     static member binding_separator = ty.binding_separator

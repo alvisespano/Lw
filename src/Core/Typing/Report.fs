@@ -136,6 +136,9 @@ module Error =
     let skolemized_type_variable_escaped loc tsk =
         E 24 loc "skolem type variable %O escaped" tsk
 
+    let annot_flex_type loc ϕ =
+        E 25 loc "type expression is a flexible type where a standard (System-F) type is expected: %O" ϕ
+
 
 [< RequireQualifiedAccess >]
 module Warn =
@@ -184,8 +187,6 @@ module Warn =
     let unused_quantified_type_variable loc α t =
         W 13 loc Normal "quantified type variable %O does not occur in type %O" α t
 
-    let lambda_annot_is_flex_type loc x ϕ t =
-        E 25 loc "function parameter %O has been annotated with a flexible type %O and had to be instantiated to the System-F type %O" x ϕ t
 
 
 [< RequireQualifiedAccess >]

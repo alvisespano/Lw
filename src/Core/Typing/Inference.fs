@@ -25,7 +25,7 @@ open Lw.Core.Typing.Ops
 open Lw.Core.Typing.Meta
 
 
-let desugar (M : translator_typing_builder<_, _>) f (e0 : node<_, _>) (e : node<_, _>) =
+let desugar (M : type_inference_builder<_>) f (e0 : node<_, _>) (e : node<_, _>) =
     M {
         L.debug Low "[DESUGAR] %O ~~> %O" e0 e
         let! t = f e
@@ -50,7 +50,7 @@ let W_lit = function
 //
 
 let rec W_expr (ctx : context) (e0 : expr) =
-    let M = new translator_typing_builder<_, _> (e0)
+    let M = new type_inference_builder<_> (e0)
     M {
         let e = e0.value // uexpr must be bound before translation, or printing will not work
         #if DEBUG_BEFORE_INFERENCE
@@ -81,7 +81,7 @@ let rec W_expr (ctx : context) (e0 : expr) =
     } 
 
 and W_decl ctx d =
-    let M = new translator_typing_builder<_, _> (d)
+    let M = new type_inference_builder<_> (d)
     M {
         L.debug Low "[decl] %O" d
         return! (if ctx.top_level_decl then M.fork_scoped_vars else M.ReturnFrom) <| M { 
@@ -95,23 +95,28 @@ and W_decl ctx d =
 
 and W_expr' ctx e0 =
     let Lo x = Lo e0.loc x
-    let M = new translator_typing_builder<_, _> (e0)
+    let M = new type_inference_builder< _> (e0)
     let desugar = desugar M (W_expr ctx) e0
+    let W_expr_F ctx e0 =
+        M {
+            let! ϕ = W_expr ctx e0
+            return ϕ.ftype
+        }
     M {
         match e0.value with
         | Lit lit ->
             yield W_lit lit
 
         | Record (bs, eo) ->
-            let! bs = M.List.map (fun (l, e) -> M { let! ϕ = W_expr ctx e in return l, ϕ.ftype }) bs
+            let! bs = M.List.map (fun (l, e) -> M { let! t = W_expr_F ctx e in return l, t }) bs
             match eo with
             | None ->
                 yield T_Closed_Record bs
 
             | Some e ->
-                let! ϕe = W_expr ctx e
+                let! ϕ = W_expr ctx e
                 let ρ = var.fresh
-                do! M.unify e.loc (T_Record ([], Some ρ)) ϕe.ftype
+                do! M.unify e.loc (T_Record ([], Some ρ)) ϕ.ftype
                 yield T_Record (bs, Some ρ)
 
         | Var x ->
@@ -131,18 +136,18 @@ and W_expr' ctx e0 =
                 yield α
 
             | Jb_Var σ ->
-                let! cs, t = M.inherit_constraints σ
-                if cs.is_empty then yield t
+                let! { constraints = cs; fxty = ϕ } = M.instantiate_and_inherit_constraints σ
+                if cs.is_empty then yield ϕ
                 else
                     let e1 = Id x
                     let e2 = possibly_tuple Lo E_CId Tuple cs
                     M.translated <- App (Lo e1, e2)
-                    yield t
+                    yield ϕ
 
             | Jb_Data σ ->
-                let! _, t = M.inherit_constraints σ
+                let! { fxty = ϕ } = M.instantiate_and_inherit_constraints σ
                 M.translated <- Reserved_Cons x
-                yield t
+                yield ϕ
                 
             | Jb_Unbound ->
                 return Report.Error.unbound_symbol e0.loc x
@@ -179,13 +184,9 @@ and W_expr' ctx e0 =
                     do! M.add_prefix α (Fx_Bottom K_Star)
                     return tα
                 | Some τ ->
-                    let! ϕ, k = Wk_and_eval_ty_expr ctx τ
+                    let! t, k = Wk_and_eval_ty_expr ctx τ
                     do! M.kunify τ.loc K_Star k
-                    match ϕ with
-                    | Fx_F_Ty t -> return t
-                    | _         -> let t = ϕ.ftype
-                                   Report.Warn.lambda_annot_is_flex_type τ.loc x ϕ t
-                                   return t
+                    return t
             }
             let! t = M.fork_Γ <| M {
                 let! _ = M.bind_var_Γ x tx
@@ -202,12 +203,12 @@ and W_expr' ctx e0 =
 
         | App (e1, e2) -> 
             let! Q0 = M.get_Q
-            let! t1 = W_expr ctx e1
-            let! t2 = W_expr ctx e2
+            let! ϕ1 = W_expr ctx e1
+            let! ϕ2 = W_expr ctx e2
             let α1, tα1 = ty.fresh_star_var_and_ty
             let α2, tα2 = ty.fresh_star_var_and_ty
             let β, tβ = ty.fresh_star_var_and_ty
-            do! M.extend [α1, t1; α2, t2; β, T_Bottom K_Star]
+            do! M.extend [α1, ϕ1; α2, ϕ2; β, Fx_Bottom K_Star]
             do! M.unify e1.loc (T_Arrow (tα2, tβ)) tα1
             let! Q5 = M.split_prefix Q0.dom
             yield Q5, tβ
@@ -216,14 +217,14 @@ and W_expr' ctx e0 =
             return unexpected "empty or unary tuple: %O" __SOURCE_FILE__ __LINE__ e
 
         | Tuple es ->
-            let! ts = M.List.map (W_expr ctx) es
+            let! ts = M.List.map (W_expr_F ctx) es
             yield T_Tuple ts
 
         | If (e1, e2, e3) ->
-            let! t1 = W_expr ctx e1
+            let! t1 = W_expr_F ctx e1
             do! M.unify e1.loc T_Bool t1
-            let! t2 = W_expr ctx e2
-            let! t3 = W_expr ctx e3
+            let! t2 = W_expr_F ctx e2
+            let! t3 = W_expr_F ctx e3
             do! M.unify e3.loc t2 t3
             yield t2
 
@@ -236,23 +237,25 @@ and W_expr' ctx e0 =
         | Match (_, []) ->
             return unexpected "empty case list in match expression" __SOURCE_FILE__ __LINE__ 
              
+        // TODO: why don't we try to use flex types here and unify schemes instead? does it make sense?
         | Match (e1, cases) ->
-            let! te1 = W_expr ctx e1
+            let! te1 = W_expr_F ctx e1
             let tr0 = ty.fresh_star_var
             for p, ewo, e in cases do
                 let! tp = W_patt ctx p
                 do! M.unify p.loc te1 tp
                 match ewo with
                 | None    -> return ()
-                | Some ew -> let! tew = W_expr ctx ew
+                | Some ew -> let! tew = W_expr_F ctx ew
                              do! M.unify ew.loc T_Bool tew
-                let! te = W_expr ctx e
+                let! te = W_expr_F ctx e
                 do! M.unify e.loc tr0 te
             yield tr0
         
+        // TODO: treat Annot as an application to an annotated lambda
         | Annot (e, τ) ->
             let! t, _ = Wk_and_eval_ty_expr ctx τ
-            let! te = W_expr ctx e // TODO: treat Annot as an application to an annotated lambda
+            let! te = W_expr_F ctx e 
             do! M.unify e.loc t te
             yield t
 
@@ -266,20 +269,20 @@ and W_expr' ctx e0 =
                 in
                     R es
             for ei in es do
-                let! ti = W_expr ctx ei
+                let! ti = W_expr_F ctx ei
                 try do! M.unify ei.loc T_Unit ti
                 with :? Report.type_error as e -> Report.Warn.expected_unit_statement ei.loc ti
             yield! W_expr ctx e
 
         | Select (e, x) ->
-            let! te = W_expr ctx e
+            let! te = W_expr_F ctx e
             let α = ty.fresh_star_var
             let t = T_Open_Record [x, α]
             do! M.unify e.loc t te
             yield α
             
         | Restrict (e, x) ->
-            let! te = W_expr ctx e
+            let! te = W_expr_F ctx e
             let α = ty.fresh_star_var
             let ρ = var.fresh
             do! M.unify e.loc (T_Record ([x, α], Some ρ)) te
@@ -314,13 +317,13 @@ and W_expr' ctx e0 =
                 let bs = [ for c in cs -> let xi = c.name in { qual = decl_qual.none; patt = Lo <| P_Var xi; expr = Lo <| Select (Lo <| Id x, xi) } ]
                 in
                     Let (Lo <| D_Bind bs, e)
-            yield! desugar (Lo <| Lambda ((x, None), Lo e1))
+            yield! desugar (Lo <| Lambda ((x, None), Lo e1))    // TODO: infer the type of the desugared expression?
 
         | Eject e ->
-            let! t = W_expr ctx e
+            let! t = W_expr_F ctx e
             let α = ty.fresh_star_var
             let tr = T_Open_Record []
-            do! M.unify e.loc (T_Arrow (tr, α)) t
+            do! M.unify e.loc (T_Arrow (tr, α)) t   // TODO: probably this is not working in HML and something like the (APP) rule must be used
             match tr with
             | T_Record (xts, _) ->
                 for x, t in xts do
@@ -331,10 +334,10 @@ and W_expr' ctx e0 =
             let x = fresh_reserved_id ()
             let e1 = Record ([ for { name = y } in cs -> y, Lo <| Id y ], None)
             let e2 = App (e, Lo <| Id x)
-            yield! desugar (Lo <| Let (Lo <| D_Bind [{ qual = decl_qual.none; patt = Lo <| P_Var x; expr = Lo e1 }], Lo e2))
+            yield! desugar (Lo <| Let (Lo <| D_Bind [{ qual = decl_qual.none; patt = Lo <| P_Var x; expr = Lo e1 }], Lo e2))    // TODO: infer the type of the desugared expression?
 
         | Solve (e, τ) ->
-            let! te = W_expr ctx e
+            let! te = W_expr_F ctx e
             let! t, _ = Wk_and_eval_ty_expr ctx τ
             do! M.unify e.loc (T_Open_Record []) t
             let xts =
@@ -364,7 +367,7 @@ and W_expr' ctx e0 =
     
 
 and W_decl' (ctx : context) (d0 : decl) =
-    let M = new translator_typing_builder<_, _> (d0)
+    let M = new type_inference_builder<_> (d0)
     let desugar = desugar M (W_decl ctx) d0
     let unify_and_resolve (ctx : context) (e : node<_, _>) t1 t2 =
         M {
@@ -373,7 +376,7 @@ and W_decl' (ctx : context) (d0 : decl) =
         }
     let jk over x t = if over then Jk_Inst (x, t.GetHashCode ()) else Jk_Var x
 
-    let gen_bind prefixes decl_qual (e0 : node<_, _>) x (t : ty) =
+    let gen_bind prefixes decl_qual (e0 : node<_, _>) x (t : fxty) =
         let loc = e0.loc
         let Lo x = Lo loc x
         M {
@@ -565,7 +568,7 @@ and W_decl' (ctx : context) (d0 : decl) =
 
 
 and W_patt ctx (p0 : patt) =
-    let M = new translator_typing_builder<_, _> (p0)
+    let M = new type_inference_builder<_, _> (p0)
     let R = W_patt ctx
     let loc0 = p0.loc
     M {
@@ -577,7 +580,7 @@ and W_patt ctx (p0 : patt) =
                     return Report.Error.unbound_data_constructor loc0 x
                     
                 | Jb_Data σ ->
-                    let! _, _, t = M.inherit_constraints σ
+                    let! _, _, t = M.instantiate_and_inherit_constraints σ
                     yield t
 
                 | Jb_Overload t ->

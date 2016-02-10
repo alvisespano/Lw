@@ -34,8 +34,9 @@ with
     member this.pretty = sprintf "%O : %O [δ = %d]" this.jk this.σ this.δ
 
 let private search_best_candidate ctx p cx ct jkσs =
-    [ for jk, σ in jkσs do
-            let csi, _, ti = instantiate σ
+    [ for jk, σ : scheme in jkσs do
+            let { constraints = csi; fxty = ϕi } = σ.instantiate
+            let ti = ϕi.ftype // TODO: can we use flex types here?
             match try_principal_type_of ctx ti ct with
             | Some (tθ : tsubst, kθ) ->
                 yield { constraints = csi
@@ -63,7 +64,7 @@ let private restrict_overloaded x (Γ : jenv) =
         }
 
 let rec resolve_constraints (ctx : context) e0 =
-    let M = new translator_typing_builder<_, _> (e0)
+    let M = new type_inference_builder<_> (e0)
     let loc = e0.loc
     let L0 x = Lo loc x
     M {

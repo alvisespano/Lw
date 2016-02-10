@@ -57,7 +57,7 @@ with
 type K<'a> = Monad.M<'a, state>
 
 let (|Jb_Overload|Jb_Var|Jb_Data|Jb_OverVar|Jb_Unbound|) = function
-    | Some (Jk_Var _, { mode = Jm_Overloadable; scheme = Ungeneralized t }) -> Jb_Overload t.refresh_fv
+    | Some (Jk_Var _, { mode = Jm_Overloadable; scheme = Ungeneralized t }) -> Jb_Overload t.instantiate_fv
     | Some (Jk_Var _, { mode = Jm_Normal; scheme = σ })                     -> Jb_Var σ
     | Some (Jk_Inst _, { mode = Jm_Overloadable; scheme = _ })              -> Jb_OverVar
     | Some (Jk_Data _, { mode = Jm_Normal; scheme = σ })                    -> Jb_Data σ
@@ -116,7 +116,7 @@ type basic_builder (loc : location) =
         }
 
 
-    member private __.lookup report (env : Env.t<_, _>) x =
+    member internal __.lookup report (env : Env.t<_, _>) x =
         try env.lookup x
         with Env.UnboundSymbol x -> report loc x
 
@@ -136,39 +136,131 @@ type basic_builder (loc : location) =
             return Computation.B.set { for x, n in vas do yield Va (n, Some x) }
         }
 
-    member M.bind_γ x kσ =
+    member M.fork_scoped_vars f =
         M {
-            let! _, kθ = M.get_θ
-            let kσ = subst_kscheme kθ kσ
-            do! M.lift_γ (fun γ -> γ.bind x kσ)
-            return kσ
-        }
-        
-    member M.gen_bind_γ x k =
-        M {
-            let! { γ = γ; θ = _, kθ } = M.get_state
-            let! αs = M.get_scoped_vars_as_set
-            let kσ = kgeneralize (subst_kind kθ k) γ αs
-            return! M.bind_γ x kσ
+            let! Γ = M.get_scoped_vars
+            let! r = f
+            do! M.set_scoped_vars Γ
+            return r
         }
 
-    member M.bind_Δ x t =
+
+
+
+// specialized monad for type inference and translation
+//
+
+type type_inference_builder<'e> (e : node<'e, unit>) =
+    inherit basic_builder (e.loc)
+
+    member __.translated with set x = e.value <- x 
+
+    member M.Yield (ϕ : fxty) =
         M {
-            do! M.lift_Δ (fun Δ -> Δ.bind x t)
+            let! ϕ = M.updated ϕ
+            return ϕ
         }
 
-    member M.search_γ x =
+    member M.Yield (t : ty) = M { yield Fx_F_Ty t }   
+    member M.Yield ((x : id, ϕ : fxty)) = M { let! ϕ = M.updated ϕ in return x, ϕ }    // used for row types
+
+    // used when inferring let bindings    
+    member M.Yield l =
         M {
-            let! γ = M.get_γ
-            return γ.search x
+            return! M.List.map (fun (b : _, x : id, cs : constraints, ϕ : fxty) -> M {
+                        let! ϕ = M.updated ϕ
+                        let! cs = M.updated cs
+                        return b, x, cs, ϕ
+                    }) l                    
         }
 
-    member M.lookup_γ x =
+    // used by some HML rules inferring foralls where the type part have been substituted
+    member M.Yield ((Q : prefix, t : ty)) =
         M {
-            let! γ = M.get_γ
-            return M.lookup Report.Error.unbound_type_symbol γ x
+            assert Q.dom.IsSubsetOf t.fv
+            let! tθ, kθ = M.get_θ
+            assert (Set.intersect Q.dom (tθ.dom + kθ.dom)).IsEmpty
+            yield Fx_ForallsQ (Q, Fx_F_Ty t)
         }
-        
+
+    // banged versions
+    member M.YieldFrom f = M { let! (r : fxty) = f in yield r }
+    member M.YieldFrom f = M { let! (r : list<_ * id * constraints * fxty>) = f in yield r }
+
+    member M.fork_Γ f =
+        M {
+            let! Γ = M.get_Γ
+            let! r = f
+            do! M.set_Γ Γ
+            return r
+        }
+
+    member M.fork_Q f =
+        M {
+            let! Q = M.get_Q
+            let! r = f
+            do! M.set_Q Q
+            return r
+        }
+
+    member M.updated (t : ty) =
+        M {
+            let! θ = M.get_θ
+            return subst_ty θ t
+        }
+
+    member M.updated (ϕ : fxty) =
+        M {
+            let! θ = M.get_θ
+            return subst_fxty θ ϕ
+        }
+
+    member M.updated cs =
+        M {
+            let! θ = M.get_θ
+            return subst_constraints θ cs
+        }
+
+    member M.split_prefix αs =
+        M {
+            let! Q = M.get_Q
+//            let! Q = M.updated Q    // TODO: is this really needed?
+            let Q1, Q2 = Q.split αs
+            do! M.set_Q Q1
+            return Q2
+        }
+
+    member M.extend (α, ϕ) =
+        M {
+//            let! t = M.updated t
+            let! Q = M.get_Q
+            let Q, θ = Q.extend (α, ϕ)
+            do! M.set_Q Q
+            do! M.update_θ θ
+        }
+
+    member M.extend xs =
+        M {
+            for α, t in xs do
+                do! M.extend (α, t)
+        }
+
+    member M.update_prefix_with_bound (Q : prefix) (α, ϕ : fxty) =
+        M {
+//            let! ϕ = M.updated ϕ
+            let Q, θ = Q.update_prefix_with_bound (α, ϕ)
+            do! M.set_Q Q
+            do! M.update_θ θ
+        }
+
+    member M.update_prefix_with_subst (Q : prefix) (α, t : ty) =
+        M {
+//            let! t = M.updated t
+            let Q, θ = Q.update_prefix_with_subst (α, t)
+            do! M.set_Q Q
+            do! M.update_θ θ            
+        }
+
     member M.search_binding_by_name_Γ x =
         M {
             let! Γ = M.get_Γ
@@ -230,46 +322,11 @@ type basic_builder (loc : location) =
             do! M.lift_constraints (fun cs -> cs.remove c)
         }
 
-    member M.inherit_constraints { constraints = cs; fxty = ϕ } =
-        M {
-            do! M.add_constraints cs
-            return cs, ϕ
-        }
-
-    member M.updated (t : ty) =
-        M {
-            let! θ = M.get_θ
-            return subst_ty θ t
-        }
-
-    member M.updated (ϕ : fxty) =
-        M {
-            let! θ = M.get_θ
-            return subst_fxty θ ϕ
-        }
-
-    member M.fork_scoped_vars f =
-        M {
-            let! Γ = M.get_scoped_vars
-            let! r = f
-            do! M.set_scoped_vars Γ
-            return r
-        }
-
-    member M.fork_Γ f =
-        M {
-            let! Γ = M.get_Γ
-            let! r = f
-            do! M.set_Γ Γ
-            return r
-        }
-
-    member M.fork_γ f =
-        M {
-            let! Γ = M.get_γ
-            let! r = f
-            do! M.set_γ Γ
-            return r
+    member M.instantiate_and_inherit_constraints (σ : scheme) =
+        M {            
+            let σ = σ.instantiate
+            do! M.add_constraints σ.constraints
+            return σ
         }
 
     member M.fork_constraints f =
@@ -280,6 +337,31 @@ type basic_builder (loc : location) =
             return r
         }
 
+
+
+// specialized monad for type evaluation
+//
+
+type type_eval_builder<'e> (τ : node<'e, kind>) =
+    inherit basic_builder (τ.loc)
+
+    member M.Yield (ϕ : fxty) = M { return ϕ }
+    member M.Yield (t : ty) = M { yield Fx_F_Ty t }
+
+    member M.YieldFrom f = M { let! (r : ty) = f in yield r }
+    member M.YieldFrom f = M { let! (r : fxty) = f in yield r }
+
+    member M.search_Δ x =
+        M {
+            let! Δ = M.get_Δ
+            return Δ.search x
+        }
+
+    member M.bind_Δ x t =
+        M {
+            do! M.lift_Δ (fun Δ -> Δ.bind x t)
+        }
+    
     member M.fork_Δ f =
         M {
             let! Δ = M.get_Δ
@@ -289,105 +371,69 @@ type basic_builder (loc : location) =
         }
 
 
-// specialized monad for typing
+
+// specialized monad kind inference
 //
 
-type typing_builder (loc) =
-    inherit basic_builder (loc)
+// yield operations do decorate nodes
+type kind_inference_builder<'e> (τ : node<'e, kind>) =
+    inherit basic_builder (τ.loc)
 
-    member M.Yield (ϕ : fxty) = M { let! ϕ = M.updated ϕ in return ϕ }
-    member M.Yield (t : ty) = M { yield Fx_F_Ty t }
-    
-    // used when inferring let bindings    
-    member M.Yield l =
+    member M.Yield (k : kind) =
         M {
-            return! M.List.map (fun (b : _, x : id, cs, ϕ : fxty) -> M {
-                        let! ϕ = M.updated ϕ
-                        let! cs = M.update_constraints cs
-                        return b, x, cs, ϕ
-                    }) l                    
+            let! k = M.updated k
+            τ.typed <- k
+            return k
         }
 
-    // used by some HML rules inferring foralls where the type part have been substituted
-    member M.Yield ((Q : prefix, t : ty)) = M { let! t = M.updated t in return Fx_ForallsQ (Q, Fx_F_Ty t) }   // TODO: can we just use update_fxty here?
-
-    // used for typing row types
-    member M.Yield ((x : id, ϕ : fxty)) = M { let! ϕ = M.updated ϕ in return x, ϕ }
-
-    // banged version of Yields above
-    member M.YieldFrom f = M { let! (r : fxty) = f in yield r }
-    member M.YieldFrom f = M { let! (r : list<_ * id * constraints * fxty>) = f in yield r }
-
-
-    member M.fork_Q f =
+    member M.Yield ((x, k : kind)) =
         M {
-            let! Q = M.get_Q
+            let! k = M.updated k
+            τ.typed <- k
+            return x, k
+            
+        }
+    
+    member M.YieldFrom f = M { let! (r : kind) = f in yield r }
+
+    member M.updated k =
+        M {
+            let! _, kθ = M.get_θ
+            return subst_kind kθ k
+        }
+        
+    member M.bind_γ x kσ =
+        M {
+            let! _, kθ = M.get_θ
+            let kσ = subst_kscheme kθ kσ
+            do! M.lift_γ (fun γ -> γ.bind x kσ)
+            return kσ
+        }
+        
+    member M.gen_bind_γ x k =
+        M {
+            let! { γ = γ; θ = _, kθ } = M.get_state
+            let! αs = M.get_scoped_vars_as_set
+            let kσ = kgeneralize (subst_kind kθ k) γ αs
+            return! M.bind_γ x kσ
+        }
+
+    member M.search_γ x =
+        M {
+            let! γ = M.get_γ
+            return γ.search x
+        }
+
+    member M.lookup_γ x =
+        M {
+            let! γ = M.get_γ
+            return M.lookup Report.Error.unbound_type_symbol γ x
+        }
+
+    member M.fork_γ f =
+        M {
+            let! Γ = M.get_γ
             let! r = f
-            do! M.set_Q Q
+            do! M.set_γ Γ
             return r
         }
-
-    member M.update_constraints cs =
-        M {
-            let! θ = M.get_θ
-            return subst_constraints θ cs
-        }
-
-    member M.split_prefix αs =
-        M {
-            let! θ = M.get_θ
-            let! Q = M.get_Q
-//            let Q = subst_prefix θ Q    // TODO: is this really needed?
-            let Q1, Q2 = Q.split αs
-            do! M.set_Q Q1
-            return Q2
-        }
-
-    member M.extend (α, t) =
-        M {
-//            let! t = M.update_ty t
-            let! Q = M.get_Q
-            let Q, θ = Q.extend (α, t)
-            do! M.set_Q Q
-            do! M.update_θ θ
-        }
-
-    member M.extend xs =
-        M {
-            for α, t in xs do
-                do! M.extend (α, t)
-        }
-
-    member M.update_prefix_with_bound (Q : prefix) (α, ϕ : fxty) =
-        M {
-            let! ϕ = M.updated ϕ
-            let Q, θ = Q.update_prefix_with_bound (α, ϕ)
-            do! M.set_Q Q
-            do! M.update_θ θ
-        }
-
-    member M.update_prefix_with_subst (Q : prefix) (α, t : ty) =
-        M {
-            let! t = M.updated t
-            let Q, θ = Q.update_prefix_with_subst (α, t)
-            do! M.set_Q Q
-            do! M.update_θ θ            
-        }
-
-
-// specialized monad for typing and translating
-//
-
-type translator_typing_builder<'u, 'a> (e : node<'u, 'a>) =
-    inherit typing_builder (e.loc)
-    member __.translated with set x = e.value <- x 
-
-
-// specialized monad for kinding
-//
-
-type kinding_builder<'u> (τ : node<'u, kind>) =
-    inherit basic_builder (τ.loc)
-    member __.Yield ((x, k : kind)) = fun (s : state) -> let k = subst_kind s.kθ k in τ.typed <- k; (x, k), s
-    member M.Yield (k : kind) = M { let! (), r = M { yield (), k } in return r }
-    member M.YieldFrom f = M { let! (r : kind) = f in yield r }
