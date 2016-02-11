@@ -43,7 +43,7 @@ with
         {
             Γ   = Env.empty
             γ   = Env.empty
-            θ   = tsubst.empty, ksubst.empty
+            θ   = tksubst.empty
             δ   = tenv.empty
             Q   = Q_Nil
 
@@ -51,10 +51,8 @@ with
             scoped_vars    = Env.empty
         }
 
-    member this.kθ = snd this.θ 
-
         
-type K<'a> = Monad.M<'a, state>
+type M<'a> = Monad.M<'a, state>
 
 let (|Jb_Overload|Jb_Var|Jb_Data|Jb_OverVar|Jb_Unbound|) = function
     | Some (Jk_Var _, { mode = Jm_Overloadable; scheme = Ungeneralized t }) -> Jb_Overload t.instantiate_fv
@@ -78,7 +76,7 @@ type basic_builder (loc : location) =
 
     member __.lift_Γ f st = (), { st with Γ = f st.Γ |> subst_jenv st.θ }
     member __.lift_Δ f st = (), { st with δ = f st.δ }
-    member __.lift_γ f st = (), { st with state.γ = f st.γ |> subst_kjenv st.kθ }
+    member __.lift_γ f st = (), { st with state.γ = f st.γ |> subst_kjenv st.θ.k }
     member __.lift_Q f st = (), { st with Q = f st.Q }
     member __.lift_θ f st = (), { st with θ = f st.θ }
     member __.lift_constraints f (st : state) = (), { st with constraints = subst_constraints st.θ (f st.constraints) }
@@ -99,20 +97,20 @@ type basic_builder (loc : location) =
     //       The basic implementation idea behind it is to use weak references: each object of type var carries a reference count, which implies that each type a given var 
     //       appears in increases the counter. Naturally, also substitutions carry objects of type var, but substitutions should count as weak references, in such a way
     //       that when a var is being referenced only from within a substitution, the substitution entry can be safely removed because we ensure no other type is referencing that var any longer.
-    member M.update_θ (tθ, _ as θ) =
+    member M.update_θ θ =
         M {
             do! M.lift_state (fun s ->
-                    let (_, kθ) as θ = compose_tksubst θ s.θ
+                    let θ = compose_tksubst θ s.θ
                     in
-                        { γ = subst_kjenv kθ s.γ
+                        { γ = subst_kjenv θ.k s.γ
                           δ = subst_tenv θ s.δ
                           θ = θ
                           Γ = subst_jenv θ s.Γ
                           Q = subst_prefix θ s.Q
                           constraints = subst_constraints θ s.constraints
                           scoped_vars = s.scoped_vars })
-            let! tθ', _ = M.get_θ
-            L.debug Normal "[S+] %O\n     = %O" tθ tθ'
+            let! θ' = M.get_θ
+            L.debug Normal "[S+] %O\n     = %O" θ.t θ'.t
         }
 
 
@@ -144,16 +142,50 @@ type basic_builder (loc : location) =
             return r
         }
 
+    member M.bind_γ x kσ =
+        M {
+            let! θ = M.get_θ
+            let kσ = subst_kscheme θ.k kσ
+            do! M.lift_γ (fun γ -> γ.bind x kσ)
+            return kσ
+        }
+        
+    member M.gen_bind_γ x k =
+        M {
+            let! { γ = γ; θ = θ } = M.get_state
+            let! αs = M.get_scoped_vars_as_set
+            let kσ = (subst_kind θ.k k).generalize γ αs
+            return! M.bind_γ x kσ
+        }
 
+    member M.search_γ x =
+        M {
+            let! γ = M.get_γ
+            return γ.search x
+        }
+
+    member M.lookup_γ x =
+        M {
+            let! γ = M.get_γ
+            return M.lookup Report.Error.unbound_type_symbol γ x
+        }
+
+    member M.fork_γ f =
+        M {
+            let! Γ = M.get_γ
+            let! r = f
+            do! M.set_γ Γ
+            return r
+        }
 
 
 // specialized monad for type inference and translation
 //
 
-type type_inference_builder<'e> (e : node<'e, unit>) =
-    inherit basic_builder (e.loc)
+type type_inference_builder (loc) =
+    inherit basic_builder (loc)
 
-    member __.translated with set x = e.value <- x 
+    new () = new type_inference_builder (new location ())
 
     member M.Yield (ϕ : fxty) =
         M {
@@ -162,7 +194,7 @@ type type_inference_builder<'e> (e : node<'e, unit>) =
         }
 
     member M.Yield (t : ty) = M { yield Fx_F_Ty t }   
-    member M.Yield ((x : id, ϕ : fxty)) = M { let! ϕ = M.updated ϕ in return x, ϕ }    // used for row types
+    member M.Yield ((x : id, t : ty)) = M { let! t = M.updated t in return x, t }    // used for row types
 
     // used when inferring let bindings    
     member M.Yield l =
@@ -178,8 +210,8 @@ type type_inference_builder<'e> (e : node<'e, unit>) =
     member M.Yield ((Q : prefix, t : ty)) =
         M {
             assert Q.dom.IsSubsetOf t.fv
-            let! tθ, kθ = M.get_θ
-            assert (Set.intersect Q.dom (tθ.dom + kθ.dom)).IsEmpty
+            let! θ = M.get_θ
+            assert (Set.intersect Q.dom θ.dom).IsEmpty
             yield Fx_ForallsQ (Q, Fx_F_Ty t)
         }
 
@@ -337,6 +369,9 @@ type type_inference_builder<'e> (e : node<'e, unit>) =
             return r
         }
 
+type translatable_type_inference_builder<'e> (e : node<'e, unit>) =
+    inherit type_inference_builder (e.loc)
+    member __.translated with set x = e.value <- x 
 
 
 // specialized monad for type evaluation
@@ -398,42 +433,7 @@ type kind_inference_builder<'e> (τ : node<'e, kind>) =
 
     member M.updated k =
         M {
-            let! _, kθ = M.get_θ
-            return subst_kind kθ k
+            let! θ = M.get_θ
+            return subst_kind θ.k k
         }
         
-    member M.bind_γ x kσ =
-        M {
-            let! _, kθ = M.get_θ
-            let kσ = subst_kscheme kθ kσ
-            do! M.lift_γ (fun γ -> γ.bind x kσ)
-            return kσ
-        }
-        
-    member M.gen_bind_γ x k =
-        M {
-            let! { γ = γ; θ = _, kθ } = M.get_state
-            let! αs = M.get_scoped_vars_as_set
-            let kσ = kgeneralize (subst_kind kθ k) γ αs
-            return! M.bind_γ x kσ
-        }
-
-    member M.search_γ x =
-        M {
-            let! γ = M.get_γ
-            return γ.search x
-        }
-
-    member M.lookup_γ x =
-        M {
-            let! γ = M.get_γ
-            return M.lookup Report.Error.unbound_type_symbol γ x
-        }
-
-    member M.fork_γ f =
-        M {
-            let! Γ = M.get_γ
-            let! r = f
-            do! M.set_γ Γ
-            return r
-        }

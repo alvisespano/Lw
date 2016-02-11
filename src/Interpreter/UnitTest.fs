@@ -19,22 +19,22 @@ open Lw.Core.Typing.Inference
 open Lw.Core.Typing.Meta
 open Lw.Core.Typing.Report
 
-type [< NoComparison; NoEquality >] test_result  =
-    | Ok of ty * kind
+type [< NoComparison; NoEquality >] test_result =
+    | Ok of fxty * kind
     | Wrong
 
 let ctx0 = context.top_level
 let envs0 = Intrinsic.envs.envs0
 let st0 = { Typing.StateMonad.state.empty with Γ = envs0.Γ; γ = envs0.γ }
 
-let unM f x = f ctx0 x st0 |> fst    
+let unM f x = f ctx0 x st0 |> fst
 
 let parse_ty s =
     let τ =
         try parse_ty_expr s
         with :? Parsing.syntax_error as e -> unexpected "syntax error while parsing type expr: %s\n%O" __SOURCE_FILE__ __LINE__ s e
     in
-        unM Wk_and_eval_ty_expr τ
+        unM Wk_and_eval_ty_expr_fx τ
         
 let ok s =
     let t, k = parse_ty s
@@ -55,7 +55,7 @@ let inference s =
     L.test Normal "%O : %O" e t
     t
 
-let is_test_ok t (et : ty, ek) = et = t && ek = t.kind
+let is_test_ok (t : fxty) (et, ek) = et = t && ek = t.kind
     
 
 let test1 (input, res) =

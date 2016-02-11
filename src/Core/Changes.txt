@@ -1,8 +1,18 @@
 ﻿
+11/2/2016:
+* REFACT: tksubst is not a type alias anymore but a record
+* FIX: is_instance_of redesigned and refactored as a member of type ty
+* REFACT: monad builders designed reworked
+* REFACT: major refactor done
+* FIX: D_Type declarations now create a dummy Td_Decl when calling type evaluation and kind inference
+* BUG: (|Fx_ForallsQ|) does not handle possible foralls within the internal ty node
+
+
 10/2/2016:
 * REFACT: constraint, types, schemes and flex types instantiation (i.e. variable refreshment) has been widely redesigned
 * REFACT: big refactor of monad builders
 * UP: more modules ported to the new design
+* UP: unification of T_Forall does not unify kinds of the sub-term anymore, as it was done automatically by recursion
 
 
 9/2/2016: [v0.9.1]

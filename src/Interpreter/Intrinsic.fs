@@ -119,9 +119,10 @@ module Builtin =
 
 let private Γ0, Δ0 =
     List.fold (fun (Γ : jenv, Δ : Eval.env) (x, f) ->
-                    let t, v = f x
+                    let (t : ty), v = f x
                     in
-                        Γ.bind (Jk_Var x) { mode = Jm_Normal; scheme = generalize (constraints.empty, [], t) Γ Set.empty },
+                        Γ.bind (Jk_Var x) { mode = Jm_Normal; scheme = { constraints = constraints.empty
+                                                                         fxty        = Fx_F_Ty (T_Foralls (List.ofSeq t.fv, t))} },
                         Δ.bind x v)
         (Env.empty, Env.empty) Builtin.Values.ΓΔ0
 
@@ -129,7 +130,7 @@ let private γ0, δ0 =
     List.fold (fun (γ : kjenv, δ : tenv) (x, k) ->
                     let t = T_Cons (x, k)
                     in
-                        γ.bind x (kgeneralize k γ),
+                        γ.bind x (k.generalize γ Set.empty),
                         δ.bind x t) (Env.empty, Env.empty) Builtin.Types.γ0
 
 type [< NoEquality; NoComparison >] envs = {

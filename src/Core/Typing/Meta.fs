@@ -44,10 +44,10 @@ let rec kmgu (ctx : mgu_context) k1_ k2_ =
 type basic_builder with
     member M.kunify loc (k1 : kind) (k2 : kind) =
         M {
-            let! { θ = _, kθ; γ = γ } = M.get_state
+            let! { θ = { k = kθ }; γ = γ } = M.get_state
             let kθ = kmgu { loc = loc; γ = γ } (subst_kind kθ k1) (subst_kind kθ k2)
             L.mgu "[kU] %O == %O [%O]" k1 k2 kθ
-            do! M.update_θ (tsubst.empty, kθ)
+            do! M.update_θ (!> kθ)
         }
 
 let private prompt_inferred_kind, prompt_evaluated_type = 
@@ -67,8 +67,8 @@ module private Eval =
     let rec ty_expr (ctx : context) (τ0 : ty_expr) =
         let M = new type_eval_builder<_> (τ0)
         M {            
-            let! _, kθ = M.get_θ
-            τ0.typed <- subst_kind kθ τ0.typed // apply latest subst to each typed node
+            let! θ = M.get_θ
+            τ0.typed <- subst_kind θ.k τ0.typed // apply latest subst to each typed node
             let! t = ty_expr' ctx τ0
             L.debug Min "[t::K] %O\n :: %O\n[T*]   %O" τ0 τ0.typed t
             return t
@@ -160,20 +160,6 @@ module private Eval =
                 }
         }
 
-    and ty_decl ctx d =
-        let M = new type_eval_builder<_> (d)
-        M {
-            match d.value with
-            | Td_Bind bs ->
-                do! ty_bindings ctx d bs
-
-            | Td_Rec bs ->
-                do! ty_rec_bindings ctx d bs
-
-            | Td_Kind _ ->
-                return not_implemented "%O" __SOURCE_FILE__ __LINE__ d
-        }
-
     and ty_bindings (ctx : context) d bs =
         let M = new type_eval_builder<_> (d)
         M {
@@ -186,7 +172,7 @@ module private Eval =
                     prompt_evaluated_type x (Δ.lookup x)
         }
 
-    and ty_rec_bindings (ctx : context) d bs =
+    and ty_rec_bindings<'e> (ctx : context) (d : node<'e, _>) bs =
         let M = new type_eval_builder<_> (d)
         M {
             let! Δ = M.get_Δ
@@ -196,6 +182,21 @@ module private Eval =
                         prompt_evaluated_type x t
                         Δ.bind x t) Δ bs
             do! M.set_Δ !Δr
+        }
+
+    // like Wk_ty_decl, this must be defined AFTER the functions it calls
+    and ty_decl ctx d =
+        let M = new type_eval_builder<_> (d)
+        M {
+            match d.value with
+            | Td_Bind bs ->
+                do! ty_bindings ctx d bs
+
+            | Td_Rec bs ->
+                do! ty_rec_bindings ctx d bs
+
+            | Td_Kind _ ->
+                return not_implemented "%O" __SOURCE_FILE__ __LINE__ d
         }
 
     and ty_patt ctx (p : ty_patt) (t : ty) =
@@ -357,20 +358,6 @@ and Wk_ty_expr' (ctx : context) (τ0 : ty_expr) =
             yield K_Row
     }
 
-and Wk_ty_decl ctx d =
-    let M = new kind_inference_builder<_> (d)
-    M {
-        match d.value with
-        | Td_Bind bs ->
-            return! Wk_ty_bindings ctx d bs
-
-        | Td_Rec bs ->
-            return! Wk_ty_rec_bindings ctx d bs
-
-        | Td_Kind _ ->
-            return not_implemented "%O" __SOURCE_FILE__ __LINE__ d
-    }
-
 // TODO: deal with kindvars scoping; should resemble tyvars scoping, with restriction when generalization occurs etc
 and Wk_ty_bindings (ctx : context) d bs =
     let M = new kind_inference_builder<_> (d)
@@ -388,8 +375,7 @@ and Wk_ty_bindings (ctx : context) d bs =
             prompt_inferred_kind ctx Config.Printing.Prompt.type_decl_prefixes x kσ
     }   
 
-
-and Wk_ty_rec_bindings (ctx : context) d bs  =
+and Wk_ty_rec_bindings<'e> (ctx : context) (d : node<'e, kind>) bs =
     let M = new kind_inference_builder<_> (d)
     M {
         let! bs = M.fork_γ <| M {
@@ -409,6 +395,20 @@ and Wk_ty_rec_bindings (ctx : context) d bs  =
             prompt_inferred_kind ctx Config.Printing.Prompt.rec_type_decl_prefixes x kσ
     }
 
+// this function must be defined AFTER the functions it recursively calls, otherwise F# type inference won't make them polymorphic
+and Wk_ty_decl ctx d =
+    let M = new kind_inference_builder<_> (d)
+    M {
+        match d.value with
+        | Td_Bind bs ->
+            return! Wk_ty_bindings ctx d bs
+
+        | Td_Rec bs ->
+            return! Wk_ty_rec_bindings ctx d bs
+
+        | Td_Kind _ ->
+            return not_implemented "%O" __SOURCE_FILE__ __LINE__ d
+    }
 
 and Wk_ty_patt ctx (p0 : ty_patt) =
     let K = new kind_inference_builder<_> (p0)
@@ -482,7 +482,7 @@ and Wk_ty_patt ctx (p0 : ty_patt) =
 // kind inference and type evaluation in one shot
 //
 
-let Wk_and_eval_ty_expr_fxty (ctx : context) τ =
+let Wk_and_eval_ty_expr_fx (ctx : context) τ =
     let M = new kind_inference_builder<_> (τ)
     M {
         let! k = Wk_ty_expr ctx τ
@@ -507,7 +507,7 @@ let Wk_and_eval_ty_rec_bindings (ctx : context) d bs =
 let Wk_and_eval_ty_expr (ctx : context) τ =
     let M = new kind_inference_builder<_> (τ)
     M {
-        let! ϕ, k = Wk_and_eval_ty_expr_fxty ctx τ
+        let! ϕ, k = Wk_and_eval_ty_expr_fx ctx τ
         match ϕ with
         | Fx_F_Ty t -> return t, k
         | _         -> return Report.Error.annot_flex_type τ.loc ϕ

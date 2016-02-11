@@ -427,7 +427,10 @@ let T_Foralls = Foralls T_Forall
 let (|T_Foralls|) = (|Foralls|) (function T_Forall (α, t) -> Some (α, t) | _ -> None)
 
 let Fx_Foralls = Foralls Fx_Forall
-let (|Fx_Foralls|) = (|Foralls|) (function Fx_Forall (αt, t) -> Some (αt, t) | _ -> None)
+let (|Fx_Foralls|) =
+    (|Foralls|) (function Fx_Forall (αt, t) -> Some (αt, t)
+                        | Fx_F_Ty (T_Forall (α, t)) -> Some ((α, Fx_Bottom t.kind), Fx_F_Ty t)
+                        | _ -> None)
 
 let T_ConsApps ((x, k), ts) = T_Apps (T_Cons (x, k) :: ts)
 let (|T_ConsApps|_|) = function
@@ -514,11 +517,12 @@ type [< NoComparison; NoEquality >] subst<'t> (env : Env.t<var, 't>) =
     member __.map f = new subst<'t> (env.map f)
     member __.search_by f = env.search_by f
 
-    static member pretty_item (α : var) (t : 't) = sprintf "[%O %s %O]" α Config.Printing.substitution_sep t
-    member __.pretty = if env.is_empty then "0" else env.pretty_by_binding subst.pretty_item ""
-    override this.ToString () = this.pretty
+    static member pretty_item (bra, ket, α : var, t : 't) = sprintf "%s%O %s %O%s" bra α Config.Printing.substitution_sep t ket
+    static member pretty_item (α, t) = subst<_>.pretty_item ("[", "]", α, t)
+    member __.pretty (bra, ket) = if env.is_empty then sprintf "%s%s" bra ket else env.pretty_by_binding (fun α t -> subst<'t>.pretty_item (bra, ket, α, t)) ""
+    override this.ToString () = this.pretty ("[", "]")
       
-    member private θ1.append (θ2 : subst<_>) = new subst<'t> (θ1.env + θ2.env)
+    member private θ1.append (θ2 : subst<'t>) = new subst<'t> (θ1.env + θ2.env)
 
     static member empty = new subst<'t> ()
 
@@ -526,12 +530,16 @@ type [< NoComparison; NoEquality >] subst<'t> (env : Env.t<var, 't>) =
 
 type ksubst = subst<kind>
 type tsubst = subst<ty>
-type vasubst = subst<var>
-// TODO: refactor tksubst as a record so there can be a custom pretty printer
-type tksubst = tsubst * ksubst
+//type vasubst = subst<var>
 
-let empty_θ = tsubst.empty, ksubst.empty
-
+type [< NoComparison; NoEquality >] tksubst = { t : tsubst; k : ksubst }
+with
+    static member op_Implicit tθ = { t = tθ; k = ksubst.empty }
+    static member op_Implicit kθ = { t = tsubst.empty; k = kθ }
+    static member empty = { t = tsubst.empty; k = ksubst.empty }
+    member θ.dom = θ.t.dom + θ.k.dom
+    override this.ToString () = this.pretty
+    member this.pretty = sprintf "%s%s" (this.t.pretty ("[", "]")) (this.k.pretty ("{", "}"))
        
 
 // augmentations for kinds

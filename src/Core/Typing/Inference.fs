@@ -25,7 +25,7 @@ open Lw.Core.Typing.Ops
 open Lw.Core.Typing.Meta
 
 
-let desugar (M : type_inference_builder<_>) f (e0 : node<_, _>) (e : node<_, _>) =
+let desugar (M : translatable_type_inference_builder<_>) f (e0 : node<_, _>) (e : node<_, _>) =
     M {
         L.debug Low "[DESUGAR] %O ~~> %O" e0 e
         let! t = f e
@@ -50,12 +50,12 @@ let W_lit = function
 //
 
 let rec W_expr (ctx : context) (e0 : expr) =
-    let M = new type_inference_builder<_> (e0)
+    let M = new translatable_type_inference_builder<_> (e0)
     M {
         let e = e0.value // uexpr must be bound before translation, or printing will not work
         #if DEBUG_BEFORE_INFERENCE
         let! Q = M.get_Q
-        let! tθ, kθ = M.get_θ
+        let! θ = M.get_θ
         let! cs = M.get_constraints
         let rule =
             match e with
@@ -65,15 +65,15 @@ let rec W_expr (ctx : context) (e0 : expr) =
             | Let _     -> "LET"
             | _         -> "e"
         L.tabulate 2
-        L.debug Min "(%-3s) %O\n[C]   %O\n[Q]   %O\n[S]   %O\n      %O" rule e cs Q tθ kθ
+        L.debug Min "(%-3s) %O\n[C]   %O\n[Q]   %O\n[S]   %O" rule e cs Q θ
         #endif
         let! (ϕ : fxty) = W_expr' ctx e0
         do! resolve_constraints ctx e0
         let! Q' = M.get_Q
-        let! tθ', kθ' = M.get_θ
+        let! θ' = M.get_θ
         let! cs' = M.get_constraints
         // TODO: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)
-        L.debug Low "(%-3s) %O\n[:T]  %O\n[nf]  %O\n[F-t] %O\n[e*]  %O\n[C]   %O\n[Q]   %O\n[S]   %O\n      %O\n[C']  %O\n[Q']  %O\n[S']  %O\n      %O" rule e ϕ ϕ.nf ϕ.ftype e0 cs Q tθ kθ cs' Q' tθ' kθ'
+        L.debug Low "(%-3s) %O\n[:T]  %O\n[nf]  %O\n[F-t] %O\n[e*]  %O\n[C]   %O\n[Q]   %O\n[S]   %O\n[C']  %O\n[Q']  %O\n[S']  %O" rule e ϕ ϕ.nf ϕ.ftype e0 cs Q θ cs' Q' θ'
         #if DEBUG_BEFORE_INFERENCE
         L.undo_tabulate
         #endif
@@ -81,7 +81,7 @@ let rec W_expr (ctx : context) (e0 : expr) =
     } 
 
 and W_decl ctx d =
-    let M = new type_inference_builder<_> (d)
+    let M = new translatable_type_inference_builder<_> (d)
     M {
         L.debug Low "[decl] %O" d
         return! (if ctx.top_level_decl then M.fork_scoped_vars else M.ReturnFrom) <| M { 
@@ -93,22 +93,24 @@ and W_decl ctx d =
 // main W functions
 //
 
+and W_expr_F ctx e0 =
+    let M = new translatable_type_inference_builder< _> (e0)
+    M {
+        let! ϕ = W_expr ctx e0
+        return ϕ.ftype
+    }
+
 and W_expr' ctx e0 =
     let Lo x = Lo e0.loc x
-    let M = new type_inference_builder< _> (e0)
+    let M = new translatable_type_inference_builder< _> (e0)
     let desugar = desugar M (W_expr ctx) e0
-    let W_expr_F ctx e0 =
-        M {
-            let! ϕ = W_expr ctx e0
-            return ϕ.ftype
-        }
     M {
         match e0.value with
         | Lit lit ->
             yield W_lit lit
 
         | Record (bs, eo) ->
-            let! bs = M.List.map (fun (l, e) -> M { let! t = W_expr_F ctx e in return l, t }) bs
+            let! bs = M.List.map (fun (x : id, e) -> M { let! t = W_expr_F ctx e in yield x, t }) bs
             match eo with
             | None ->
                 yield T_Closed_Record bs
@@ -242,7 +244,7 @@ and W_expr' ctx e0 =
             let! te1 = W_expr_F ctx e1
             let tr0 = ty.fresh_star_var
             for p, ewo, e in cases do
-                let! tp = W_patt ctx p
+                let! tp = W_patt_F ctx p
                 do! M.unify p.loc te1 tp
                 match ewo with
                 | None    -> return ()
@@ -367,25 +369,25 @@ and W_expr' ctx e0 =
     
 
 and W_decl' (ctx : context) (d0 : decl) =
-    let M = new type_inference_builder<_> (d0)
+    let M = new translatable_type_inference_builder<_> (d0)
     let desugar = desugar M (W_decl ctx) d0
     let unify_and_resolve (ctx : context) (e : node<_, _>) t1 t2 =
         M {
             do! M.unify e.loc t1 t2
             do! resolve_constraints ctx e
         }
-    let jk over x t = if over then Jk_Inst (x, t.GetHashCode ()) else Jk_Var x
+    let jk decl_qual x t = if decl_qual.over then Jk_Inst (x, t.GetHashCode ()) else Jk_Var x
 
-    let gen_bind prefixes decl_qual (e0 : node<_, _>) x (t : fxty) =
+    let gen_bind prefixes dq (e0 : node<_, _>) x (t : fxty) =
         let loc = e0.loc
         let Lo x = Lo loc x
         M {
             let! { γ = γ; constraints = cs } = M.get_state
             // check shadowing and relation with previous bindings
             let! jb = M.search_binding_by_name_Γ x
-            if decl_qual.over then
+            if dq.over then
                 match jb with                
-                | Jb_Overload pt -> if not (is_instance_of { loc = loc; γ = γ } pt t) then Report.Error.instance_not_valid loc x t pt   // open-world overloadable instance
+                | Jb_Overload pt -> if not (t.is_instance_of { loc = loc; γ = γ } pt) then Report.Error.instance_not_valid loc x t pt   // open-world overloadable instance
                 | Jb_Unbound     -> Report.Warn.let_over_without_previous_let loc x                                                     // let-over binding without a previous let-non-over is a warning
                 | _              -> ()                                                                                                  // let-over binding after anything else is valid closed-world overloading
             else
@@ -412,13 +414,13 @@ and W_decl' (ctx : context) (d0 : decl) =
                 | _ -> ()
 
             // generalize, bind and translate
-            let jk = jk decl_qual.over x t
+            let jk = jk dq x t
             let! σ =
-                let jm = if decl_qual.over then Jm_Overloadable else Jm_Normal
+                let jm = if dq.over then Jm_Overloadable else Jm_Normal
                 in
                     M.gen_bind_Γ jk jm t
             let e1 = if cs.is_empty then e0 else LambdaFun ([possibly_tuple Lo P_CId P_Tuple cs], Lo e0.value)
-            Report.prompt ctx (prefixes @ decl_qual.as_tokens) x σ (Some (Config.Printing.ftype_instance_sep, σ.fxty.ftype))
+            Report.prompt ctx (prefixes @ dq.as_tokens) x σ (Some (Config.Printing.ftype_instance_sep, σ.fxty.ftype))
             return jk, e1
         }
 
@@ -443,7 +445,8 @@ and W_decl' (ctx : context) (d0 : decl) =
                     // TODO: refactor this crap an write shorter code
                     M.List.collect (fun ({ patt = p; expr = e } as b) -> M {
                                 do! M.clear_constraints
-                                let! te = W_expr ctx e
+                                let! ϕe = W_expr ctx e
+                                let te = ϕe.ftype
                                 return! M.fork_Γ <| M {
                                     let (|B_Unannot|B_Annot|B_Patt|) = function
                                         | ULo (P_Var x)                    -> B_Unannot x
@@ -452,29 +455,29 @@ and W_decl' (ctx : context) (d0 : decl) =
                                     match p with
                                     | B_Unannot x ->
                                         let! cs = M.get_constraints
-                                        yield [b, x, cs, te.ftype]  // by default bind inferred types as F-types
+                                        yield [b, x, cs, Fx_F_Ty ϕe.ftype]      // by default bind inferred types as F-types
 
                                     | B_Annot (x, τ) ->
-                                        let! tx, k = Wk_and_eval_ty_expr ctx τ
+                                        let! ϕx, k = Wk_and_eval_ty_expr_fx ctx τ
                                         do! M.kunify τ.loc K_Star k
-                                        // TODO: another possible behaviour: always bind the flex type even if an F-type has been annotated: this means that ANY annotation would bind flex types
-                                        let! te = M {
-                                            if tx.is_ftype then
-                                                do! M.unify τ.loc te.ftype tx
-                                                yield te.ftype                  // bind inferred type as an F-type when the annotation is an F-type
-                                            else
-                                                do! M.subsume τ.loc te.ftype tx
-                                                yield te                        // bind the inferred type when annotation is a flex type instead
+                                        let! ϕe = M {
+                                            match ϕx with
+                                            | Fx_F_Ty tx ->
+                                                do! M.unify τ.loc tx te
+                                                yield te                        // bind inferred type as an F-type when the annotation is an F-type
+                                            | _ ->
+                                                do! M.subsume τ.loc te ϕx
+                                                yield ϕe                        // bind the inferred type when annotation is a flex type instead
                                         }
                                         let! cs = M.get_constraints
-                                        yield [b, x, cs, te]
+                                        yield [b, x, cs, ϕe]
 
                                     | B_Patt p ->
-                                        let! tp = W_patt ctx p
-                                        do! M.unify e.loc tp te
+                                        let! tp = W_patt_F ctx p
+                                        do! M.unify e.loc tp te                 // TODO: redesign the behaviour of pattern-based let-bindings reusing (LAMBDA) and (APP) rules
                                         do! resolve_constraints ctx e
                                         let! cs = M.get_constraints
-                                        yield! vars_in_patt p |> Set.toList |> M.List.map (fun x -> M { let! { scheme = Ungeneralized t } = M.lookup_Γ (Jk_Var x) in return b, x, cs, t })
+                                        yield! vars_in_patt p |> Set.toList |> M.List.map (fun x -> M { let! { scheme = σ } = M.lookup_Γ (Jk_Var x) in return b, x, cs, σ.fxty })
                                 }
                             }) bs
                 let! bs' = M.List.map (fun (b : binding, x, cs, t) -> M { let! () = M.set_constraints cs in return! gen_bind Config.Printing.Prompt.value_decl_prefixes b.qual b.expr x t }) l
@@ -486,37 +489,38 @@ and W_decl' (ctx : context) (d0 : decl) =
                 let! l =
                     M.fork_Γ <| M {
                         do! M.clear_constraints
-                        let! l = M.List.map (fun ({ qual = q; par = x, _; expr = e } as b) -> M {
+                        let! l = M.List.map (fun ({ qual = dq; par = x, _; expr = e } as b) -> M {
                                         // TODO: verify how let rec works
                                         let! tx = M {
                                             match b.par with
                                             | _, None ->
                                                 let α, tα = ty.fresh_star_var_and_ty
-                                                do! M.add_prefix α (T_Bottom K_Star)
-                                                yield tα
+                                                do! M.add_prefix α (Fx_Bottom K_Star)
+                                                return tα
 
                                             | _, Some τ -> 
                                                 let! t, k = Wk_and_eval_ty_expr ctx τ
                                                 do! M.kunify τ.loc K_Star k
-                                                yield t                                                
+                                                return t                                                
                                         }
-                                        let! _ = M.bind_Γ (jk q.over x tx) { mode = Jm_Normal; scheme = Ungeneralized tx }
+                                        let! _ = M.bind_Γ (jk dq x tx) { mode = Jm_Normal; scheme = Ungeneralized tx }  // TODO: reuse the (LAMBDA) rule behaviour
                                         return b, x, tx
                                     }) bs
+                        // basic value restriction for let rec
                         for { expr = e }, _, tx in l do
-                            let! te = W_expr ctx e
+                            let! te = W_expr_F ctx e
                             do! unify_and_resolve ctx e tx te
                             match te with
                             | T_Arrow _ -> ()
                             | _         -> Report.Error.value_restriction_non_arrow_in_letrec e.loc te
                         return l
                     }
-                let! bs' = M.List.map (fun (b : rec_binding, x, tx) -> M { return! gen_bind Config.Printing.Prompt.rec_value_decl_prefixes b.qual b.expr x tx }) l
+                let! bs' = M.List.map (fun (b : rec_binding, x, tx) -> M { return! gen_bind Config.Printing.Prompt.rec_value_decl_prefixes b.qual b.expr x (Fx_F_Ty tx) }) l
                 M.translated <- D_Rec [for jk, e in bs' -> { qual = decl_qual.none; par = jk.pretty, None; expr = e }]
             }
 
         | D_Open (q, e) ->
-            let! t = W_expr ctx e
+            let! t = W_expr_F ctx e
             do! unify_and_resolve ctx e (T_Open_Record []) t
             let Lo x = Lo e.loc x
             match t with
@@ -534,7 +538,8 @@ and W_decl' (ctx : context) (d0 : decl) =
                 do! W_decl ctx d
 
         | D_Type bs ->
-            do! Wk_and_eval_ty_rec_bindings ctx d0.loc bs                    
+            let d = Lo d0.loc <| Td_Rec bs
+            do! Wk_and_eval_ty_rec_bindings ctx d bs
 
         | D_Datatype { id = c; kind = kc; datacons = bs } ->
             // type constructor must have star as codomain
@@ -546,7 +551,7 @@ and W_decl' (ctx : context) (d0 : decl) =
             let! kσ = M.gen_bind_γ c kc
             Report.prompt ctx Config.Printing.Prompt.datatype_decl_prefixes c kσ None
             // rebind kc to the unified kind, by reinstantiating it rather than keeping the user-declared one
-            let kc = kinstantiate kσ 
+            let kc = kσ.instantiate
             for { id = x; signature = τx } in bs do
                 let! tx, kx = Wk_and_eval_ty_expr ctx τx
                 do! M.kunify τx.loc K_Star kx
@@ -558,8 +563,8 @@ and W_decl' (ctx : context) (d0 : decl) =
                 let pt = T_Apps [ yield T_Cons (c, kc); for _ in kdom -> ty.fresh_star_var ]
                 let _, tcod = split (|T_Arrows|_|) tx
                 let! γ = M.get_γ
-                if not (is_principal_type_of { γ = γ; loc = τx.loc } pt tcod) then return Report.Error.data_constructor_codomain_invalid τx.loc x c tcod
-                let! σ = M.gen_bind_Γ (Jk_Data x) Jm_Normal tx
+                if not (tcod.is_instance_of { γ = γ; loc = τx.loc } pt) then return Report.Error.data_constructor_codomain_invalid τx.loc x c tcod
+                let! σ = M.gen_bind_Γ (Jk_Data x) Jm_Normal (Fx_F_Ty tx)
                 Report.prompt ctx Config.Printing.Prompt.data_decl_prefixes x σ None
 
         | D_Kind _ ->
@@ -567,9 +572,15 @@ and W_decl' (ctx : context) (d0 : decl) =
     }  
 
 
-and W_patt ctx (p0 : patt) =
-    let M = new type_inference_builder<_, _> (p0)
-    let R = W_patt ctx
+and W_patt_F ctx p0 =
+    let M = new translatable_type_inference_builder<_> (p0)
+    M {
+        let! ϕ = W_patt ctx p0
+        return ϕ.ftype
+    }
+
+and W_patt ctx (p0 : patt) : M<fxty> =
+    let M = new type_inference_builder (p0.loc)
     let loc0 = p0.loc
     M {
         match p0.value with
@@ -580,8 +591,8 @@ and W_patt ctx (p0 : patt) =
                     return Report.Error.unbound_data_constructor loc0 x
                     
                 | Jb_Data σ ->
-                    let! _, _, t = M.instantiate_and_inherit_constraints σ
-                    yield t
+                    let! σ = M.instantiate_and_inherit_constraints σ
+                    yield σ.fxty
 
                 | Jb_Overload t ->
                     return Report.Error.data_constructor_bound_to_wrong_symbol loc0 "open-world overloaded symbol" x t
@@ -600,7 +611,7 @@ and W_patt ctx (p0 : patt) =
         | P_Var x ->
             let α = var.fresh
             let k = K_Star
-            do! M.add_prefix α (T_Bottom k)
+            do! M.add_prefix α (Fx_Bottom k)
             let t = T_Var (α, k)
             do! M.ignore <| M.bind_var_Γ x t
             yield t
@@ -612,11 +623,11 @@ and W_patt ctx (p0 : patt) =
             return unexpected "empty or unary tuple in pattern: %O" __SOURCE_FILE__ __LINE__ p
 
         | P_Tuple ps ->
-            let! ts = M.List.map R ps
+            let! ts = M.List.map (W_patt_F ctx) ps
             yield T_Tuple ts
 
         | P_Record xps ->
-            let! xts = M.List.map (fun (x : id, p) -> M { let! t = R p in yield x, t }) xps
+            let! xts = M.List.map (fun (x : id, p) -> M { let! t = W_patt_F ctx p in return x, t }) xps
             yield T_Open_Record xts
 
         | P_Or (p1, p2) ->
@@ -624,8 +635,8 @@ and W_patt ctx (p0 : patt) =
             let xs2 = vars_in_patt p2
             let set = (xs1 + xs2) - Set.intersect xs1 xs2
             if not (Set.isEmpty set) then Report.Error.different_vars_in_sides_of_or_pattern loc0 set
-            let! t1 = R p1
-            let! t2 = R p2
+            let! t1 = W_patt_F ctx p1
+            let! t2 = W_patt_F ctx p2
             do! M.unify p2.loc t1 t2
             yield t1
 
@@ -634,15 +645,15 @@ and W_patt ctx (p0 : patt) =
             let xs2 = vars_in_patt p2
             let set = Set.intersect xs1 xs2
             if not (Set.isEmpty set) then Report.Error.same_vars_in_sides_of_or_pattern loc0 set
-            let! t1 = R p1
-            let! t2 = R p2
+            let! t1 = W_patt_F ctx p1
+            let! t2 = W_patt_F ctx p2
             do! M.unify p2.loc t1 t2
             yield t1
 
         | P_App (p1, p2) ->
             // TODO: consider supporting HML for pattern application
-            let! t1 = R p1
-            let! t2 = R p2
+            let! t1 = W_patt_F ctx p1
+            let! t2 = W_patt_F ctx p2
             let α = ty.fresh_star_var
             do! M.unify p1.loc (T_Arrow (t2, α)) t1
             yield α
@@ -651,13 +662,13 @@ and W_patt ctx (p0 : patt) =
             yield ty.fresh_star_var
 
         | P_As (p, x) ->
-            let! tp = R p
+            let! tp = W_patt_F ctx p
             let! _ = M.bind_var_Γ x tp
             yield tp
 
         | P_Annot (p, τ) ->
             let! t, _ = Wk_and_eval_ty_expr ctx τ
-            let! tp = R p
+            let! tp = W_patt_F ctx p
             do! M.unify p.loc t tp
             yield t
     }
@@ -665,13 +676,13 @@ and W_patt ctx (p0 : patt) =
 
 and W_program (prg : program) =
     let ctx = context.top_level
-    let M = new typing_builder (new location ())
+    let M = new type_inference_builder ()
     M {
         for d in prg.decls do
             do! W_decl ctx d
         match prg.main with
         | None -> ()
         | Some e ->
-            let! t = W_expr ctx (Lo e.loc <| Val e)
+            let! t = W_expr_F ctx (Lo e.loc <| Val e)
             do! M.unify e.loc T_Int t
     }

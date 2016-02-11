@@ -55,14 +55,14 @@ module internal Mgu =
     module Pure =
         let S = subst_ty
         let ( ** ) = compose_tksubst
-        let kmgu ctx k1 k2 = tsubst.empty, kmgu ctx k1 k2
+        let kmgu ctx k1 k2 : tksubst = !> (kmgu ctx k1 k2)
 
         type var with
             member α.skolemized = sprintf Config.Typing.skolemized_tyvar_fmt α.pretty
 
         let skolemize_ty αks t =
             let sks = [ for α : var, k in αks do yield α, α.skolemized, k ]
-            let θ = new tsubst (Env.t.ofSeq <| List.map (fun (α, x, k) -> α, T_Cons (x, k)) sks), ksubst.empty
+            let θ = !> (new tsubst (Env.t.ofSeq <| List.map (fun (α, x, k) -> α, T_Cons (x, k)) sks))
             in
                 Computation.B.set { for _, x, _ in sks do yield x }, S θ t
 
@@ -96,7 +96,7 @@ module internal Mgu =
             member this.cons = Computation.B.set { for _, t in this do yield! t.cons }
 
         let cons_in_tsubst (tθ : tsubst) = Computation.B.set { for _, t : ty in tθ do yield! t.cons }
-        let cons_in_tksubst (tθ, _) = cons_in_tsubst tθ
+        let cons_in_tksubst θ = cons_in_tsubst θ.t
 
         let check_skolem_escape ctx c θ (Q : prefix) =
             let cons = cons_in_tksubst θ + Q.cons
@@ -117,7 +117,7 @@ module internal Mgu =
             #if DEBUG_UNIFY
             L.mgu "[sub] %O :> %O\n      Q = %O\n" t ϕ Q
             #endif
-            let Q, (tθ, kθ) as r =
+            let Q, θ as r =
                 match t, ϕ with            
                 | _, Fx_Bottom k ->          // this case comes from HML implementation - it is not in the paper
                     assert false
@@ -126,24 +126,24 @@ module internal Mgu =
                 | T_ForallsK (αs, t1), Fx_Inst_ForallsQ (Q', t2) ->            
                     assert Q.is_disjoint Q'
                     let skcs, t1' = skolemize_ty αs t1
-                    let Q1, (tθ1, kθ1) = mgu ctx (Q + Q') t1' t2
+                    let Q1, θ1 = mgu ctx (Q + Q') t1' t2
                     let Q2, Q3 = Q1.split Q.dom
-                    let θ2 = tθ1.remove (Q3.dom (*+ Q'.dom*)), kθ1      // TODO: WARNING: this has been nodified by me! the "+ Q'.dom" part does not come from the HML paper
+                    let θ2 = { θ1 with t = θ1.t.remove (Q3.dom (*+ Q'.dom*)) }      // TODO: WARNING: this has been nodified by me! the "+ Q'.dom" part does not come from the HML paper
                     check_skolems_escape ctx skcs θ2 Q2
                     Q2, θ2
             #if DEBUG_UNIFY
-            L.mgu "[sub=] %O :> %O\n       %O\n       %O\n       Q' = %O" t ϕ tθ kθ Q
+            L.mgu "[sub=] %O :> %O\n       %O\n       Q' = %O" t ϕ θ Q
             #endif
             r
 
 
-        and mgu_scheme ctx (Q : prefix) (ϕ1 : fxty)  (ϕ2 : fxty) =
+        and mgu_scheme ctx (Q : prefix) (ϕ1 : fxty) (ϕ2 : fxty) =
             let ϕ1 = ϕ1.nf
             let ϕ2 = ϕ2.nf
             #if DEBUG_UNIFY
             L.mgu "[mgu-scheme] %O == %O\n             Q = %O" ϕ1 ϕ2 Q
             #endif
-            let Q, (tθ, kθ), t as r =
+            let Q, θ, t as r =
                 match ϕ1, ϕ2 with
                 | (Fx_Bottom k, (_ as t))
                 | (_ as t, Fx_Bottom k) -> Q, kmgu ctx k t.kind, t
@@ -155,7 +155,7 @@ module internal Mgu =
                     in
                         Q4, θ3, Fx_ForallsQ (Q5, Fx_F_Ty (S θ3 t1))
             #if DEBUG_UNIFY
-            L.mgu "[mgu-scheme=] %O == %O\n              %O\n              %O\n              Q' = %O\n              t = %O" ϕ1 ϕ2 tθ kθ Q t
+            L.mgu "[mgu-scheme=] %O == %O\n              %O\n              Q' = %O\n              t = %O" ϕ1 ϕ2 θ Q t
             #endif
             r
 
@@ -166,14 +166,14 @@ module internal Mgu =
                 #if DEBUG_UNIFY
                 L.mgu "[mgu] %O == %O\n      Q = %O" t1 t2 Q0
                 #endif
-                let Q, (tθ, kθ) as r =
+                let Q, θ as r =
                     match t1, t2 with
                     | T_Cons (x, k1), T_Cons (y, k2) when x = y -> Q0, kmgu ctx k1 k2
                     | T_Var (α, k1), T_Var (β, k2) when α = β   -> Q0, kmgu ctx k1 k2
                                       
                     | (T_Row _ as s), T_Row_Ext (l, t, (T_Row (_, ρo) as r)) ->
                         let t', s', tθ1 = rewrite_row loc t1 t2 s l
-                        let θ1 = tθ1, ksubst.empty
+                        let θ1 = !> tθ1
                         Option.iter (fun ρ -> if Set.contains ρ tθ1.dom then Report.Error.row_tail_circularity loc ρ tθ1) ρo
                         let Q2, θ2 = R Q0 (S θ1 t) (S θ1 t')
                         let Q3, θ3 = let θ = θ2 ** θ1 in R Q2 (S θ r) (S θ s')
@@ -225,7 +225,7 @@ module internal Mgu =
                         raise (Mismatch (t1, t2))
 
                 #if DEBUG_UNIFY
-                L.mgu "[mgu=] %O == %O\n       %O\n       %O\n       Q' = %O" t1 t2 tθ kθ Q
+                L.mgu "[mgu=] %O == %O\n       %O\n       %O\n       Q' = %O" t1 t2 θ.t θ.k Q
                 #endif
                 r
             in
@@ -235,13 +235,14 @@ module internal Mgu =
        
 
 let mgu = Mgu.Pure.mgu
+//let fxmgu = Mgu.Pure.mgu_scheme
 let subsume = Mgu.Pure.subsume
 
 let try_mgu ctx Q t1 t2 =
     try Some (mgu ctx Q t1 t2)
     with :? Report.type_error -> None
     
-type type_inference_builder<'e> with
+type type_inference_builder with
     member M.unify loc (t1 : ty) (t2 : ty) =
         M {
             let! γ = M.get_γ
@@ -252,6 +253,17 @@ type type_inference_builder<'e> with
             do! M.set_Q Q
             do! M.update_θ θ
         }
+
+//    member M.fxunify loc (ϕ1 : fxty) (ϕ2 : fxty) =
+//        M {
+//            let! γ = M.get_γ
+//            let! Q = M.get_Q
+//            let! ϕ1 = M.updated ϕ1
+//            let! ϕ2 = M.updated ϕ2
+//            let Q, θ = fxmgu { loc = loc; γ = γ } Q ϕ1 ϕ2
+//            do! M.set_Q Q
+//            do! M.update_θ θ
+//        }
 
     member M.subsume loc (t : ty) (ϕ : fxty) =
         M {
@@ -271,16 +283,29 @@ type type_inference_builder<'e> with
             with :? Report.type_error -> do! M.set_state st          
         }
 
-let try_principal_type_of ctx pt t =
-    try_mgu ctx Q_Nil pt t |> Option.bind (function _, θ -> let t1 = subst_ty θ pt in if t1 = t then Some θ else None)
+type ty with
+    member t1.try_instance_of ctx t2 = 
+        let _, θ = mgu ctx Q_Nil t1 t2
+        in
+            if t2.fv.IsSubsetOf θ.dom then Some θ   // TODO: test if instance_of is correct
+            else None
 
-let is_principal_type_of ctx pt t = (try_principal_type_of ctx pt t).IsSome
+    member t1.is_instance_of ctx t2 = (t1.try_instance_of ctx t2).IsSome
 
-let is_instance_of ctx (ϕ1 : fxty) (pt : ty) =
-    let ϕ2 = Fx_Foralls ([for α in pt.fv do yield α, Fx_Bottom (pt.search_var α).Value], Fx_F_Ty pt)
-    let _, θ = subsume ctx ϕ1 ϕ2    // CONTINUA: subsumere al contrario? potrebbe funzionare... cioè il pt della overload deve essere un'istanza del flextype inferito
-    let t = subst_ty θ t
-    in
-        is_principal_type_of ctx pt t   // TODO: use HML subsume for checking instances
+type fxty with
+    member ϕ.is_instance_of ctx t = ϕ.ftype.is_instance_of ctx t    // TODO: test if instance_of between flex types is correct
 
 
+//let try_principal_type_of ctx pt t =
+//    try_mgu ctx Q_Nil pt t |> Option.bind (function _, θ -> let t1 = subst_ty θ pt in if t1 = t then Some θ else None)
+//
+//let is_principal_type_of ctx pt t = (try_principal_type_of ctx pt t).IsSome
+//
+//let is_instance_of ctx (ϕ1 : fxty) (pt : ty) =
+//    let ϕ2 = Fx_Foralls ([for α in pt.fv do yield α, Fx_Bottom (pt.search_var α).Value], Fx_F_Ty pt)
+//    let _, θ = subsume ctx ϕ1 ϕ2    // CONTINUA: subsumere al contrario? potrebbe funzionare... cioè il pt della overload deve essere un'istanza del flextype inferito
+//    let t = subst_ty θ t
+//    in
+//        is_principal_type_of ctx pt t   // TODO: use HML subsume for checking instances
+//
+//

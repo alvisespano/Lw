@@ -104,7 +104,7 @@ let possibly_tuple L0 e tuple cs =
 //
 
 let rec subst_kind (kθ : ksubst) =
-    let S = subst_kind kθ
+    let S x = subst_kind kθ x
     in function
     | K_Cons (x, ks) -> K_Cons (x, List.map S ks)
     | K_Var α as k ->
@@ -115,65 +115,47 @@ let rec subst_kind (kθ : ksubst) =
 let subst_var (tθ : tsubst) α =
     match tθ.search α with
     #if DEBUG
-    | Some (T_Var (β, _)) as t -> L.warn Min "substituting quantified var: %s" (subst.pretty_item α t); β
+    | Some (T_Var (β, _)) as t -> L.warn Min "substituting quantified var: %s" (subst<_>.pretty_item (α, t)); β
     | None                     -> α
-    | t                        -> unexpected "substituting quantified var to non-var type: %s" __SOURCE_FILE__ __LINE__ (subst.pretty_item α t)
+    | t                        -> unexpected "substituting quantified var to non-var type: %s" __SOURCE_FILE__ __LINE__ (subst<_>.pretty_item (α, t))
     #else
     | Some (T_Var (β, _)) -> β
     | _                   -> α
     #endif
 
-let rec subst_ty (tθ : tsubst, kθ : ksubst) =
-    let S = subst_ty (tθ, kθ)
-    let Sk = subst_kind kθ
+let rec subst_ty θ =
+    let S x = subst_ty θ x
+    let Sk = subst_kind θ.k
     in function
     | T_Var (α, _) as t ->
-        match tθ.search α with
+        match θ.t.search α with
         | Some t' -> t'
         | None    -> t
 
-    | T_Forall (α, t)           -> T_Forall (subst_var tθ α, S t)
+    | T_Forall (α, t)           -> T_Forall (subst_var θ.t α, S t)
     | T_Cons (x, k)             -> T_Cons (x, Sk k)
     | T_App (t1, t2)            -> T_App (S t1, S t2)
     | T_HTuple ts               -> T_HTuple (List.map S ts)
     | T_Closure (x, Δ, τ, k)    -> T_Closure (x, Δ, τ, Sk k)
 
-let rec subst_fxty (tθ : tsubst, kθ : ksubst) =
-    let S = subst_fxty (tθ, kθ)
-    let St = subst_ty (tθ, kθ)
-    let Sk = subst_kind kθ
+let rec subst_fxty θ =
+    let S x = subst_fxty θ x
+    let St = subst_ty θ
+    let Sk = subst_kind θ.k
     in function
     | Fx_Bottom k             -> Fx_Bottom (Sk k)
     | Fx_F_Ty t               -> Fx_F_Ty (St t)
     | Fx_Forall ((α, ϕ1), ϕ2) -> Fx_Forall (( α, S ϕ1), S ϕ2)
 
 
-//let rec subst_kind (kθ : ksubst) (k : kind) = 
-//    let Sk = subst_kind kθ
-//    in
-//        k.map_vars (fun _ k -> k) Sk
-//
-//let rec subst_ty (tθ : tsubst, kθ : ksubst) (t : ty) =
-//    let S = subst_ty (tθ, kθ)
-//    let Sk = subst_kind kθ
-//    in
-//        t.map_vars (fun t _ -> t) (fun α -> function T_Var (β, _) -> β | _ -> α) tθ S Sk
-//
-//let rec subst_fxty (tθ : tsubst, kθ : ksubst) (ϕ : fxty) =
-//    let S = subst_fxty (tθ, kθ)
-//    let St = subst_ty (tθ, kθ)
-//    let Sk = subst_kind kθ
-//    in
-//        ϕ.map_vars (fun t _ -> t) (fun α -> function T_Var (β, _) -> β | _ -> α) tθ S St Sk
-
 //// first argument is the NEW subst, second argument is the OLD one
 let compose_ksubst (kθ' : ksubst) (kθ : ksubst) = kθ.compose subst_kind kθ'
 
-let compose_tksubst (tθ' : tsubst, kθ') (tθ : tsubst, kθ) =
+let compose_tksubst { t = tθ'; k = kθ' } { t = tθ; k = kθ } =
     let kθ = compose_ksubst kθ' kθ
-    let tθ = tθ.compose (fun tθ -> subst_ty (tθ, kθ)) tθ'
+    let tθ = tθ.compose (fun tθ -> subst_ty { t = tθ; k = kθ }) tθ'
     in
-        tθ, kθ
+        { t = tθ; k = kθ }
 
 let subst_prefix θ Q = prefix.B { for α, ϕ in Q do yield α, subst_fxty θ ϕ }
 
@@ -213,7 +195,7 @@ let (|Fx_ForallsQ|) (Fx_Foralls (qs, ϕ)) = prefix.ofSeq qs, ϕ
 let (|Fx_Inst_ForallsQ|) (Fx_ForallsQ (Q, ϕ1) as ϕ0) =   // this has a special behaviour: quantified types are refreshed and right-hand is guaranteed an unquantified F-type
     match ϕ1 with
     | Fx_Unquantified_Ty t -> 
-        let θ = new tsubst (Env.t.B { for α, ϕ in Q do yield α, T_Var (var.fresh, ϕ.kind) }), ksubst.empty
+        let θ = !> (new tsubst (Env.t.B { for α, ϕ in Q do yield α, T_Var (var.fresh, ϕ.kind) }))
         in
             subst_prefix θ Q, subst_ty θ t
 
@@ -271,7 +253,7 @@ type fxty with
             then ϕ1.nf
             else
                 match ϕ1.nf with
-                | Fx_Unquantified_Ty t -> (subst_fxty (new tsubst (α, t), ksubst.empty) ϕ2).nf
+                | Fx_Unquantified_Ty t -> (subst_fxty (!> (new tsubst (α, t))) ϕ2).nf
                 | ϕ1'                  -> Fx_Forall ((α, ϕ1'), ϕ2.nf)
 
     member t.ftype =
@@ -284,7 +266,7 @@ type fxty with
                     T_Forall (α, tα)
 
             | Fx_Forall ((α, Fx_Inst_ForallsQ (Q, t1)), ϕ2) ->
-                let θ = new tsubst (α, t1), ksubst.empty
+                let θ = !> (new tsubst (α, t1))
                 in
                     R (Fx_ForallsQ (Q, subst_fxty θ ϕ2))
 
@@ -343,11 +325,12 @@ type kscheme with
         in
             subst_kind kθ k
 
-// TODO: restricted named vars should be taken into account also for kind generalization? guess so
-let kgeneralize (k : kind) γ named_tyvars =
-    let αs = k.fv - (fv_γ γ) - named_tyvars
-    in
-        { forall = αs; kind = k }
+type kind with
+    // TODO: restricted named vars should be taken into account also for kind generalization? guess so
+    member k.generalize γ named_tyvars =
+        let αs = k.fv - (fv_γ γ) - named_tyvars
+        in
+            { forall = αs; kind = k }
 
 let (|KUngeneralized|) = function
     | { forall = αs; kind = k } when αs.Count = 0 -> k
@@ -360,7 +343,7 @@ let KUngeneralized k = { forall = Set.empty; kind = k }
 //
 
 type prefix with
-    // TODO: rewrite split in a less complicated way
+    // TODO: rewrite split, extend and update in a less complicated way and put a compilation flag for switching between the two
     member Q.split αs =
         let rec R Q αs =
             match Q with
@@ -383,8 +366,8 @@ type prefix with
     member Q.extend (α, ϕ : fxty) =
         let Q', θ' as r =
             match ϕ.nf with
-            | Fx_Unquantified_Ty t -> Q, (new tsubst (α, t), ksubst.empty)
-            | _                    -> Q + (α, ϕ), empty_θ
+            | Fx_Unquantified_Ty t -> Q, !> (new tsubst (α, t))
+            | _                    -> Q + (α, ϕ), tksubst.empty
         #if DEBUG_UNIFY
         L.debug Normal "[ext] [%O][%O : %O]\n      = [%O][%O]" Q α ϕ Q' θ'
         #endif
@@ -423,7 +406,7 @@ type prefix with
         | _                         -> unexpected "item %O : %O is not in prefix: %O" __SOURCE_FILE__ __LINE__ α ty Q
 
     static member private update_prefix__reusable_part (α, t : ty, Q0 : prefix, Q1, Q2) =
-        let θ = new tsubst (α, t), ksubst.empty
+        let θ = !> (new tsubst (α, t))
         in
             Q0 + Q1 + subst_prefix θ Q2, θ
 
@@ -432,7 +415,7 @@ type prefix with
             this.update <| fun (α, ϕ : fxty, Q0, Q1, Q2) ->
                 match ϕ.nf with
                 | Fx_Unquantified_Ty t' -> prefix.update_prefix__reusable_part (α, t', Q0, Q1, Q2)
-                | _                     -> Q0 + Q1 + (α, ϕ) + Q2, (tsubst.empty, ksubst.empty)
+                | _                     -> Q0 + Q1 + (α, ϕ) + Q2, tksubst.empty
             <| (α, ϕ)
         #if DEBUG_UNIFY
         L.debug Normal "[up-Q] [%O][%O :> %O]\n       = [%O][%O]" this α ϕ Q θ
