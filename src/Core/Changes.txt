@@ -1,4 +1,9 @@
 ﻿
+12/2/2016:
+* REFACT active patterns dealing with quantification, instantiation, unquantification etc. have been redesigned
+* BUG: still not working: it still inferes the same it used to infer before the first big fix, still with no fxty
+
+
 11/2/2016:
 * REFACT: tksubst is not a type alias anymore but a record
 * FIX: is_instance_of redesigned and refactored as a member of type ty

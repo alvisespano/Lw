@@ -186,12 +186,12 @@ and W_expr' ctx e0 =
                     do! M.add_prefix α (Fx_Bottom K_Star)
                     return tα
                 | Some τ ->
-                    let! t, k = Wk_and_eval_ty_expr ctx τ
+                    let! t, k = Wk_and_eval_ty_expr_F ctx τ
                     do! M.kunify τ.loc K_Star k
                     return t
             }
             let! t = M.fork_Γ <| M {
-                let! _ = M.bind_var_Γ x tx
+                let! _ = M.bind_ungeneralized_Γ x tx
                 yield! W_expr ctx e
             }            
             let! tx = M.updated tx
@@ -256,7 +256,7 @@ and W_expr' ctx e0 =
         
         // TODO: treat Annot as an application to an annotated lambda
         | Annot (e, τ) ->
-            let! t, _ = Wk_and_eval_ty_expr ctx τ
+            let! t, _ = Wk_and_eval_ty_expr_F ctx τ
             let! te = W_expr_F ctx e 
             do! M.unify e.loc t te
             yield t
@@ -340,7 +340,7 @@ and W_expr' ctx e0 =
 
         | Solve (e, τ) ->
             let! te = W_expr_F ctx e
-            let! t, _ = Wk_and_eval_ty_expr ctx τ
+            let! t, _ = Wk_and_eval_ty_expr_F ctx τ
             do! M.unify e.loc (T_Open_Record []) t
             let xts =
                 match t with
@@ -418,7 +418,7 @@ and W_decl' (ctx : context) (d0 : decl) =
             let! σ =
                 let jm = if dq.over then Jm_Overloadable else Jm_Normal
                 in
-                    M.gen_bind_Γ jk jm t
+                    M.bind_generalized_Γ jk jm t
             let e1 = if cs.is_empty then e0 else LambdaFun ([possibly_tuple Lo P_CId P_Tuple cs], Lo e0.value)
             Report.prompt ctx (prefixes @ dq.as_tokens) x σ (Some (Config.Printing.ftype_instance_sep, σ.fxty.ftype))
             return jk, e1
@@ -434,7 +434,7 @@ and W_decl' (ctx : context) (d0 : decl) =
 
         | D_Overload l ->
             for { id = x; signature = τ } in l do
-                let! t, k = Wk_and_eval_ty_expr ctx τ
+                let! t, k = Wk_and_eval_ty_expr_F ctx τ
                 do! M.kunify τ.loc K_Star k
                 let! _ = M.bind_Γ (Jk_Var x) { mode = Jm_Overloadable; scheme = Ungeneralized t }
                 Report.prompt ctx Config.Printing.Prompt.overload_decl_prefixes x t None
@@ -499,7 +499,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                                                 return tα
 
                                             | _, Some τ -> 
-                                                let! t, k = Wk_and_eval_ty_expr ctx τ
+                                                let! t, k = Wk_and_eval_ty_expr_F ctx τ
                                                 do! M.kunify τ.loc K_Star k
                                                 return t                                                
                                         }
@@ -553,7 +553,7 @@ and W_decl' (ctx : context) (d0 : decl) =
             // rebind kc to the unified kind, by reinstantiating it rather than keeping the user-declared one
             let kc = kσ.instantiate
             for { id = x; signature = τx } in bs do
-                let! tx, kx = Wk_and_eval_ty_expr ctx τx
+                let! tx, kx = Wk_and_eval_ty_expr_F ctx τx
                 do! M.kunify τx.loc K_Star kx
                 // each curried argument of the each data constructor must have kind star
                 match tx with
@@ -564,7 +564,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                 let _, tcod = split (|T_Arrows|_|) tx
                 let! γ = M.get_γ
                 if not (tcod.is_instance_of { γ = γ; loc = τx.loc } pt) then return Report.Error.data_constructor_codomain_invalid τx.loc x c tcod
-                let! σ = M.gen_bind_Γ (Jk_Data x) Jm_Normal (Fx_F_Ty tx)
+                let! σ = M.bind_generalized_Γ (Jk_Data x) Jm_Normal (Fx_F_Ty tx)
                 Report.prompt ctx Config.Printing.Prompt.data_decl_prefixes x σ None
 
         | D_Kind _ ->
@@ -613,7 +613,7 @@ and W_patt ctx (p0 : patt) : M<fxty> =
             let k = K_Star
             do! M.add_prefix α (Fx_Bottom k)
             let t = T_Var (α, k)
-            do! M.ignore <| M.bind_var_Γ x t
+            do! M.ignore <| M.bind_ungeneralized_Γ x t
             yield t
 
         | P_Lit lit ->
@@ -663,11 +663,11 @@ and W_patt ctx (p0 : patt) : M<fxty> =
 
         | P_As (p, x) ->
             let! tp = W_patt_F ctx p
-            let! _ = M.bind_var_Γ x tp
+            let! _ = M.bind_ungeneralized_Γ x tp
             yield tp
 
         | P_Annot (p, τ) ->
-            let! t, _ = Wk_and_eval_ty_expr ctx τ
+            let! t, _ = Wk_and_eval_ty_expr_F ctx τ
             let! tp = W_patt_F ctx p
             do! M.unify p.loc t tp
             yield t

@@ -86,7 +86,7 @@ module Printing =
     let forall_prefix_sep = " "
     let type_annotation_sep = ":"
     let kind_annotation_sep = "::"
-    let flexible_quantified_tyvar_sep = ":>"
+    let var_bound_sep = ":>"
     let substitution_sep = ":="
     let openworld_overload_constraint_fmt : StringFormat<string -> string> = "%s"
     let closedworld_overload_constraint_fmt : StringFormat<string -> string> = "!%s"

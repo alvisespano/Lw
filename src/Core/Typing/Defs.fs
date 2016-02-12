@@ -309,10 +309,11 @@ type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] prefix =
     static member pretty_item = function
         | α, Fx_Bottom K_Star        -> sprintf "%O" α
         | α, Fx_Bottom k             -> sprintf "(%O :: %O)" α k
-        | α, t when t.kind = K_Star  -> sprintf "(%O %s %O)" α Config.Printing.flexible_quantified_tyvar_sep t
+        | α, t when t.kind = K_Star  -> sprintf "(%O %s %O)" α Config.Printing.var_bound_sep t
         | α, t                       -> sprintf "(%O :: %O >= %O)" α t.kind t
 
-    member Q.pretty = mappen_strings_or_nothing prefix.pretty_item Config.Printing.empty_prefix Config.Printing.forall_prefix_sep Q
+    static member pretty_as_prefix Q = mappen_strings_or_nothing prefix.pretty_item Config.Printing.empty_prefix Config.Printing.forall_prefix_sep Q
+    member Q.pretty = prefix.pretty_as_prefix Q
     override this.ToString () = this.pretty
 
     member this.fold f z =
@@ -427,10 +428,7 @@ let T_Foralls = Foralls T_Forall
 let (|T_Foralls|) = (|Foralls|) (function T_Forall (α, t) -> Some (α, t) | _ -> None)
 
 let Fx_Foralls = Foralls Fx_Forall
-let (|Fx_Foralls|) =
-    (|Foralls|) (function Fx_Forall (αt, t) -> Some (αt, t)
-                        | Fx_F_Ty (T_Forall (α, t)) -> Some ((α, Fx_Bottom t.kind), Fx_F_Ty t)
-                        | _ -> None)
+let (|Fx_Foralls|) = (|Foralls|) (function Fx_Forall (αt, t) -> Some (αt, t) | _ -> None)
 
 let T_ConsApps ((x, k), ts) = T_Apps (T_Cons (x, k) :: ts)
 let (|T_ConsApps|_|) = function
@@ -518,19 +516,17 @@ type [< NoComparison; NoEquality >] subst<'t> (env : Env.t<var, 't>) =
     member __.search_by f = env.search_by f
 
     static member pretty_item (bra, ket, α : var, t : 't) = sprintf "%s%O %s %O%s" bra α Config.Printing.substitution_sep t ket
-    static member pretty_item (α, t) = subst<_>.pretty_item ("[", "]", α, t)
+    static member pretty_item (α, t) = subst<'t>.pretty_item ("[", "]", α, t)
     member __.pretty (bra, ket) = if env.is_empty then sprintf "%s%s" bra ket else env.pretty_by_binding (fun α t -> subst<'t>.pretty_item (bra, ket, α, t)) ""
     override this.ToString () = this.pretty ("[", "]")
       
     member private θ1.append (θ2 : subst<'t>) = new subst<'t> (θ1.env + θ2.env)
-
     static member empty = new subst<'t> ()
 
     member θ1.compose apply_subst (θ2 : subst<'t>) = (θ2.map (fun _ t2 -> apply_subst θ1 t2)).append (θ1.restrict (θ1.dom - θ2.dom))
 
 type ksubst = subst<kind>
 type tsubst = subst<ty>
-//type vasubst = subst<var>
 
 type [< NoComparison; NoEquality >] tksubst = { t : tsubst; k : ksubst }
 with
@@ -539,7 +535,7 @@ with
     static member empty = { t = tsubst.empty; k = ksubst.empty }
     member θ.dom = θ.t.dom + θ.k.dom
     override this.ToString () = this.pretty
-    member this.pretty = sprintf "%s%s" (this.t.pretty ("[", "]")) (this.k.pretty ("{", "}"))
+    member this.pretty = this.t.pretty ("[", "]") + if this.k.is_empty then "" else this.k.pretty ("{", "}") 
        
 
 // augmentations for kinds

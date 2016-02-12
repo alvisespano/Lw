@@ -120,17 +120,19 @@ module internal Mgu =
             let Q, θ as r =
                 match t, ϕ with            
                 | _, Fx_Bottom k ->          // this case comes from HML implementation - it is not in the paper
-                    assert false
-                    Q, kmgu ctx t.kind k   
+                    Q, kmgu ctx t.kind k                    
 
-                | T_ForallsK (αs, t1), Fx_Inst_ForallsQ (Q', t2) ->            
+                | T_ForallsK (αs, t1), Fx_Inst_ForallsQU (Q', t2) ->
                     assert Q.is_disjoint Q'
+                    assert t1.is_unquantified
+                    assert t2.is_unquantified
                     let skcs, t1' = skolemize_ty αs t1
                     let Q1, θ1 = mgu ctx (Q + Q') t1' t2
                     let Q2, Q3 = Q1.split Q.dom
                     let θ2 = { θ1 with t = θ1.t.remove (Q3.dom (*+ Q'.dom*)) }      // TODO: WARNING: this has been nodified by me! the "+ Q'.dom" part does not come from the HML paper
                     check_skolems_escape ctx skcs θ2 Q2
                     Q2, θ2
+
             #if DEBUG_UNIFY
             L.mgu "[sub=] %O :> %O\n       %O\n       Q' = %O" t ϕ θ Q
             #endif
@@ -145,11 +147,13 @@ module internal Mgu =
             #endif
             let Q, θ, t as r =
                 match ϕ1, ϕ2 with
-                | (Fx_Bottom k, (_ as t))
-                | (_ as t, Fx_Bottom k) -> Q, kmgu ctx k t.kind, t
+                | (Fx_BottomQU k, (_ as t))
+                | (_ as t, Fx_BottomQU k) -> Q, kmgu ctx k t.kind, t
 
-                | Fx_Inst_ForallsQ (Q1, t1), Fx_Inst_ForallsQ (Q2, t2) ->
-                    assert (let p (a : prefix) b = a.is_disjoint b in p Q Q1 && p Q1 Q2 && p Q Q2)  //  TODO: remove this where unnecessary thanks to refreshment of Q1 and Q2
+                | Fx_Inst_ForallsQU (Q1, t1), Fx_Inst_ForallsQU (Q2, t2) ->
+                    assert (let p (a : prefix) b = a.is_disjoint b in p Q Q1 && p Q1 Q2 && p Q Q2)  // instantiating ϕ1 and ϕ2 makes this assert always false
+                    assert t1.is_unquantified
+                    assert t2.is_unquantified
                     let Q3, θ3 = mgu ctx (Q + Q1 + Q2) t1 t2
                     let Q4, Q5 = Q3.split Q.dom
                     in
@@ -225,7 +229,7 @@ module internal Mgu =
                         raise (Mismatch (t1, t2))
 
                 #if DEBUG_UNIFY
-                L.mgu "[mgu=] %O == %O\n       %O\n       %O\n       Q' = %O" t1 t2 θ.t θ.k Q
+                L.mgu "[mgu=] %O == %O\n       %O\n       Q' = %O" t1 t2 θ Q
                 #endif
                 r
             in

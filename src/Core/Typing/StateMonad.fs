@@ -110,7 +110,7 @@ type basic_builder (loc : location) =
                           constraints = subst_constraints θ s.constraints
                           scoped_vars = s.scoped_vars })
             let! θ' = M.get_θ
-            L.debug Normal "[S+] %O\n     = %O" θ.t θ'.t
+            L.debug Normal "[S+] %O\n     = %O" θ θ'
         }
 
 
@@ -318,19 +318,27 @@ type type_inference_builder (loc) =
             return σ
         }
 
-    member M.bind_var_Γ x t =
+    member M.bind_ungeneralized_Γ x t =
         M {
             return! M.bind_Γ (Jk_Var x) { mode = Jm_Normal; scheme = Ungeneralized t }
         }
 
     // TODO: check generalization and finalization
-    member M.gen_bind_Γ jk jm (Fx_ForallsQ (Q, ϕ1)) =
+    member M.bind_generalized_Γ jk jm ϕ =
         M {
-            let! cs = M.get_constraints
-            let! αs = M.get_scoped_vars_as_set
-            let _, Q2 = Q.split αs
-            let! ϕ = M.updated (Fx_ForallsQ (Q2, ϕ1))
-            let σ = { constraints = cs; fxty = ϕ }
+            let! σ = M {
+                let! cs = M.get_constraints
+                match ϕ with
+                | Fx_ForallsQ (Q, ϕ1) ->
+                    let! αs = M.get_scoped_vars_as_set
+                    let _, Q2 = Q.split αs
+                    let! ϕ = M.updated (Fx_ForallsQ (Q2, ϕ1))
+                    return { constraints = cs; fxty = ϕ }
+                
+                | Fx_BottomQ _ ->
+                    let! ϕ = M.updated ϕ
+                    return { constraints = cs; fxty = ϕ }
+            }
             return! M.bind_Γ jk { mode = jm; scheme = σ }
         }
         

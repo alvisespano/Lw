@@ -46,7 +46,7 @@ type basic_builder with
         M {
             let! { θ = { k = kθ }; γ = γ } = M.get_state
             let kθ = kmgu { loc = loc; γ = γ } (subst_kind kθ k1) (subst_kind kθ k2)
-            L.mgu "[kU] %O == %O [%O]" k1 k2 kθ
+            L.mgu "[kU] %O == %O\n     %O" k1 k2 kθ
             do! M.update_θ (!> kθ)
         }
 
@@ -117,7 +117,6 @@ module private Eval =
                 let! ϕ2 = E τ2                
                 let! ϕ1 = M {
                     match τo1 with
-                    | Some τ1 -> return! E τ1
                     | None ->
                         // check for unused quantified variable: because it's done on types rather than on type expressions, which would not allows for easy controlling scoping of the var itself
                         let k =
@@ -127,8 +126,12 @@ module private Eval =
                                         kind.fresh_var
                         in
                             return Fx_Bottom k
+
+                    | Some τ1 -> return! E τ1
                 }
-                yield Fx_Forall ((α, ϕ1), ϕ2)
+                match ϕ1, ϕ2 with
+                | Fx_Bottom _, Fx_F_Ty t -> yield T_Forall (α, t) 
+                | _                      -> yield Fx_Forall ((α, ϕ1), ϕ2)
 
             | Te_Let (d, τ1) ->
                 yield! M.fork_Δ <| M {
@@ -486,8 +489,8 @@ let Wk_and_eval_ty_expr_fx (ctx : context) τ =
     let M = new kind_inference_builder<_> (τ)
     M {
         let! k = Wk_ty_expr ctx τ
-        let! t = Eval.ty_expr ctx τ
-        return t, k                         
+        let! ϕ = Eval.ty_expr ctx τ
+        return ϕ.nf, k                  // evaluated flex type is normalized            
     }
 
 let Wk_and_eval_ty_bindings (ctx : context) d bs =
@@ -504,13 +507,15 @@ let Wk_and_eval_ty_rec_bindings (ctx : context) d bs =
         do! Eval.ty_rec_bindings ctx d bs
     }
 
-let Wk_and_eval_ty_expr (ctx : context) τ =
+let Wk_and_eval_ty_expr_F (ctx : context) τ =
     let M = new kind_inference_builder<_> (τ)
     M {
         let! ϕ, k = Wk_and_eval_ty_expr_fx ctx τ
         match ϕ with
         | Fx_F_Ty t -> return t, k
-        | _         -> return Report.Error.annot_flex_type τ.loc ϕ
+        | _         -> let t = ϕ.ftype
+                       Report.Warn.annot_flex_type_became_Ftype τ.loc ϕ t
+                       return t, k
     }
 
 

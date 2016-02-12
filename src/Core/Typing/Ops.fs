@@ -115,7 +115,7 @@ let rec subst_kind (kθ : ksubst) =
 let subst_var (tθ : tsubst) α =
     match tθ.search α with
     #if DEBUG
-    | Some (T_Var (β, _)) as t -> L.warn Min "substituting quantified var: %s" (subst<_>.pretty_item (α, t)); β
+    | Some (T_Var (β, _) as t) -> L.warn Min "substituting quantified var: %s" (subst<_>.pretty_item (α, t)); β
     | None                     -> α
     | t                        -> unexpected "substituting quantified var to non-var type: %s" __SOURCE_FILE__ __LINE__ (subst<_>.pretty_item (α, t))
     #else
@@ -157,7 +157,7 @@ let compose_tksubst { t = tθ'; k = kθ' } { t = tθ; k = kθ } =
     in
         { t = tθ; k = kθ }
 
-let subst_prefix θ Q = prefix.B { for α, ϕ in Q do yield α, subst_fxty θ ϕ }
+let subst_prefix θ Q = prefix.B { for α, ϕ in Q do yield subst_var θ.t α, subst_fxty θ ϕ }
 
 let subst_type_constraints _ tcs = tcs
 
@@ -179,33 +179,69 @@ let subst_kjenv kθ (env : kjenv) = env.map (fun _ -> subst_kscheme kθ)
 let subst_tenv θ (env : tenv) = env.map (fun _ -> subst_ty θ)
 
 
-// active patterns for unquantification, instantiation etc. 
+// active patterns for dealing with quantification, instantiation etc. 
 //
 
-let (|Fx_Unquantified_Ty|_|) = function
+let (|T_Unquantified|T_Quantified|) = function
+    | T_Forall _ -> T_Quantified 
+    | _          -> T_Unquantified 
+
+type ty with
+    member t.is_unquantified =
+        match t with
+        | T_Unquantified _ -> true
+        | _                -> false
+
+let (|Fx_Unquantified|Fx_Quantified|) = function
     | Fx_Bottom _         
     | Fx_Forall _ 
-    | Fx_F_Ty (T_Forall _) -> None
-    | Fx_F_Ty t            -> Some t
-
-// this has the normal behaviour: quantified vars are not touched
-let Fx_ForallsQ (Q : prefix, ϕ) = Fx_Foralls (Seq.toList Q, ϕ)
-let (|Fx_ForallsQ|) (Fx_Foralls (qs, ϕ)) = prefix.ofSeq qs, ϕ
-
-let (|Fx_Inst_ForallsQ|) (Fx_ForallsQ (Q, ϕ1) as ϕ0) =   // this has a special behaviour: quantified types are refreshed and right-hand is guaranteed an unquantified F-type
-    match ϕ1 with
-    | Fx_Unquantified_Ty t -> 
-        let θ = !> (new tsubst (Env.t.B { for α, ϕ in Q do yield α, T_Var (var.fresh, ϕ.kind) }))
-        in
-            subst_prefix θ Q, subst_ty θ t
-
-    | _ -> unexpected "right-hand of %O is not unquantified: %O" __SOURCE_FILE__ __LINE__ ϕ0 ϕ1
+    | Fx_F_Ty T_Quantified          -> Fx_Quantified
+    | Fx_F_Ty (T_Unquantified as t) -> Fx_Unquantified t
 
 let (|T_ForallK|_|) = function
     | T_Forall (α, t) -> let k = (t.search_var α).Value in Some ((α, k), t)
     | _ -> None
 
 let (|T_ForallsK|) = (|Foralls|) (|T_ForallK|_|)
+
+// only flex type quantifiers are collected into Q: possible quantified variables within the right-hand F-type are not handled
+let Fx_ForallsQ (Q : prefix, ϕ : fxty) = Fx_Foralls (Seq.toList Q, ϕ)
+let (|Fx_ForallsQ|Fx_BottomQ|Fx_F_TyQ|) =
+    let rec R = function
+        | Fx_Foralls ([], ϕ)  -> R ϕ
+        | Fx_Bottom k         -> Fx_BottomQ k
+        | Fx_F_Ty t           -> Fx_F_TyQ t
+        | Fx_Foralls (αts, ϕ) -> Fx_ForallsQ (prefix.ofSeq αts, ϕ)
+    in
+        R
+
+// all outer quantified vars are taken, both from the flex type and from possible F-type quantifiers, hence right hand is guaranteed unquantified
+let Fx_ForallsQU = function
+    | Q, T_Unquantified & t -> Fx_Foralls (Seq.toList Q, Fx_F_Ty t)
+    | _, t                  -> unexpected "right-hand part of flex type passed as argument is exptected to be unquantified: %O" __SOURCE_FILE__ __LINE__ t
+
+let (|Fx_ForallsQU|) = function
+//    | Fx_BottomQ k                                   -> Fx_BottomQU k
+    | Fx_ForallsQ (Q, Fx_F_Ty (T_ForallsK (αks, t))) -> Fx_ForallsQU (Q + prefix.B { for α, k in αks do yield α, Fx_Bottom k }, t)
+    | Fx_ForallsQ (Q, Fx_Bottom k)                   -> Fx_ForallsQU (let α, tα = ty.fresh_var_and_ty k in Q + (α, Fx_Bottom k), tα)
+    | Fx_ForallsQ (_, (Fx_Forall _ as ϕ1)) as ϕ      -> unexpected "no quantifier is expected in right hand %O of %O" __SOURCE_FILE__ __LINE__ ϕ1 ϕ
+
+    | Fx_ForallsQ (Q, )
+    | Fx_Bottom k                                    -> let α, tα = ty.fresh_var_and_ty k in Fx_ForallsQU (prefix.B { yield α, Fx_Bottom k }, tα)
+
+// like the one above but all quantified vars are instantiated
+let (|Fx_Inst_ForallsQU|) = function
+    | Fx_ForallsQU (Q, t) as ϕ ->
+            assert t.is_unquantified
+            let θ = !> (new tsubst (Env.t.B { for α, ϕ in Q do yield α, T_Var (var.fresh, ϕ.kind) }))
+            in
+                match subst_fxty θ ϕ with
+                | Fx_ForallsQU (Q, t) -> (Q, t)
+//                | Fx_BottomQU _       -> unexpected "instantiation led to bottom" __SOURCE_FILE__ __LINE__
+
+//    | Fx_ForallsQU (_, (T_Quantified as t)) as ϕ -> unexpected "right-hand of %O is not unquantified: %O" __SOURCE_FILE__ __LINE__ ϕ t
+//    | Fx_BottomQU k -> let α, tα = ty.fresh_var_and_ty k in Fx_Inst_ForallsQU (prefix.B { yield α, Fx_Bottom k }, tα)
+
 
 
 // ty augmentation
@@ -236,11 +272,6 @@ type ty with
 
 
 type fxty with
-//    member this.is_unquantified =
-//        match this with
-//        | Fx_Unquantified_Ty _ -> true
-//        | _                    -> false
-
     member this.nf =
         match this with
         | Fx_F_Ty _
@@ -253,8 +284,8 @@ type fxty with
             then ϕ1.nf
             else
                 match ϕ1.nf with
-                | Fx_Unquantified_Ty t -> (subst_fxty (!> (new tsubst (α, t))) ϕ2).nf
-                | ϕ1'                  -> Fx_Forall ((α, ϕ1'), ϕ2.nf)
+                | Fx_Unquantified t -> (subst_fxty (!> (new tsubst (α, t))) ϕ2).nf
+                | ϕ1'               -> Fx_Forall ((α, ϕ1'), ϕ2.nf)
 
     member t.ftype =
         let rec R = function
@@ -265,18 +296,16 @@ type fxty with
                 in
                     T_Forall (α, tα)
 
-            | Fx_Forall ((α, Fx_Inst_ForallsQ (Q, t1)), ϕ2) ->
+            | Fx_Forall ((α, Fx_Bottom _), ϕ) ->
+                T_Forall (α, R ϕ)
+
+            | Fx_Forall ((α, Fx_ForallsQU (Q, t1)), ϕ2) ->
                 let θ = !> (new tsubst (α, t1))
                 in
                     R (Fx_ForallsQ (Q, subst_fxty θ ϕ2))
 
         in
             R t.nf      // normalization can be left out of the recursion
-
-    member t.is_ftype =
-        match t with
-        | Fx_F_Ty _ -> true
-        | _         -> false
 
 
 let Ungeneralized t = { constraints = constraints.empty; fxty = Fx_F_Ty t }
@@ -298,15 +327,15 @@ type constraints with
     member cs.instantiate αs = constraints.B { for c in cs do yield c.instantiate αs }
 
 type scheme with
-    member this.fv =
-        let { constraints = cs; fxty = t } = this
+    member σ.fv =
+        let { constraints = cs; fxty = t } = σ
         in
             cs.fv + t.fv
 
-    member this.instantiate =
-        let { constraints = cs; fxty = Fx_ForallsQ (Q, _) as ϕ } = this
-        in
-            { constraints = cs.instantiate Q.dom; fxty = ϕ }
+    member σ.instantiate =
+        match σ.fxty with
+        | Fx_ForallsQ (Q, _) as ϕ -> { constraints = σ.constraints.instantiate Q.dom; fxty = ϕ }
+        | Fx_BottomQ _            -> σ
 
 let internal fv_env fv (env : Env.t<_, _>) = env.fold (fun αs _ v -> Set.union αs (fv v)) Set.empty
 
@@ -359,17 +388,17 @@ type prefix with
                         Q1, Q_Cons (Q2, (α, t))
         let Q1, Q2 as r = R Q αs
         #if DEBUG_UNIFY
-        L.debug Normal "[split] [%O][{ %s }]\n        = [%O][%O]" Q (flatten_stringables ", " αs) Q1 Q2
+        L.debug Normal "[split] %O ; { %s }\n        = %O\n          %O" Q (flatten_stringables ", " αs) Q1 Q2
         #endif
         r
 
     member Q.extend (α, ϕ : fxty) =
         let Q', θ' as r =
             match ϕ.nf with
-            | Fx_Unquantified_Ty t -> Q, !> (new tsubst (α, t))
+            | Fx_Unquantified t -> Q, !> (new tsubst (α, t))
             | _                    -> Q + (α, ϕ), tksubst.empty
         #if DEBUG_UNIFY
-        L.debug Normal "[ext] [%O][%O : %O]\n      = [%O][%O]" Q α ϕ Q' θ'
+        L.debug Normal "[ext] %O ; (%O : %O)\n      = %O\n        %O" Q α ϕ Q' θ'
         #endif
         r
 
@@ -414,18 +443,18 @@ type prefix with
         let Q, θ as r =
             this.update <| fun (α, ϕ : fxty, Q0, Q1, Q2) ->
                 match ϕ.nf with
-                | Fx_Unquantified_Ty t' -> prefix.update_prefix__reusable_part (α, t', Q0, Q1, Q2)
+                | Fx_Unquantified t' -> prefix.update_prefix__reusable_part (α, t', Q0, Q1, Q2)
                 | _                     -> Q0 + Q1 + (α, ϕ) + Q2, tksubst.empty
             <| (α, ϕ)
         #if DEBUG_UNIFY
-        L.debug Normal "[up-Q] [%O][%O :> %O]\n       = [%O][%O]" this α ϕ Q θ
+        L.debug Normal "[up-Q] %O ; %s\n       = %O\n         %O" this (prefix.pretty_item (α, ϕ)) Q θ
         #endif
         r
 
     member this.update_prefix_with_subst (α, t : ty) =
         let Q, θ as r = this.update prefix.update_prefix__reusable_part (α, t)
         #if DEBUG_UNIFY
-        L.debug Normal "[up-S] [%O][%O := %O]\n       = [%O][%O]" this α t Q θ
+        L.debug Normal "[up-S] %O ; %s\n       = %O\n         %O" this (subst<_>.pretty_item ("(", ")", α, t)) Q θ
         #endif
         r
 
