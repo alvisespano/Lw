@@ -108,10 +108,29 @@ let Foralls forall = function
     | [], t -> t
     | αs, t -> List.foldBack (fun α t -> forall (α, t)) αs t
 
-let rec (|Foralls|) (|Forall|_|) = function
-    | Forall (α, Foralls (|Forall|_|) (αs, t)) -> (α :: αs, t)
-    | Forall (α, t)                            -> ([α], t)
-    | t                                        -> ([], t)
+//let rec (|Foralls0|) (|Forall|_|) = function
+//    | Forall (α, Foralls0 (|Forall|_|) (αs, t)) -> α :: αs, t
+//    | Forall (α, t)                             -> [α], t
+//    | t                                         -> [], t
+//
+//let (|Foralls|_|) (|Foralls0|) = function
+//    | Foralls0 (αs, _) when Seq.isEmpty αs -> None
+//    | Foralls0 (αs, t) -> Some (αs, t)
+
+let rec (|Foralls|_|) (|Forall|_|) = function
+    | Forall (α, Foralls (|Forall|_|) (αs, t)) -> Some (α :: αs, t)
+    | Forall (α, t)                            -> Some ([α], t)
+    | _                                        -> None
+
+let (|Foralls0|) (|Foralls|_|) = function
+    | Foralls (αs, t) -> αs, t
+    | t               -> [], t
+
+let make_foralls (forall : ('a * 'b) -> _) ((|Forall|_|) : _ -> ('a * 'b) option) =
+    let (|Foralls|_|) = (|Foralls|_|) (|Forall|_|)
+    in
+        Foralls forall, (|Foralls0|) (|Foralls|_|), (|Foralls|_|)
+
 
 type annotable =
     abstract annot_sep : string
@@ -446,8 +465,10 @@ let Te_Unit = Te_Primitive "unit"
 let Te_Apps τs = (Apps (fun (τ1, τ2) -> Lo τ1.loc <| Te_App (τ1, τ2)) τs).value
 let (|Te_Apps|_|) = (|Apps|_|) (function Te_App (ULo τ1, ULo τ2) -> Some (τ1, τ2) | _ -> None)
 
-let Te_Foralls (αs, τ) = (Foralls (fun (α, τ) -> Lo τ.loc <| Te_Forall (α, τ)) (αs, τ)).value
-let (|Te_Foralls|) = (|Foralls|) (function Te_Forall (α, ULo τ) -> Some (α, τ) | _ -> None)
+//let Te_Foralls (αs, τ) = (Foralls (fun (α, τ) -> Lo τ.loc <| Te_Forall (α, τ)) (αs, τ)).value
+//let (|Te_Foralls|_|) = (|Foralls|_|) (function Te_Forall (α, ULo τ) -> Some (α, τ) | _ -> None)
+
+let Te_Foralls, (|Te_Foralls0|), (|Te_Foralls|_|) = make_foralls (fun (α, τ) -> Lo τ.loc <| Te_Forall (α, τ)) (function ULo (Te_Forall (α, (ULo _ as τ))) -> Some (α, τ) | _ -> None)
 
 let Te_Arrow_Cons = Te_Id "->"
 let (|Te_Arrow_Cons|_|) = function

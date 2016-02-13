@@ -182,9 +182,20 @@ let subst_tenv θ (env : tenv) = env.map (fun _ -> subst_ty θ)
 // active patterns for dealing with quantification, instantiation etc. 
 //
 
-let (|T_Unquantified|T_Quantified|) = function
-    | T_Forall _ -> T_Quantified 
-    | _          -> T_Unquantified 
+let T_ForallK ((α, _), t) = T_Forall (α, t)
+let (|T_ForallK|_|) = function
+    | T_Forall (α, t) -> let k = (t.search_var α).Value in Some ((α, k), t)
+    | _ -> None
+
+let T_ForallsK, (|T_ForallsK0|), (|T_ForallsK|_|) = make_foralls T_ForallK (|T_ForallK|_|)
+
+let (|T_Unquantified|_|) = function
+    | T_Forall _ -> None
+    | t          -> Some t
+
+let (|Fx_Unquantified|_|) = function
+    | Fx_F_Ty (T_Unquantified t) -> Some t
+    | _ -> None
 
 type ty with
     member t.is_unquantified =
@@ -192,51 +203,48 @@ type ty with
         | T_Unquantified _ -> true
         | _                -> false
 
-let (|Fx_Unquantified|Fx_Quantified|) = function
-    | Fx_Bottom _         
-    | Fx_Forall _ 
-    | Fx_F_Ty T_Quantified          -> Fx_Quantified
-    | Fx_F_Ty (T_Unquantified as t) -> Fx_Unquantified t
+type fxty with
+    member ϕ.is_unquantified =
+        match ϕ with
+        | Fx_Unquantified _ -> true
+        | _                 -> false
 
-let (|T_ForallK|_|) = function
-    | T_Forall (α, t) -> let k = (t.search_var α).Value in Some ((α, k), t)
+// only flex type quantifiers are collected into Q: possible quantified variables within the right-hand F-type are not included
+
+let Fx_ForallsQ (Q : prefix, ϕ : fxty) = Fx_Foralls (Seq.toList Q, ϕ)
+let (|Fx_ForallsQ|_|) = function
+    | Fx_Foralls (αts, ϕ) -> assert not αts.IsEmpty; Some (prefix.ofSeq αts, ϕ)
     | _ -> None
 
-let (|T_ForallsK|) = (|Foralls|) (|T_ForallK|_|)
-
-// only flex type quantifiers are collected into Q: possible quantified variables within the right-hand F-type are not handled
-let Fx_ForallsQ (Q : prefix, ϕ : fxty) = Fx_Foralls (Seq.toList Q, ϕ)
-let (|Fx_ForallsQ|Fx_BottomQ|Fx_F_TyQ|) =
-    let rec R = function
-        | Fx_Foralls ([], ϕ)  -> R ϕ
-        | Fx_Bottom k         -> Fx_BottomQ k
-        | Fx_F_Ty t           -> Fx_F_TyQ t
-        | Fx_Foralls (αts, ϕ) -> Fx_ForallsQ (prefix.ofSeq αts, ϕ)
-    in
-        R
+let (|Fx_ForallsQ0|) = function
+    | Fx_ForallsQ r -> r
+    | ϕ             -> Q_Nil, ϕ
 
 // all outer quantified vars are taken, both from the flex type and from possible F-type quantifiers, hence right hand is guaranteed unquantified
-let Fx_ForallsQU = function
-    | Q, T_Unquantified & t -> Fx_Foralls (Seq.toList Q, Fx_F_Ty t)
-    | _, t                  -> unexpected "right-hand part of flex type passed as argument is exptected to be unquantified: %O" __SOURCE_FILE__ __LINE__ t
+//let Fx_ForallsQU = function
+//    | Q, T_Unquantified t -> Fx_Foralls (Seq.toList Q, Fx_F_Ty t)
+//    | _, t                -> unexpected "right-hand part of flex type passed as argument is exptected to be unquantified: %O" __SOURCE_FILE__ __LINE__ t
 
-let (|Fx_ForallsQU|) = function
-//    | Fx_BottomQ k                                   -> Fx_BottomQU k
-    | Fx_ForallsQ (Q, Fx_F_Ty (T_ForallsK (αks, t))) -> Fx_ForallsQU (Q + prefix.B { for α, k in αks do yield α, Fx_Bottom k }, t)
-    | Fx_ForallsQ (Q, Fx_Bottom k)                   -> Fx_ForallsQU (let α, tα = ty.fresh_var_and_ty k in Q + (α, Fx_Bottom k), tα)
-    | Fx_ForallsQ (_, (Fx_Forall _ as ϕ1)) as ϕ      -> unexpected "no quantifier is expected in right hand %O of %O" __SOURCE_FILE__ __LINE__ ϕ1 ϕ
-
-    | Fx_ForallsQ (Q, )
-    | Fx_Bottom k                                    -> let α, tα = ty.fresh_var_and_ty k in Fx_ForallsQU (prefix.B { yield α, Fx_Bottom k }, tα)
+let (|Fx_ForallsQU0|) =
+    let q αks = prefix.B { for α, k in αks do yield α, Fx_Bottom k }
+    in function
+    | Fx_ForallsQ (Q, Fx_F_Ty (T_ForallsK (αks, t))) -> Q + q αks, t
+    | Fx_ForallsQ (Q, Fx_F_Ty t)                     -> Q, t
+    | Fx_ForallsQ (Q, _) as ϕ                        -> unexpected "this case should never happen: %O" __SOURCE_FILE__ __LINE__ ϕ
+    | Fx_F_Ty (T_ForallsK (αks, t))                  -> q αks, t
+    | Fx_Bottom k                                    -> let α, tα = ty.fresh_var_and_ty k in q [α, k], tα
 
 // like the one above but all quantified vars are instantiated
-let (|Fx_Inst_ForallsQU|) = function
+let (|Fx_Inst_ForallsQU|_|) = function
     | Fx_ForallsQU (Q, t) as ϕ ->
             assert t.is_unquantified
             let θ = !> (new tsubst (Env.t.B { for α, ϕ in Q do yield α, T_Var (var.fresh, ϕ.kind) }))
             in
                 match subst_fxty θ ϕ with
-                | Fx_ForallsQU (Q, t) -> (Q, t)
+                | Fx_ForallsQU (Q, t) -> Some (Q, t)
+                | _ -> None
+
+    | _ -> None
 //                | Fx_BottomQU _       -> unexpected "instantiation led to bottom" __SOURCE_FILE__ __LINE__
 
 //    | Fx_ForallsQU (_, (T_Quantified as t)) as ϕ -> unexpected "right-hand of %O is not unquantified: %O" __SOURCE_FILE__ __LINE__ ϕ t

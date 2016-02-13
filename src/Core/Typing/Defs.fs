@@ -415,20 +415,8 @@ let (|T_NamedVar|_|) = function
 let T_Apps = Apps T_App
 let (|T_Apps|_|) = (|Apps|_|) (function T_App (t1, t2) -> Some (t1, t2) | _ -> None)
 
-let Foralls forall = function
-    | [], t -> t
-    | αs, t -> List.foldBack (fun α t -> forall (α, t)) αs t
-
-let rec (|Foralls|) (|Forall|_|) = function
-    | Forall (α, Foralls (|Forall|_|) (αs, t)) -> (α :: αs, t)
-    | Forall (α, t)                            -> ([α], t)
-    | t                                        -> ([], t)
-
-let T_Foralls = Foralls T_Forall
-let (|T_Foralls|) = (|Foralls|) (function T_Forall (α, t) -> Some (α, t) | _ -> None)
-
-let Fx_Foralls = Foralls Fx_Forall
-let (|Fx_Foralls|) = (|Foralls|) (function Fx_Forall (αt, t) -> Some (αt, t) | _ -> None)
+let T_Foralls, (|T_Foralls0|), (|T_Foralls|_|) = make_foralls T_Forall (function T_Forall (α, t) -> Some (α, t) | _ -> None)
+let Fx_Foralls, (|Fx_Foralls0|), (|Fx_Foralls|_|) = make_foralls Fx_Forall (function Fx_Forall (αt, t) -> Some (αt, t) | _ -> None)
 
 let T_ConsApps ((x, k), ts) = T_Apps (T_Cons (x, k) :: ts)
 let (|T_ConsApps|_|) = function
@@ -491,8 +479,7 @@ let T_Open_Variant xts = T_Variant (xts, Some var.fresh)
 let T_Closed_Variant xts = T_Variant (xts, None)
 
 
-
-// substitutions
+// substitution types
 //
 
 type [< NoComparison; NoEquality >] subst<'t> (env : Env.t<var, 't>) =
@@ -608,6 +595,7 @@ type ty with
             | T_App (App s)          -> s
             | T_Closure (x, _, τ, _) -> sprintf "<[%O]>" (Te_Lambda ((x, None), τ))
             | T_Foralls (αs, t)      -> use N = var.add_quantified αs in sprintf "forall %s. %O" (flatten_stringables Config.Printing.forall_prefix_sep αs) t
+            | T_Forall _ as t        -> unexpected "forall: %O" __SOURCE_FILE__ __LINE__ t
         and R = wrap_pretty_with_kind R'
         in
             R this
@@ -655,9 +643,10 @@ type fxty with
     override this.ToString () = this.pretty    
     member this.pretty =
         let rec R' = function
+            | Fx_Foralls (qs, t)      -> let Q = prefix.ofSeq qs in use N = var.add_quantified Q in sprintf "forall %O. %O" Q t
+            | Fx_Forall _             -> unexpected "forall" __SOURCE_FILE__ __LINE__
             | Fx_Bottom _             -> Config.Printing.dynamic.bottom
             | Fx_F_Ty t               -> t.pretty
-            | Fx_Foralls (qs, t)      -> let Q = prefix.ofSeq qs in use N = var.add_quantified Q in sprintf "forall %O. %O" Q t
         and R = wrap_pretty_with_kind R'
         in
             R this
@@ -679,7 +668,7 @@ type scheme with
     override this.ToString () = this.pretty
 
     member σ.pretty =
-        let { constraints = cs; fxty = Fx_Foralls (qs, ϕ1) } = σ
+        let { constraints = cs; fxty = Fx_Foralls0 (qs, ϕ1) } = σ
         // TODO: deal with variables in the constraints and choose how to show them, either detecting the outer-most foralls or something like that
         let αs = Computation.B.set { for α, _ in qs do yield α }
         let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_prefix_sep αs)
