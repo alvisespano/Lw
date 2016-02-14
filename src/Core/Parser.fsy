@@ -338,7 +338,7 @@ ty_expr_app_atom:
 
 ty_expr_:
   | FUN ty_fun_param_cases                          { (Te_LambdaCases $2).value }
-  | FORALL ty_forall_params DOT ty_expr             { Te_Foralls ($2, $4) }
+  | FORALL ty_forall_params DOT ty_expr             { (Te_Foralls ($2, $4)).value }
   | FUNCTION ty_cases                               { (Te_LambdaFunction $2).value }
   | MATCH ty_expr WITH ty_cases			            { Te_Match ($2, $4) }
   | LET let_ty_decls IN ty_expr                     { (Te_Lets ($2, $4)).value }

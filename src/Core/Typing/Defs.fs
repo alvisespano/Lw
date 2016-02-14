@@ -329,6 +329,7 @@ type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] prefix =
 module prefix =
     let B = new Computation.Builder.itemized_collection<_, _> (empty = Q_Nil, plus1 = (fun i Q -> Q_Cons (Q, i)), plus = fun Q1 Q2 -> Q1 + Q2)
     let ofSeq sq = B { for α, t in sq do yield α, t }
+    let of_bottoms αks = B { for α, k in αks do yield α, Fx_Bottom k }
 
 
 

@@ -329,14 +329,10 @@ type type_inference_builder (loc) =
             let! σ = M {
                 let! cs = M.get_constraints
                 match ϕ with
-                | Fx_ForallsQ (Q, ϕ1) ->
+                | Fx_ForallsQ0 (Q, ϕ1) ->
                     let! αs = M.get_scoped_vars_as_set
                     let _, Q2 = Q.split αs
                     let! ϕ = M.updated (Fx_ForallsQ (Q2, ϕ1))
-                    return { constraints = cs; fxty = ϕ }
-                
-                | Fx_BottomQ _ ->
-                    let! ϕ = M.updated ϕ
                     return { constraints = cs; fxty = ϕ }
             }
             return! M.bind_Γ jk { mode = jm; scheme = σ }

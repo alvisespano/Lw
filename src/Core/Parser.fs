@@ -2351,7 +2351,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 341 "Parser.fsy"
-                                                                           Te_Foralls (_2, _4) 
+                                                                           (Te_Foralls (_2, _4)).value 
                    )
 # 341 "Parser.fsy"
                  : 'ty_expr_));

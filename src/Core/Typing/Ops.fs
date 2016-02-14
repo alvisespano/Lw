@@ -221,18 +221,21 @@ let (|Fx_ForallsQ0|) = function
     | ϕ             -> Q_Nil, ϕ
 
 // all outer quantified vars are taken, both from the flex type and from possible F-type quantifiers, hence right hand is guaranteed unquantified
-//let Fx_ForallsQU = function
-//    | Q, T_Unquantified t -> Fx_Foralls (Seq.toList Q, Fx_F_Ty t)
-//    | _, t                -> unexpected "right-hand part of flex type passed as argument is exptected to be unquantified: %O" __SOURCE_FILE__ __LINE__ t
+let Fx_ForallsQU (Q, t : ty) =
+    assert t.is_unquantified
+    Fx_Foralls (Seq.toList Q, Fx_F_Ty t)
 
-let (|Fx_ForallsQU0|) =
-    let q αks = prefix.B { for α, k in αks do yield α, Fx_Bottom k }
-    in function
-    | Fx_ForallsQ (Q, Fx_F_Ty (T_ForallsK (αks, t))) -> Q + q αks, t
-    | Fx_ForallsQ (Q, Fx_F_Ty t)                     -> Q, t
-    | Fx_ForallsQ (Q, _) as ϕ                        -> unexpected "this case should never happen: %O" __SOURCE_FILE__ __LINE__ ϕ
-    | Fx_F_Ty (T_ForallsK (αks, t))                  -> q αks, t
-    | Fx_Bottom k                                    -> let α, tα = ty.fresh_var_and_ty k in q [α, k], tα
+let (|Fx_ForallsQU|_|) = function
+    | Fx_ForallsQ (Q, Fx_F_Ty (T_ForallsK (αks, t))) -> Some (Q + prefix.of_bottoms αks, t)
+    | Fx_ForallsQ (Q, Fx_F_Ty t)                     -> Some (Q, t)
+    | Fx_F_Ty (T_ForallsK (αks, t))                  -> Some (prefix.of_bottoms αks, t)
+    | _                                              -> None 
+
+let (|Fx_ForallsQU0|) = function
+    | Fx_ForallsQU (Q, t)   -> Q, t
+    | Fx_Bottom k           -> let α, tα = ty.fresh_var_and_ty k in (prefix.of_bottoms [α, k], tα)
+    | ϕ                     -> unexpected_case __SOURCE_FILE__ __LINE__ ϕ
+
 
 // like the one above but all quantified vars are instantiated
 let (|Fx_Inst_ForallsQU|_|) = function
@@ -245,10 +248,6 @@ let (|Fx_Inst_ForallsQU|_|) = function
                 | _ -> None
 
     | _ -> None
-//                | Fx_BottomQU _       -> unexpected "instantiation led to bottom" __SOURCE_FILE__ __LINE__
-
-//    | Fx_ForallsQU (_, (T_Quantified as t)) as ϕ -> unexpected "right-hand of %O is not unquantified: %O" __SOURCE_FILE__ __LINE__ ϕ t
-//    | Fx_BottomQU k -> let α, tα = ty.fresh_var_and_ty k in Fx_Inst_ForallsQU (prefix.B { yield α, Fx_Bottom k }, tα)
 
 
 
@@ -307,7 +306,7 @@ type fxty with
             | Fx_Forall ((α, Fx_Bottom _), ϕ) ->
                 T_Forall (α, R ϕ)
 
-            | Fx_Forall ((α, Fx_ForallsQU (Q, t1)), ϕ2) ->
+            | Fx_Forall ((α, Fx_ForallsQU0 (Q, t1)), ϕ2) ->
                 let θ = !> (new tsubst (α, t1))
                 in
                     R (Fx_ForallsQ (Q, subst_fxty θ ϕ2))
@@ -342,8 +341,7 @@ type scheme with
 
     member σ.instantiate =
         match σ.fxty with
-        | Fx_ForallsQ (Q, _) as ϕ -> { constraints = σ.constraints.instantiate Q.dom; fxty = ϕ }
-        | Fx_BottomQ _            -> σ
+        | Fx_ForallsQ0 (Q, _) as ϕ -> { constraints = σ.constraints.instantiate Q.dom; fxty = ϕ }
 
 let internal fv_env fv (env : Env.t<_, _>) = env.fold (fun αs _ v -> Set.union αs (fv v)) Set.empty
 
@@ -402,9 +400,10 @@ type prefix with
 
     member Q.extend (α, ϕ : fxty) =
         let Q', θ' as r =
-            match ϕ.nf with
+            let ϕ1 = ϕ.nf
+            match ϕ1 with
             | Fx_Unquantified t -> Q, !> (new tsubst (α, t))
-            | _                    -> Q + (α, ϕ), tksubst.empty
+            | _                 -> Q + (α, ϕ1), tksubst.empty
         #if DEBUG_UNIFY
         L.debug Normal "[ext] %O ; (%O : %O)\n      = %O\n        %O" Q α ϕ Q' θ'
         #endif
