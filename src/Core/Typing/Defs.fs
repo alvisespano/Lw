@@ -34,6 +34,7 @@ type tenv = Env.t<id, ty>
 
 
 // System-F types
+//
 
 and [< NoComparison; CustomEquality; DebuggerDisplay("{ToString()}") >] ty =
     | T_Cons of id * kind
@@ -42,10 +43,8 @@ and [< NoComparison; CustomEquality; DebuggerDisplay("{ToString()}") >] ty =
     | T_App of (ty * ty)
     | T_Forall of var * ty
     | T_Closure of id * tenv ref * ty_expr * kind
-//    | T_Bottom of kind
 with
     static member binding_separator = Config.Printing.type_annotation_sep
-//    static member reduction_separator = Config.Printing.ftype_instance_sep
 
     member this.kind =
         match this with
@@ -235,42 +234,42 @@ module constraints =
 // GADTs definitions
 //
 
-type uvar = Uv of var
-with
-    override this.ToString () = this.pretty
-
-    member this.pretty =
-        match this with
-            | Uv va -> va.pretty
-
-type [< NoComparison; NoEquality >] type_constraints = 
-    | C_Empty
-    | C_Eq of ty * ty
-    | C_And of type_constraints * type_constraints
-with
-    override this.ToString () = this.pretty
-
-    member this.pretty =
-        match this with
-            | C_Empty        -> ""
-            | C_Eq (t1, t2)  -> sprintf "%O ~ %O" t1 t2
-            | C_And (c1, c2) -> sprintf "%O & %O" c1 c2
-
-    member this.is_empty = match this with C_Empty -> true | _ -> false
-
-type [< NoComparison; NoEquality >] type_impl_constraints =
-    | Ic_Constraint of type_constraints
-    | Ic_Impl of Set<var> * Set<uvar> * type_constraints * type_impl_constraints
-    | Ic_And of type_impl_constraints * type_impl_constraints
-with
-    override this.ToString () = this.pretty
-
-    member this.pretty =
-        match this with
-            | Ic_Constraint c           -> c.pretty
-            | Ic_Impl (αs, bs, c, ic)   -> sprintf "[%s] forall %O. %O => %O" (flatten_stringables " " αs) (flatten_stringables " " bs) c ic
-            | Ic_And (ic1, ic2)         -> sprintf "%O & %O" ic1 ic2
-
+//type uvar = Uv of var
+//with
+//    override this.ToString () = this.pretty
+//
+//    member this.pretty =
+//        match this with
+//            | Uv va -> va.pretty
+//
+//type [< NoComparison; NoEquality >] type_constraints = 
+//    | C_Empty
+//    | C_Eq of ty * ty
+//    | C_And of type_constraints * type_constraints
+//with
+//    override this.ToString () = this.pretty
+//
+//    member this.pretty =
+//        match this with
+//            | C_Empty        -> ""
+//            | C_Eq (t1, t2)  -> sprintf "%O ~ %O" t1 t2
+//            | C_And (c1, c2) -> sprintf "%O & %O" c1 c2
+//
+//    member this.is_empty = match this with C_Empty -> true | _ -> false
+//
+//type [< NoComparison; NoEquality >] type_impl_constraints =
+//    | Ic_Constraint of type_constraints
+//    | Ic_Impl of Set<var> * Set<uvar> * type_constraints * type_impl_constraints
+//    | Ic_And of type_impl_constraints * type_impl_constraints
+//with
+//    override this.ToString () = this.pretty
+//
+//    member this.pretty =
+//        match this with
+//            | Ic_Constraint c           -> c.pretty
+//            | Ic_Impl (αs, bs, c, ic)   -> sprintf "[%s] forall %O. %O => %O" (flatten_stringables " " αs) (flatten_stringables " " bs) c ic
+//            | Ic_And (ic1, ic2)         -> sprintf "%O & %O" ic1 ic2
+//
 
 
 // schemes and predicates
@@ -595,12 +594,12 @@ type ty with
             | T_Arrow (t1, t2)             -> sprintf "%s -> %s" (R t1) (R t2)
             | T_App (App s)          -> s
             | T_Closure (x, _, τ, _) -> sprintf "<[%O]>" (Te_Lambda ((x, None), τ))
-            | T_Foralls (αs, t)      -> use N = var.add_quantified αs in sprintf "forall %s. %O" (flatten_stringables Config.Printing.forall_prefix_sep αs) t
-            | T_Forall _ as t        -> unexpected "forall: %O" __SOURCE_FILE__ __LINE__ t
+            | T_Foralls0 (αs, t)     -> use A = var.add_quantified αs in sprintf "forall %s. %O" (flatten_stringables Config.Printing.forall_prefix_sep αs) t
         and R = wrap_pretty_with_kind R'
         in
             R this
 
+//    static member alpha_and_ty k = let α = var.alpha in α, T_Var (α, k)
     static member fresh_var k = T_Var (var.fresh, k)
     static member fresh_var_and_ty k = let α = var.fresh in α, T_Var (α, k)
     static member fresh_star_var = ty.fresh_var K_Star
@@ -644,10 +643,13 @@ type fxty with
     override this.ToString () = this.pretty    
     member this.pretty =
         let rec R' = function
-            | Fx_Foralls (qs, t)      -> let Q = prefix.ofSeq qs in use N = var.add_quantified Q in sprintf "forall %O. %O" Q t
-            | Fx_Forall _             -> unexpected "forall" __SOURCE_FILE__ __LINE__
-            | Fx_Bottom _             -> Config.Printing.dynamic.bottom
-            | Fx_F_Ty t               -> t.pretty
+            | Fx_Bottom _           -> Config.Printing.dynamic.bottom
+            | Fx_F_Ty t             -> t.pretty
+            | Fx_Foralls0 (qs, t)   ->
+                let Q = prefix.ofSeq qs
+                use N = var.add_quantified Q
+                in
+                    sprintf "Forall %O. %O" Q t
         and R = wrap_pretty_with_kind R'
         in
             R this

@@ -145,7 +145,7 @@ let rec subst_fxty θ =
     in function
     | Fx_Bottom k             -> Fx_Bottom (Sk k)
     | Fx_F_Ty t               -> Fx_F_Ty (St t)
-    | Fx_Forall ((α, ϕ1), ϕ2) -> Fx_Forall (( α, S ϕ1), S ϕ2)
+    | Fx_Forall ((α, ϕ1), ϕ2) -> Fx_Forall ((subst_var θ.t α, S ϕ1), S ϕ2)
 
 
 //// first argument is the NEW subst, second argument is the OLD one
@@ -203,44 +203,47 @@ type ty with
         | T_Unquantified _ -> true
         | _                -> false
 
-type fxty with
-    member ϕ.is_unquantified =
-        match ϕ with
-        | Fx_Unquantified _ -> true
-        | _                 -> false
+let T_Unquantified (t : ty) = assert t.is_unquantified; t
+
+//type fxty with
+//    member ϕ.is_unquantified =
+//        match ϕ with
+//        | Fx_Unquantified _ -> true
+//        | _                 -> false
+//
+//let Fx_Unquantified (ϕ : fxty) = assert ϕ.is_unquantified; ϕ
+
 
 // only flex type quantifiers are collected into Q: possible quantified variables within the right-hand F-type are not included
 
 let Fx_ForallsQ (Q : prefix, ϕ : fxty) = Fx_Foralls (Seq.toList Q, ϕ)
 let (|Fx_ForallsQ|_|) = function
-    | Fx_Foralls (αts, ϕ) -> assert not αts.IsEmpty; Some (prefix.ofSeq αts, ϕ)
+    | Fx_Foralls (αts, ϕ) -> Some (prefix.ofSeq αts, ϕ)
     | _ -> None
 
 let (|Fx_ForallsQ0|) = function
     | Fx_ForallsQ r -> r
     | ϕ             -> Q_Nil, ϕ
 
-// all outer quantified vars are taken, both from the flex type and from possible F-type quantifiers, hence right hand is guaranteed unquantified
-let Fx_ForallsQU (Q, t : ty) =
-    assert t.is_unquantified
-    Fx_Foralls (Seq.toList Q, Fx_F_Ty t)
+// rightmost bottom-bound entries of the prefix produce System-F types instead of a bottom-bound flex type: this keeps the resulting flex type as much normalized and F-type as possible
+let Fx_ForallsQU (Q, t : ty) = Fx_Foralls (Seq.toList Q, Fx_F_Ty (T_Unquantified t))
 
+// all outer quantified vars are taken, both from the flex type and from possible F-type quantifiers, hence right hand is guaranteed unquantified
 let (|Fx_ForallsQU|_|) = function
-    | Fx_ForallsQ (Q, Fx_F_Ty (T_ForallsK (αks, t))) -> Some (Q + prefix.of_bottoms αks, t)
-    | Fx_ForallsQ (Q, Fx_F_Ty t)                     -> Some (Q, t)
-    | Fx_F_Ty (T_ForallsK (αks, t))                  -> Some (prefix.of_bottoms αks, t)
+    | Fx_ForallsQ (Q, Fx_F_Ty (T_ForallsK (αks, t))) -> Some (Q + prefix.of_bottoms αks, T_Unquantified t)
+    | Fx_ForallsQ (Q, Fx_F_Ty t)                     -> Some (Q, T_Unquantified t)
+    | Fx_F_Ty (T_ForallsK (αks, t))                  -> Some (prefix.of_bottoms αks, T_Unquantified t)
     | _                                              -> None 
 
-let (|Fx_ForallsQU0|) = function
-    | Fx_ForallsQU (Q, t)   -> Q, t
-    | Fx_Bottom k           -> let α, tα = ty.fresh_var_and_ty k in (prefix.of_bottoms [α, k], tα)
-    | ϕ                     -> unexpected_case __SOURCE_FILE__ __LINE__ ϕ
-
+// unused
+//let (|Fx_ForallsQU0|) = function
+//    | Fx_ForallsQU (Q, t)   -> Q, t
+//    | Fx_Bottom k           -> let α, tα = ty.fresh_var_and_ty k in (prefix.of_bottoms [α, k], T_Unquantified tα)
+//    | ϕ                     -> unexpected_case __SOURCE_FILE__ __LINE__ ϕ
 
 // like the one above but all quantified vars are instantiated
 let (|Fx_Inst_ForallsQU|_|) = function
     | Fx_ForallsQU (Q, t) as ϕ ->
-            assert t.is_unquantified
             let θ = !> (new tsubst (Env.t.B { for α, ϕ in Q do yield α, T_Var (var.fresh, ϕ.kind) }))
             in
                 match subst_fxty θ ϕ with
@@ -249,6 +252,10 @@ let (|Fx_Inst_ForallsQU|_|) = function
 
     | _ -> None
 
+let (|Fx_Inst_ForallsQU0|) = function
+    | Fx_Inst_ForallsQU (Q, t)  -> Q, t
+    | Fx_Bottom k               -> let α, tα = ty.fresh_var_and_ty k in (prefix.of_bottoms [α, k], T_Unquantified tα)
+    | ϕ                         -> unexpected_case __SOURCE_FILE__ __LINE__ ϕ
 
 
 // ty augmentation
@@ -278,42 +285,60 @@ type ty with
     member t.instantiate_fv = t.instantiate t.fv
 
 
+let debug_fun name f x =
+    let r = f x
+    L.debug High "[%s] %s(%O) = %O" name name x r
+    r
+
+
 type fxty with
     member this.nf =
-        match this with
-        | Fx_F_Ty _
-        | Fx_Bottom _ as t -> t
-        | Fx_Forall ((α, ϕ1), ϕ2) ->
-            if not <| Set.contains α ϕ2.fv then ϕ2.nf
-            elif match ϕ2.nf with
-                 | Fx_F_Ty (T_Var (β, _)) -> α = β
-                 | _                      -> false
-            then ϕ1.nf
-            else
-                match ϕ1.nf with
-                | Fx_Unquantified t -> (subst_fxty (!> (new tsubst (α, t))) ϕ2).nf
-                | ϕ1'               -> Fx_Forall ((α, ϕ1'), ϕ2.nf)
+        let r =
+            match this with
+            | Fx_F_Ty _
+            | Fx_Bottom _ as ϕ -> ϕ
 
-    member t.ftype =
+            | Fx_Forall ((α, ϕ1), ϕ2) ->
+                if not <| Set.contains α ϕ2.fv then ϕ2.nf
+                else
+                    match ϕ2.nf with
+                    | Fx_F_Ty (T_Var (β, _) as t) when α = β ->
+                        match ϕ1.nf with
+                        | Fx_Bottom _ -> Fx_F_Ty (T_Forall (α, t))  // this special case has been added by me: nf(forall ('a :> _|_). 'a) = forall 'a. 'a; original HML spec would reduce to _|_ instead
+                        | ϕ           -> ϕ
+
+                    | _ -> 
+                        match ϕ1.nf with
+                        | Fx_Unquantified t -> (subst_fxty (!> (new tsubst (α, t))) ϕ2).nf
+                        | ϕ1'               -> Fx_Forall ((α, ϕ1'), ϕ2.nf)
+        #if DEBUG_NF
+        L.debug High "[nf] nf(%O) = %O" this r
+        #endif
+        r
+
+    member this.ftype =
         let rec R = function
             | Fx_F_Ty t -> t
 
             | Fx_Bottom k ->
-                let α, tα = ty.fresh_var_and_ty k   // TODO: is this fresh var really correct?
+                let α, tα = ty.fresh_var_and_ty k   // TODO: is this really correct?
                 in
                     T_Forall (α, tα)
 
             | Fx_Forall ((α, Fx_Bottom _), ϕ) ->
                 T_Forall (α, R ϕ)
 
-            | Fx_Forall ((α, Fx_ForallsQU0 (Q, t1)), ϕ2) ->
+            | Fx_Forall ((α, Fx_ForallsQU (Q, t1)), ϕ2) ->
                 let θ = !> (new tsubst (α, t1))
+                let r = R (Fx_ForallsQ (Q, subst_fxty θ ϕ2))
                 in
-                    R (Fx_ForallsQ (Q, subst_fxty θ ϕ2))
-
-        in
-            R t.nf      // normalization can be left out of the recursion
-
+                    r
+            | ϕ -> unexpected_case __SOURCE_FILE__ __LINE__ ϕ
+        let r = R this.nf
+        #if DEBUG_NF
+        L.debug High "[ftype] ftype(%O) = %O" this r
+        #endif
+        r
 
 let Ungeneralized t = { constraints = constraints.empty; fxty = Fx_F_Ty t }
 
@@ -400,10 +425,9 @@ type prefix with
 
     member Q.extend (α, ϕ : fxty) =
         let Q', θ' as r =
-            let ϕ1 = ϕ.nf
-            match ϕ1 with
+            match ϕ.nf with
             | Fx_Unquantified t -> Q, !> (new tsubst (α, t))
-            | _                 -> Q + (α, ϕ1), tksubst.empty
+            | _                 -> Q + (α, ϕ), tksubst.empty
         #if DEBUG_UNIFY
         L.debug Normal "[ext] %O ; (%O : %O)\n      = %O\n        %O" Q α ϕ Q' θ'
         #endif

@@ -30,6 +30,11 @@ SHORT-TERM
             The pragmatic benefit is that type variables can be shared between multiple overloaded symbols, like in type classes.
             One could even give a name to a set of overload principal types with a suffix "as". Or also: one could declare to overload a record type, and give birth to a real type class.
 
+(+)     [Overloaded lambda parameters] When a lambda parameter is annotated in a special way (e.g. a special keyword or something) it is typed like a FreeVar but it brings all gathered
+            constraints to the left hand of the resulting arrow type. This basically creates an intersection type which must be fully resolved (i.e. putting automatic applications)
+            at call sites - opposedly to standard constraints which may or may not be fully resolved. Notice that this is an alternate interpretation of first-class polymorphism, based
+            on typing differently each use of a given lambda parameter instead of annotating it with a principal polymorphic System-F type.
+
 (+)     [Python-like 'or' construct] Design an 'or' construct like Python for dealing with optionsn in the following way:
                 e1 or e2 ~~> match e1 with Some x -> x | None -> e2
               It actually matches the 'either' function, but it is infix: let (or) a b = either b a

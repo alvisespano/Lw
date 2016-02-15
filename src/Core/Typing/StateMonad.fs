@@ -189,7 +189,7 @@ type type_inference_builder (loc) =
 
     member M.Yield (ϕ : fxty) =
         M {
-            let! ϕ = M.updated ϕ
+//            let! ϕ = M.updated ϕ
             return ϕ
         }
 
@@ -212,7 +212,7 @@ type type_inference_builder (loc) =
             assert Q.dom.IsSubsetOf t.fv
             let! θ = M.get_θ
             assert (Set.intersect Q.dom θ.dom).IsEmpty
-            yield Fx_ForallsQ (Q, Fx_F_Ty t)
+            yield Fx_ForallsQU (Q, t)
         }
 
     // banged versions

@@ -164,6 +164,8 @@ with
 
     static member fresh_named s = Va (fresh_int (), Some s)
 
+//    static member alpha = Va (0, None)
+
     member this.refresh =
         match this with
         | Va (_, Some s) -> var.fresh_named s
