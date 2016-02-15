@@ -301,6 +301,8 @@ type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] prefix =
         in
             R this
 
+    member Q.is_empty = match Q with Q_Nil -> true | _ -> false
+
     member Q.dom = Computation.B.set { for α, _ in Q do yield α }
 
     member Q.is_disjoint (Q' : prefix) = (Set.intersect Q.dom Q'.dom).IsEmpty
@@ -649,7 +651,11 @@ type fxty with
                 let Q = prefix.ofSeq qs
                 use N = var.add_quantified Q
                 in
+                    #if DEBUG
                     sprintf "Forall %O. %O" Q t
+                    #else
+                    sprintf "forall %O. %O" Q t
+                    #endif
         and R = wrap_pretty_with_kind R'
         in
             R this

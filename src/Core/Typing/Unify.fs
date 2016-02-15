@@ -111,7 +111,7 @@ module internal Mgu =
             match Q with
             | Q_Slice α (_, _, Q2) -> Set.contains α (Fx_ForallsQ (Q2, t)).fv
             | _                    -> false
-    
+ 
         let rec subsume ctx (Q : prefix) (T_ForallsK0 (αs, t1) as t : ty) (ϕ : fxty) =
             let ϕ = ϕ.nf
             #if DEBUG_UNIFY
@@ -119,7 +119,7 @@ module internal Mgu =
             #endif
             let Q, θ as r =
                 match ϕ with            
-                | Fx_Inst_ForallsQU (Q', t2) ->
+                | FxU0_ForallsQ (Mapped fxty.instantiate_unquantified (Q', t2)) ->
                     assert Q.is_disjoint Q'
                     let skcs, t1' = skolemize_ty αs t1
                     let Q1, θ1 = mgu ctx (Q + Q') t1' t2
@@ -128,10 +128,8 @@ module internal Mgu =
                     check_skolems_escape ctx skcs θ2 Q2
                     Q2, θ2
 
-                | Fx_Bottom k ->          // this case comes from HML implementation - it is not in the paper
+                | FxU0_Bottom k ->          // this case comes from HML implementation - it is not in the paper
                     Q, kmgu ctx t.kind k                    
-
-                | x -> unexpected_case __SOURCE_FILE__ __LINE__ x
 
             #if DEBUG_UNIFY
             L.mgu "[sub=] %O :> %O\n       %O\n       Q' = %O" t ϕ θ Q
@@ -147,17 +145,15 @@ module internal Mgu =
             #endif
             let Q, θ, t as r =
                 match ϕ1, ϕ2 with
-                | (Fx_Bottom k, (_ as t))
-                | (_ as t, Fx_Bottom k) -> Q, kmgu ctx k t.kind, t
+                | (FxU0_Bottom k, (_ as t))
+                | (_ as t, FxU0_Bottom k) -> Q, kmgu ctx k t.kind, t
 
-                | Fx_Inst_ForallsQU (Q1, t1), Fx_Inst_ForallsQU (Q2, t2) ->
+                | FxU0_ForallsQ  (Mapped fxty.instantiate_unquantified (Q1, t1)), FxU0_ForallsQ (Mapped fxty.instantiate_unquantified (Q2, t2)) ->
                     assert (let p (a : prefix) b = a.is_disjoint b in p Q Q1 && p Q1 Q2 && p Q Q2)  // instantiating ϕ1 and ϕ2 makes this assert always false
                     let Q3, θ3 = mgu ctx (Q + Q1 + Q2) t1 t2
                     let Q4, Q5 = Q3.split Q.dom
                     in
                         Q4, θ3, Fx_ForallsQ (Q5, Fx_F_Ty (S θ3 t1))
-
-                | x -> unexpected_case __SOURCE_FILE__ __LINE__ x
 
             #if DEBUG_UNIFY
             L.mgu "[mgu-scheme=] %O == %O\n              %O\n              Q' = %O\n              t = %O" ϕ1 ϕ2 θ Q t

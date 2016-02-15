@@ -1,4 +1,14 @@
 ﻿
+15/2/2016:
+* HML seems to work now
+* REFACT: fxty.Fx_Forall is now pretty printed as "Forall" with a capital letter when DEBUG is enabled, in order to distinguish System-F quantification from flexible type quantification
+* FIX: fxty.nf fixed: it now reduces flexible forall ('a :> _|_). 'a to System-F forall 'a. 'a directly. This seems enough to make HML inference correct
+* REFACT: cleaned up a lot ForallsQ and other stuff like that
+* NEW: instantiation of quantifier+unquantified_ty is now done via a static method and not anymore by active patterns
+* NEW: (|Mapped|) active pattern: promoted to Prelude
+* REFACT: refactoring datatype involved in gen_bind for generic multiple binding management
+
+
 12/2/2016:
 * REFACT active patterns dealing with quantification, instantiation, unquantification etc. have been redesigned
 * BUG: still not working: it still inferes the same it used to infer before the first big fix, still with no fxty

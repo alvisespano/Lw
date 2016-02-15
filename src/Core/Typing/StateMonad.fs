@@ -55,7 +55,7 @@ with
 type M<'a> = Monad.M<'a, state>
 
 let (|Jb_Overload|Jb_Var|Jb_Data|Jb_OverVar|Jb_Unbound|) = function
-    | Some (Jk_Var _, { mode = Jm_Overloadable; scheme = Ungeneralized t }) -> Jb_Overload t.instantiate_fv
+    | Some (Jk_Var _, { mode = Jm_Overloadable; scheme = Ungeneralized t }) -> Jb_Overload t.instantiate
     | Some (Jk_Var _, { mode = Jm_Normal; scheme = σ })                     -> Jb_Var σ
     | Some (Jk_Inst _, { mode = Jm_Overloadable; scheme = _ })              -> Jb_OverVar
     | Some (Jk_Data _, { mode = Jm_Normal; scheme = σ })                    -> Jb_Data σ
@@ -189,22 +189,12 @@ type type_inference_builder (loc) =
 
     member M.Yield (ϕ : fxty) =
         M {
-//            let! ϕ = M.updated ϕ
+            let! ϕ = M.updated ϕ
             return ϕ
         }
 
     member M.Yield (t : ty) = M { yield Fx_F_Ty t }   
     member M.Yield ((x : id, t : ty)) = M { let! t = M.updated t in return x, t }    // used for row types
-
-    // used when inferring let bindings    
-    member M.Yield l =
-        M {
-            return! M.List.map (fun (b : _, x : id, cs : constraints, ϕ : fxty) -> M {
-                        let! ϕ = M.updated ϕ
-                        let! cs = M.updated cs
-                        return b, x, cs, ϕ
-                    }) l                    
-        }
 
     // used by some HML rules inferring foralls where the type part have been substituted
     member M.Yield ((Q : prefix, t : ty)) =
@@ -212,12 +202,11 @@ type type_inference_builder (loc) =
             assert Q.dom.IsSubsetOf t.fv
             let! θ = M.get_θ
             assert (Set.intersect Q.dom θ.dom).IsEmpty
-            yield Fx_ForallsQU (Q, t)
+            yield Fx_ForallsQ (Q, Fx_F_Ty t)
         }
 
     // banged versions
     member M.YieldFrom f = M { let! (r : fxty) = f in yield r }
-    member M.YieldFrom f = M { let! (r : list<_ * id * constraints * fxty>) = f in yield r }
 
     member M.fork_Γ f =
         M {
@@ -323,19 +312,11 @@ type type_inference_builder (loc) =
             return! M.bind_Γ (Jk_Var x) { mode = Jm_Normal; scheme = Ungeneralized t }
         }
 
-    // TODO: check generalization and finalization
+    // TODO: check generalization and finalization: for example deal with scoped vars
     member M.bind_generalized_Γ jk jm ϕ =
         M {
-            let! σ = M {
-                let! cs = M.get_constraints
-                match ϕ with
-                | Fx_ForallsQ0 (Q, ϕ1) ->
-                    let! αs = M.get_scoped_vars_as_set
-                    let _, Q2 = Q.split αs
-                    let! ϕ = M.updated (Fx_ForallsQ (Q2, ϕ1))
-                    return { constraints = cs; fxty = ϕ }
-            }
-            return! M.bind_Γ jk { mode = jm; scheme = σ }
+            let! cs = M.get_constraints
+            return! M.bind_Γ jk { mode = jm; scheme = {  constraints = cs; fxty = ϕ } }
         }
         
     member M.add_prefix α t =
