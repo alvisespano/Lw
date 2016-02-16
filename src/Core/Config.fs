@@ -72,7 +72,13 @@ module Printing =
                            greek_tyvars_ <- true
                 | false -> greek_tyvars_ <- false
                 
-        member this.forall = if this.unicode then "\u2200" else "forall "
+        member this.forall = if this.unicode then "\u2200\b" else "forall"
+        member this.flex_forall =
+            #if DEBUG
+            "Forall"
+            #else
+            this.forall
+            #endif
         member this.bottom = if this.unicode then "⏊" else "_|_"
 
         member this.tyvar_range = if this.greek_tyvars then 'α', 'ζ' else 'a', 'z'
@@ -104,7 +110,7 @@ module Printing =
     let named_var_fmt : StringFormat<string -> int -> string> = "%s_%d"
     #endif
     let empty_prefix = "()"
-    let ftype_instance_sep = "<:"
+    let ftype_instance_of_fxty_sep = "<:"
     let type_evaluation_sep = "="
 
     module Prompt =

@@ -33,25 +33,14 @@ let desugar (M : translatable_type_inference_builder<_>) f (e0 : node<_, _>) (e 
         return t
     }
 
-// special Yield for generalization
-
-type [< NoComparison; NoEquality >] gen_binding<'n> = {
-    b  : 'n
-    x  : id
-    cs : constraints
-    ϕ  : fxty
+type [< NoComparison; NoEquality >] gen_binding = {
+    qual   : decl_qual
+    expr        : expr
+    id          : id
+    constraints : constraints
+    inferred    : fxty
+    to_bind     : fxty
 }
-
-//type type_inference_builder with
-//    member M.Yield l =
-//        M {
-//            return! M.List.map (fun gb -> M {
-//                        let! ϕ = M.updated gb.ϕ
-//                        let! cs = M.updated gb.cs
-//                        return  { gb with cs = cs; ϕ = ϕ }
-//                    }) l                    
-//        }
-//    member M.YieldFrom f = M { let! (r : list<gen_binding>) = f in yield r }
 
 
 // type inference algorithms
@@ -102,9 +91,15 @@ and W_decl ctx d =
     let M = new translatable_type_inference_builder<_> (d)
     M {
         L.debug Low "[decl] %O" d
-        return! (if ctx.top_level_decl then M.fork_scoped_vars else M.ReturnFrom) <| M { 
+        if ctx.top_level_decl then
+            // when it's a top level binding
+            use N = var.reset_normalization
+            do! M.fork_scoped_vars <| M {
+                    do! W_decl' ctx d   
+            }
+        else
+            // when it's an inner binding
             do! W_decl' ctx d
-        }
     }  
 
 
@@ -388,7 +383,9 @@ and W_expr' ctx e0 =
 
 and W_decl' (ctx : context) (d0 : decl) =
     let M = new translatable_type_inference_builder<_> (d0)
+
     let desugar = desugar M (W_decl ctx) d0
+    
     let unify_and_resolve (ctx : context) (e : node<_, _>) t1 t2 =
         M {
             do! M.unify e.loc t1 t2
@@ -396,14 +393,12 @@ and W_decl' (ctx : context) (d0 : decl) =
         }
     let jk decl_qual x t = if decl_qual.over then Jk_Inst (x, t.GetHashCode ()) else Jk_Var x
 
-    let gen_bind prefixes ({ x = x; ϕ = ϕ} as gb) =
-        let dq = gb.b.qual
-        let e0 = gb.b.expr
+    let gen_bind prefixes ({ id = x; qual = dq; expr = e0; to_bind = ϕ } as gb) =
         let loc = e0.loc
         let Lo x = Lo loc x
         M {
-            let! { γ = γ; constraints = cs } = M.get_state
-            // check shadowing and relation with previous bindings
+            // check shadowing and interaction with previous bindings
+            let! γ = M.get_γ
             let! jb = M.search_binding_by_name_Γ x
             if dq.over then
                 match jb with                
@@ -416,6 +411,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                 | _             -> ()                                               // normal binding that can shadow legally
 
             // check constraints solvability and scope escaping
+            let! cs = M.get_constraints
             for { name = cx; ty = ct } as c in cs do
                 let αs = ct.fv - ϕ.fv in if not αs.IsEmpty then Report.Hint.unsolvable_constraint loc x ϕ cx ct αs
                 match c.mode with
@@ -433,14 +429,16 @@ and W_decl' (ctx : context) (d0 : decl) =
 
                 | _ -> ()
 
-            // generalize, bind and translate
-            let jk = jk dq x ϕ
-            let! σ =
+            // generalization and binding
+            let jk = jk dq x gb.to_bind
+            let! _ =
                 let jm = if dq.over then Jm_Overloadable else Jm_Normal
                 in
-                    M.bind_generalized_Γ jk jm ϕ
+                    M.bind_generalized_Γ jk jm gb.to_bind
+            Report.prompt ctx (prefixes @ dq.as_tokens) x gb.to_bind (Some (Config.Printing.ftype_instance_of_fxty_sep, gb.inferred))
+
+            // translation
             let e1 = if cs.is_empty then e0 else LambdaFun ([possibly_tuple Lo P_CId P_Tuple cs], Lo e0.value)
-            Report.prompt ctx (prefixes @ dq.as_tokens) x ϕ (Some (Config.Printing.ftype_instance_sep, σ.fxty.ftype))
             return jk, e1
         }
 
@@ -461,81 +459,87 @@ and W_decl' (ctx : context) (d0 : decl) =
 
         | D_Bind bs ->
             do! M.fork_constraints <| M {
-                let! l =
-                    // TODO: refactor this crap an write shorter code
-                    M.List.collect (fun ({ patt = p; expr = e } as b) -> M {
-                                do! M.clear_constraints
-                                let! ϕe = W_expr ctx e
-                                let te = ϕe.ftype
-                                return! M.fork_Γ <| M {
-                                    let (|B_Unannot|B_Annot|B_Patt|) = function
-                                        | ULo (P_Var x)                    -> B_Unannot x
-                                        | ULo (P_Annot (ULo (P_Var x), τ)) -> B_Annot (x, τ)
-                                        | p                                -> B_Patt p
-                                    match p with
-                                    | B_Unannot x ->
-                                        let! cs = M.get_constraints
-                                        return [{ b = b; x = x; cs = cs; ϕ = Fx_F_Ty ϕe.ftype }]      // by default bind inferred types as F-types
+                // infer type for each binding in the let..and block
+                let! l = M.List.collect (fun ({ patt = p; expr = e } as b) -> M {
+                            do! M.clear_constraints     // TODO: probably there's a relation between contraints to be kept (i.e. not cleared) and the free vars in Γ
+                            let! ϕe = W_expr ctx e
+                            let te = ϕe.ftype
+                            return! M.fork_Γ <| M {     // fork Γ in such a way that vars bound by patterns are removed afterwards
+                                let (|B_Unannot|B_Annot|B_Patt|) = function
+                                    | ULo (P_Var x)                    -> B_Unannot x
+                                    | ULo (P_Annot (ULo (P_Var x), τ)) -> B_Annot (x, τ)
+                                    | p                                -> B_Patt p
+                                match p with
+                                | B_Unannot x ->
+                                    let! cs = M.get_constraints
+                                    return [{ expr = b.expr; qual = b.qual; id = x; constraints = cs; to_bind = Fx_F_Ty te; inferred = ϕe }]     // by default bind inferred types as F-types
 
-                                    | B_Annot (x, τ) ->
-                                        let! ϕx, k = Wk_and_eval_ty_expr_fx ctx τ
-                                        do! M.kunify τ.loc K_Star k
-                                        let! ϕe = M {
-                                            match ϕx with
-                                            | Fx_F_Ty tx ->
-                                                do! M.unify τ.loc tx te
-                                                yield te                        // bind inferred type as an F-type when the annotation is an F-type
-                                            | _ ->
-                                                do! M.subsume τ.loc te ϕx
-                                                yield ϕe                        // bind the inferred type when annotation is a flex type instead
-                                        }
-                                        let! cs = M.get_constraints
-                                        return [{ b = b; x = x; cs = cs; ϕ = ϕe }] // TODO: cleanup the gen_binding type, perhaps putting a field of type scheme
+                                | B_Annot (x, τ) ->
+                                    let! ϕx, k = Wk_and_eval_ty_expr_fx ctx τ
+                                    do! M.kunify τ.loc K_Star k
+                                    let! ϕe' = M {
+                                        match ϕx with
+                                        | Fx_F_Ty tx ->
+                                            do! M.unify τ.loc tx te
+                                            yield te                        // bind inferred type as an F-type when the annotation is an F-type
+                                        | _ ->
+                                            do! M.subsume τ.loc te ϕx
+                                            yield ϕe                        // bind the inferred type when annotation is a flex type instead
+                                    }
+                                    let! cs = M.get_constraints
+                                    return [{ expr = b.expr; qual = b.qual; id = x; constraints = cs; to_bind = ϕe'; inferred = ϕe }]
 
-                                    | B_Patt p ->
-                                        let! tp = W_patt_F ctx p
-                                        do! M.unify e.loc tp te                 // TODO: redesign the behaviour of pattern-based let-bindings reusing (LAMBDA) and (APP) rules
-                                        do! resolve_constraints ctx e
-                                        let! cs = M.get_constraints
-                                        return! vars_in_patt p |> Set.toList |> M.List.map (fun x -> M { let! { scheme = σ } = M.lookup_Γ (Jk_Var x) in return { b = b; x = x; cs = cs; ϕ = σ.fxty } })
-                                }
-                            }) bs
-                let! bs' = M.List.map (fun gb -> M { let! () = M.set_constraints gb.cs in return! gen_bind Config.Printing.Prompt.value_decl_prefixes gb }) l
+                                | B_Patt p ->
+                                    let! tp = W_patt_F ctx p
+                                    do! M.unify e.loc tp te                 // TODO: redesign the behaviour of pattern-based let-bindings reusing (LAMBDA) and (APP) rules
+                                    do! resolve_constraints ctx e
+                                    let! cs = M.get_constraints
+                                    return! vars_in_patt p |> Set.toList |> M.List.map (fun x -> M {
+                                            let! { scheme = σ } = M.lookup_Γ (Jk_Var x) 
+                                            return { expr = b.expr; qual = b.qual; id = x; constraints = cs; to_bind = σ.fxty; inferred = ϕe }
+                                        })
+                            }
+                        }) bs
+                let! bs' = M.List.map (fun gb -> M { let! () = M.set_constraints gb.constraints in return! gen_bind Config.Printing.Prompt.value_decl_prefixes gb }) l
                 M.translated <- D_Bind [for jk, e in bs' -> { qual = decl_qual.none; patt = Lo e.loc (P_Jk jk); expr = e }]
             }
 
         | D_Rec bs ->
             do! M.fork_constraints <| M {
-                let! l =
-                    M.fork_Γ <| M {
-                        do! M.clear_constraints
-                        let! l = M.List.map (fun ({ qual = dq; par = x, _; expr = e } as b) -> M {
-                                        // TODO: verify how let rec works
-                                        let! tx = M {
-                                            match b.par with
-                                            | _, None ->
-                                                let α, tα = ty.fresh_star_var_and_ty
-                                                do! M.add_prefix α (Fx_Bottom K_Star)
-                                                return tα
+                let! l = M.fork_Γ <| M {
+                    do! M.clear_constraints
+                    // introduce fresh type variables or the annotated type for each rec binding
+                    let! l = M.List.map (fun ({ qual = dq; par = x, _; expr = e } as b) -> M {
+                                // TODO: verify how let rec works
+                                let! tx = M {
+                                    match b.par with
+                                    | _, None ->
+                                        let α, tα = ty.fresh_star_var_and_ty
+                                        do! M.add_prefix α (Fx_Bottom K_Star)
+                                        return tα
 
-                                            | _, Some τ -> 
-                                                let! t, k = Wk_and_eval_ty_expr_F ctx τ
-                                                do! M.kunify τ.loc K_Star k
-                                                return t                                                
-                                        }
-                                        let! _ = M.bind_Γ (jk dq x tx) { mode = Jm_Normal; scheme = Ungeneralized tx }  // TODO: reuse the (LAMBDA) rule behaviour
-                                        return b, x, tx
-                                    }) bs
-                        // basic value restriction for let rec
-                        for { expr = e }, _, tx in l do
-                            let! te = W_expr_F ctx e
-                            do! unify_and_resolve ctx e tx te
-                            match te with
-                            | T_Arrow _ -> ()
-                            | _         -> Report.Error.value_restriction_non_arrow_in_letrec e.loc te
-                        return l
-                    }
-                let! bs' = M.List.map (fun (b : rec_binding, x, tx) -> M { return! gen_bind Config.Printing.Prompt.rec_value_decl_prefixes { b = b; x = x; cs = cs; ϕ = Fx_F_Ty tx } }) l
+                                    | _, Some τ -> 
+                                        let! t, k = Wk_and_eval_ty_expr_F ctx τ
+                                        do! M.kunify τ.loc K_Star k
+                                        return t                                                
+                                }
+                                let! _ = M.bind_Γ (jk dq x tx) { mode = Jm_Normal; scheme = Ungeneralized tx }
+                                return b, x, tx
+                            }) bs
+                    // check arrow and value restriction for each rec binding
+                    for { expr = e }, _, tx in l do
+                        let! te = W_expr_F ctx e    // TODO: reuse the (LAMBDA) rule behaviour
+                        do! unify_and_resolve ctx e tx te
+                        match te with
+                        | T_Arrow _ -> ()
+                        | _         -> Report.Error.value_restriction_non_arrow_in_letrec e.loc te
+                    return l
+                }
+                let! bs' = M.List.map (fun (b : rec_binding, x, tx) -> M {
+                                let ϕ = Fx_F_Ty tx
+                                let! cs = M.get_constraints // TODO: every rec..and binding has the same contraints?
+                                return! gen_bind Config.Printing.Prompt.rec_value_decl_prefixes { expr = b.expr; qual = b.qual; id = x; constraints = cs; inferred = ϕ; to_bind = ϕ }
+                            }) l
                 M.translated <- D_Rec [for jk, e in bs' -> { qual = decl_qual.none; par = jk.pretty, None; expr = e }]
             }
 

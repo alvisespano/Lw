@@ -91,7 +91,7 @@ type [< NoComparison; CustomEquality; DebuggerDisplay("{ToString()}") >] fxty =
     | Fx_F_Ty of ty
 with
     static member binding_separator = Config.Printing.type_annotation_sep
-    static member reduction_separator = Config.Printing.ftype_instance_sep
+    static member reduction_separator = Config.Printing.ftype_instance_of_fxty_sep
 
     member this.kind =
         match this with
@@ -543,7 +543,7 @@ type kscheme with
         match kσ with
             | { forall = αs; kind = k } ->
                 use A = var.add_quantified αs
-                let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_prefix_sep αs)
+                let αspart = if αs.IsEmpty then "" else sprintf "%s %s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_prefix_sep αs)
                 in
                     sprintf "%s%O" αspart k
 
@@ -596,7 +596,7 @@ type ty with
             | T_Arrow (t1, t2)             -> sprintf "%s -> %s" (R t1) (R t2)
             | T_App (App s)          -> s
             | T_Closure (x, _, τ, _) -> sprintf "<[%O]>" (Te_Lambda ((x, None), τ))
-            | T_Foralls0 (αs, t)     -> use A = var.add_quantified αs in sprintf "forall %s. %O" (flatten_stringables Config.Printing.forall_prefix_sep αs) t
+            | T_Foralls0 (αs, t)     -> use A = var.add_quantified αs in sprintf "%s %s. %O" Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_prefix_sep αs) t
         and R = wrap_pretty_with_kind R'
         in
             R this
@@ -651,11 +651,8 @@ type fxty with
                 let Q = prefix.ofSeq qs
                 use N = var.add_quantified Q
                 in
-                    #if DEBUG
-                    sprintf "Forall %O. %O" Q t
-                    #else
-                    sprintf "forall %O. %O" Q t
-                    #endif
+                    sprintf "%s %O. %O" Config.Printing.dynamic.flex_forall Q t
+                    
         and R = wrap_pretty_with_kind R'
         in
             R this
@@ -680,7 +677,7 @@ type scheme with
         let { constraints = cs; fxty = Fx_Foralls0 (qs, ϕ1) } = σ
         // TODO: deal with variables in the constraints and choose how to show them, either detecting the outer-most foralls or something like that
         let αs = Computation.B.set { for α, _ in qs do yield α }
-        let αspart = if αs.IsEmpty then "" else sprintf "%s%s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_prefix_sep αs)
+        let αspart = if αs.IsEmpty then "" else sprintf "%s %s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_prefix_sep αs)
         let cspart = if cs.is_empty then "" else sprintf "{ %O } => " cs
         in
             sprintf "%s%s%O" αspart cspart ϕ1
