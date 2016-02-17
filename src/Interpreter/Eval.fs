@@ -78,7 +78,7 @@ let beta_redux ctx loc v1 v2 =
 
 let rec enclose ctx (x, e, Δ : env ref as cl) = V_Redux (Config.Interactive.pretty_closure cl, (fun ctx v -> eval_expr ctx ((!Δ).bind x v) e))
 
-// TODO: implement Δ with a fast hashmap: do not worry about scoping as the bindings can be left inside the map and overwritten, as type checking already dealt with scoping
+// TODOL: implement Δ with a fast hashmap: do not worry about scoping as the bindings can be left inside the map and overwritten, as type checking already dealt with scoping
 and eval_expr (ctx : context) Δ (e0 : expr) =
     ctx.cancellation_token.ThrowIfCancellationRequested ()
     let E Δ e = eval_expr ctx Δ e

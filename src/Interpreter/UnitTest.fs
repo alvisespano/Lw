@@ -115,8 +115,6 @@ let main () =
 
 
 
-// TODO: translate these HML tests written in Haskell into F#
-
 (*
 testsAll :: [Test]
 testsAll

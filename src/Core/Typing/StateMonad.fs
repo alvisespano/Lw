@@ -201,7 +201,7 @@ type type_inference_builder (loc) =
         M {
             assert Q.dom.IsSubsetOf t.fv
             let! θ = M.get_θ
-            assert (Set.intersect Q.dom θ.dom).IsEmpty
+            assert (Set.intersect Q.dom θ.dom).IsEmpty  // HACK: this assert might not be wise
             yield Fx_ForallsQ (Q, Fx_F_Ty t)
         }
 
@@ -251,24 +251,18 @@ type type_inference_builder (loc) =
             return Q2
         }
 
-    member M.extend (α, ϕ) =
+    member M.extend (α, ϕ : fxty) =
         M {
-//            let! t = M.updated t
+            let! ϕ = M.updated ϕ
             let! Q = M.get_Q
             let Q, θ = Q.extend (α, ϕ)
             do! M.set_Q Q
             do! M.update_θ θ
         }
 
-    member M.extend xs =
-        M {
-            for α, t in xs do
-                do! M.extend (α, t)
-        }
-
     member M.update_prefix_with_bound (Q : prefix) (α, ϕ : fxty) =
         M {
-//            let! ϕ = M.updated ϕ
+            let! ϕ = M.updated ϕ
             let Q, θ = Q.update_prefix_with_bound (α, ϕ)
             do! M.set_Q Q
             do! M.update_θ θ
@@ -276,7 +270,7 @@ type type_inference_builder (loc) =
 
     member M.update_prefix_with_subst (Q : prefix) (α, t : ty) =
         M {
-//            let! t = M.updated t
+            let! t = M.updated t
             let Q, θ = Q.update_prefix_with_subst (α, t)
             do! M.set_Q Q
             do! M.update_θ θ            
@@ -312,7 +306,7 @@ type type_inference_builder (loc) =
             return! M.bind_Γ (Jk_Var x) { mode = Jm_Normal; scheme = Ungeneralized t }
         }
 
-    // TODO: check generalization and finalization: for example deal with scoped vars
+    // TODOH: check generalization and finalization: for example deal with scoped vars
     member M.bind_generalized_Γ jk jm ϕ =
         M {
             let! cs = M.get_constraints

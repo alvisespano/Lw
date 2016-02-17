@@ -11,6 +11,7 @@ let id x = x
 
 let i = id id
 
+(*
 let comb (id : forall 'a. 'a -> 'a) = id id
 
 let revapp x f = f x
@@ -18,5 +19,5 @@ let revapp x f = f x
 let poly (f : forall 'a. 'a -> 'a) = f 1, f true
 
 let a = poly id
-
+*)
 

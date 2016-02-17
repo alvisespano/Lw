@@ -261,8 +261,10 @@ type fxty with
                 else
                     match ϕ2.nf with
                     | Fx_F_Ty (T_Var (β, _) as t) when α = β ->
-                        match ϕ1.nf with
-                        | Fx_Bottom _ -> Fx_F_Ty (T_Forall (α, t))  // this special case has been added by me: nf(forall ('a :> _|_). 'a) = forall 'a. 'a; original HML spec would reduce to _|_ instead
+                        match ϕ1.nf with                        
+                        #if ENABLE_HML_FIXES
+                        | Fx_Bottom _ -> Fx_F_Ty (T_Forall (α, t))   // HACK: this special case has been added by me: nf(forall ('a :> _|_). 'a) = forall 'a. 'a; original HML spec would reduce to _|_ instead
+                        #endif
                         | ϕ           -> ϕ
 
                     | _ -> 
@@ -274,12 +276,15 @@ type fxty with
         #endif
         r
 
+    member this.is_nf = this.nf = this
+
+
     member this.ftype =
         let rec R = function
             | Fx_F_Ty t -> t
 
             | Fx_Bottom k ->
-                let α, tα = ty.fresh_var_and_ty k   // TODO: is this really correct?
+                let α, tα = ty.fresh_var_and_ty k
                 in
                     T_Forall (α, tα)
 
@@ -345,7 +350,6 @@ type kscheme with
             subst_kind kθ k
 
 type kind with
-    // TODO: restricted named vars should be taken into account also for kind generalization? guess so
     member k.generalize γ named_tyvars =
         let αs = k.fv - (fv_γ γ) - named_tyvars
         in

@@ -79,7 +79,7 @@ let rec W_expr (ctx : context) (e0 : expr) =
         let! Q' = M.get_Q
         let! θ' = M.get_θ
         let! cs' = M.get_constraints
-        // TODO: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)
+        // TODOL: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)
         L.debug Low "(%-3s) %O\n[:T]  %O\n[nf]  %O\n[F-t] %O\n[e*]  %O\n[C]   %O\n[Q]   %O\n[S]   %O\n[C']  %O\n[Q']  %O\n[S']  %O" rule e ϕ ϕ.nf ϕ.ftype e0 cs Q θ cs' Q' θ'
         #if DEBUG_BEFORE_INFERENCE
         L.undo_tabulate
@@ -93,7 +93,9 @@ and W_decl ctx d =
         L.debug Low "[decl] %O" d
         if ctx.top_level_decl then
             // when it's a top level binding
+            #if DEBUG
             use N = var.reset_normalization
+            #endif
             do! M.fork_scoped_vars <| M {
                     do! W_decl' ctx d   
             }
@@ -190,7 +192,6 @@ and W_expr' ctx e0 =
             yield T_Open_Variant [x, T_Arrow (α, β)]
 
         | Lambda ((x, τo), e) ->
-            // TODO: make the code for Lambda a generic "on_bind" function and use it every time a similar scenario is needed
             let α, tα = ty.fresh_star_var_and_ty
             let! Q0 = M.get_Q
             let! tx = M {
@@ -223,7 +224,9 @@ and W_expr' ctx e0 =
             let α1, tα1 = ty.fresh_star_var_and_ty
             let α2, tα2 = ty.fresh_star_var_and_ty
             let β, tβ = ty.fresh_star_var_and_ty
-            do! M.extend [α1, ϕ1; α2, ϕ2; β, Fx_Bottom K_Star]
+            do! M.extend (α1, ϕ1)
+            do! M.extend (α2, ϕ2)
+            do! M.extend (β, Fx_Bottom K_Star)
             do! M.unify e1.loc (T_Arrow (tα2, tβ)) tα1
             let! Q5 = M.split_prefix Q0.dom
             yield Q5, tβ
@@ -267,7 +270,7 @@ and W_expr' ctx e0 =
                 do! M.unify e.loc tr0 te
             yield tr0
         
-        // TODO: treat Annot as an application to an annotated lambda
+        // TODOH: treat Annot as an application to an annotated lambda
         | Annot (e, τ) ->
             let! t, _ = Wk_and_eval_ty_expr_F ctx τ
             let! te = W_expr_F ctx e 
@@ -332,7 +335,7 @@ and W_expr' ctx e0 =
                 let bs = [ for c in cs -> let xi = c.name in { qual = decl_qual.none; patt = Lo <| P_Var xi; expr = Lo <| Select (Lo <| Id x, xi) } ]
                 in
                     Let (Lo <| D_Bind bs, e)
-            yield! desugar (Lo <| Lambda ((x, None), Lo e1))    // TODO: infer the type of the desugared expression?
+            yield! desugar (Lo <| Lambda ((x, None), Lo e1))    // TODOL: infer the type of the desugared expression?
 
         | Eject e ->
             let! t = W_expr_F ctx e
@@ -342,7 +345,7 @@ and W_expr' ctx e0 =
             match tr with
             | T_Record (xts, _) ->
                 for x, t in xts do
-                    // TODO: think about a special construct for expressing constraint mode and strictness
+                    // TODOL: think about a special construct for expressing constraint mode and strictness
                     do! M.add_constraint (constraintt.fresh_strict Cm_OpenWorldOverload x t)
             | _ -> unexpected "non-record type in eject expression: %O" __SOURCE_FILE__ __LINE__ tr
             let! cs = M.get_constraints
@@ -461,7 +464,7 @@ and W_decl' (ctx : context) (d0 : decl) =
             do! M.fork_constraints <| M {
                 // infer type for each binding in the let..and block
                 let! l = M.List.collect (fun ({ patt = p; expr = e } as b) -> M {
-                            do! M.clear_constraints     // TODO: probably there's a relation between contraints to be kept (i.e. not cleared) and the free vars in Γ
+                            do! M.clear_constraints     // TODOH: probably there's a relation between contraints to be kept (i.e. not cleared) and the free vars in Γ
                             let! ϕe = W_expr ctx e
                             let te = ϕe.ftype
                             return! M.fork_Γ <| M {     // fork Γ in such a way that vars bound by patterns are removed afterwards
@@ -491,7 +494,7 @@ and W_decl' (ctx : context) (d0 : decl) =
 
                                 | B_Patt p ->
                                     let! tp = W_patt_F ctx p
-                                    do! M.unify e.loc tp te                 // TODO: redesign the behaviour of pattern-based let-bindings reusing (LAMBDA) and (APP) rules
+                                    do! M.unify e.loc tp te                 // TODOH: redesign the behaviour of pattern-based let-bindings reusing (LAMBDA) and (APP) rules
                                     do! resolve_constraints ctx e
                                     let! cs = M.get_constraints
                                     return! vars_in_patt p |> Set.toList |> M.List.map (fun x -> M {
@@ -510,7 +513,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                     do! M.clear_constraints
                     // introduce fresh type variables or the annotated type for each rec binding
                     let! l = M.List.map (fun ({ qual = dq; par = x, _; expr = e } as b) -> M {
-                                // TODO: verify how let rec works
+                                // TODOH: verify how let rec works
                                 let! tx = M {
                                     match b.par with
                                     | _, None ->
@@ -528,7 +531,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                             }) bs
                     // check arrow and value restriction for each rec binding
                     for { expr = e }, _, tx in l do
-                        let! te = W_expr_F ctx e    // TODO: reuse the (LAMBDA) rule behaviour
+                        let! te = W_expr_F ctx e 
                         do! unify_and_resolve ctx e tx te
                         match te with
                         | T_Arrow _ -> ()
@@ -537,7 +540,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                 }
                 let! bs' = M.List.map (fun (b : rec_binding, x, tx) -> M {
                                 let ϕ = Fx_F_Ty tx
-                                let! cs = M.get_constraints // TODO: every rec..and binding has the same contraints?
+                                let! cs = M.get_constraints // TODOH: every rec..and binding has the same contraints?
                                 return! gen_bind Config.Printing.Prompt.rec_value_decl_prefixes { expr = b.expr; qual = b.qual; id = x; constraints = cs; inferred = ϕ; to_bind = ϕ }
                             }) l
                 M.translated <- D_Rec [for jk, e in bs' -> { qual = decl_qual.none; par = jk.pretty, None; expr = e }]
@@ -675,7 +678,7 @@ and W_patt ctx (p0 : patt) : M<fxty> =
             yield t1
 
         | P_App (p1, p2) ->
-            // TODO: consider supporting HML for pattern application
+            // TODOH: consider using HML (APP) rule for pattern application
             let! t1 = W_patt_F ctx p1
             let! t2 = W_patt_F ctx p2
             let α = ty.fresh_star_var

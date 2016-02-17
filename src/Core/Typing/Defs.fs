@@ -39,7 +39,7 @@ type tenv = Env.t<id, ty>
 and [< NoComparison; CustomEquality; DebuggerDisplay("{ToString()}") >] ty =
     | T_Cons of id * kind
     | T_Var of var * kind    
-    | T_HTuple of ty list   // TODO: try to design a more general Rowed type which does not expect star on fields, and encode htuples with it
+    | T_HTuple of ty list   // TODOL: try to design a more general Rowed type which does not expect star on fields, and encode htuples with it
     | T_App of (ty * ty)
     | T_Forall of var * ty
     | T_Closure of id * tenv ref * ty_expr * kind
@@ -364,7 +364,7 @@ with
             
     member this.pretty =
         match this with
-            | Jm_Overloadable -> "(overloadable) "  // TODO: this trailing space is ugly
+            | Jm_Overloadable -> "(overloadable) "  // TODOL: this trailing space is ugly
             | Jm_Normal       -> ""
 
 type [< NoComparison; NoEquality >] jenv_value =
@@ -509,10 +509,17 @@ type [< NoComparison; NoEquality >] subst<'t> (env : Env.t<var, 't>) =
     member __.pretty (bra, ket) = if env.is_empty then sprintf "%s%s" bra ket else env.pretty_by_binding (fun α t -> subst<'t>.pretty_item (bra, ket, α, t)) ""
     override this.ToString () = this.pretty ("[", "]")
       
-    member private θ1.append (θ2 : subst<'t>) = new subst<'t> (θ1.env + θ2.env)
-    static member empty = new subst<'t> ()
+    member private θ1.append (θ2 : subst<'t>) =
+        assert (Set.intersect θ1.dom θ2.dom).IsEmpty
+        new subst<'t> (θ1.env + θ2.env)
 
-    member θ1.compose apply_subst (θ2 : subst<'t>) = (θ2.map (fun _ t2 -> apply_subst θ1 t2)).append (θ1.restrict (θ1.dom - θ2.dom))
+    static member empty = new subst<'t> ()
+  
+    // from "Typing Haskell in Haskell":
+    //      s1 @@ s2    = [ (u, apply s1 t) | (u,t) <- s2 ] ++ s1
+    // HACK: this does not check that domains are disjoint and might trigger the assert in method append
+    member θ1.compose apply_subst (θ2 : subst<'t>) = (θ2.map (fun _ -> apply_subst θ1)).append θ1 // (θ2.restrict (θ2.dom - θ1.dom))
+    // when θ1 and θ2 are swapped, the inference algorithm seems to behave in the same way....mysteriously :P
 
 type ksubst = subst<kind>
 type tsubst = subst<ty>
@@ -601,7 +608,6 @@ type ty with
         in
             R this
 
-//    static member alpha_and_ty k = let α = var.alpha in α, T_Var (α, k)
     static member fresh_var k = T_Var (var.fresh, k)
     static member fresh_var_and_ty k = let α = var.fresh in α, T_Var (α, k)
     static member fresh_star_var = ty.fresh_var K_Star

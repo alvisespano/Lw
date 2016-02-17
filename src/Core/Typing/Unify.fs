@@ -113,7 +113,8 @@ module internal Mgu =
             | _                    -> false
  
         let rec subsume ctx (Q : prefix) (T_ForallsK0 (αs, t1) as t : ty) (ϕ : fxty) =
-            let ϕ = ϕ.nf
+//            let ϕ = ϕ.nf
+            assert ϕ.is_nf
             #if DEBUG_UNIFY
             L.mgu "[sub] %O :> %O\n      Q = %O\n" t ϕ Q
             #endif
@@ -124,7 +125,11 @@ module internal Mgu =
                     let skcs, t1' = skolemize_ty αs t1
                     let Q1, θ1 = mgu ctx (Q + Q') t1' t2
                     let Q2, Q3 = Q1.split Q.dom
-                    let θ2 = { θ1 with t = θ1.t.remove (Q3.dom (*+ Q'.dom*)) }      // TODO: WARNING: this has been nodified by me! the "+ Q'.dom" part does not come from the HML paper
+                    let αs = Q3.dom
+                    #if ENABLE_HML_FIXES
+                    let αs = αs + Q'.dom  // HACK: this has been nodified by me: it should remove from the prefix any variable introduced by the unification with the 
+                    #endif
+                    let θ2 = { θ1 with t = θ1.t.remove αs }
                     check_skolems_escape ctx skcs θ2 Q2
                     Q2, θ2
 
@@ -138,8 +143,10 @@ module internal Mgu =
 
 
         and mgu_scheme ctx (Q : prefix) (ϕ1 : fxty) (ϕ2 : fxty) =
-            let ϕ1 = ϕ1.nf
-            let ϕ2 = ϕ2.nf
+//            let ϕ1 = ϕ1.nf
+//            let ϕ2 = ϕ2.nf
+            assert ϕ1.is_nf
+            assert ϕ2.is_nf
             #if DEBUG_UNIFY
             L.mgu "[mgu-scheme] %O == %O\n             Q = %O" ϕ1 ϕ2 Q
             #endif
@@ -216,7 +223,7 @@ module internal Mgu =
                             Q2, θ2 ** θ1 ** θ0
 
                     | T_App (t1, t2), T_App (t1', t2') ->
-    //                    let θ0 = kmgu ctx (K_Arrow (t2.kind, kind.fresh_var)) t1.kind ** kmgu ctx (K_Arrow (t2'.kind, kind.fresh_var)) t1'.kind   // TODO: is this line needed?
+    //                    let θ0 = kmgu ctx (K_Arrow (t2.kind, kind.fresh_var)) t1.kind ** kmgu ctx (K_Arrow (t2'.kind, kind.fresh_var)) t1'.kind   // TODOH: is this line needed?
                         let Q1, θ1 = R Q0 t1 t1'
                         let Q2, θ2 = let S = S θ1 in R Q1 (S t2) (S t2')
                         in
@@ -277,13 +284,13 @@ type ty with
     member t1.try_instance_of ctx t2 = 
         let _, θ = mgu ctx Q_Nil t1 t2
         in
-            if t2.fv.IsSubsetOf θ.dom then Some θ   // TODO: test if instance_of is correct
+            if t2.fv.IsSubsetOf θ.dom then Some θ   // TODO: in https://web.cecs.pdx.edu/~mpj/thih/TypingHaskellInHaskell.html they define a "match" function similar to one-way-only MGU, useful here!
             else None
 
     member t1.is_instance_of ctx t2 = (t1.try_instance_of ctx t2).IsSome
 
 type fxty with
-    member ϕ.is_instance_of ctx t = ϕ.ftype.is_instance_of ctx t    // TODO: test if instance_of between flex types is correct
+    member ϕ.is_instance_of ctx t = ϕ.ftype.is_instance_of ctx t    // TODO: needs testing
 
 
 //let try_principal_type_of ctx pt t =

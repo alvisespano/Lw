@@ -1,4 +1,10 @@
 ﻿
+17/2/2016:
+* NEW: new compilation switch: ENABLE_HML_FIXES; currently 2 fixes exist:
+       (1) detection of forall ('a :> _|_). 'a in nf;
+       (2) subsume prunes all variables introduced locally within the result substitution
+* BUG: without any HML fix, inferece still produce 2 unquantified variables in typing "let app f x = f x"
+
 15/2/2016:
 * HML seems to work now
 * REFACT: fxty.Fx_Forall is now pretty printed as "Forall" with a capital letter when DEBUG is enabled, in order to distinguish System-F quantification from flexible type quantification

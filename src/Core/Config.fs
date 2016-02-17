@@ -22,6 +22,7 @@ open FSharp.Common.Prelude
  * DEBUG_PERF
  * DEBUG_RESOLVE
  * DEBUG_BEFORE_INFERENCE   // print debug information for each expression also BEFORE typing (useful for comparing what happens at each inference step)
+ * ENABLE_HML_FIXES         // enable little fixes done by me
  *)
 
 module Typing =
