@@ -150,21 +150,28 @@ let pretty_param sep (id, tyo) =
 
 [< System.Diagnostics.DebuggerDisplay("{ToString()}") >]
 type var = Va of int * string option
-with
+
+// this module is needed and cannot be turn into static members within the var class because static members are unit closures and cannot be constants
+[< CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix) >]
+module private var =
+    let cnt = ref 0
+    let env : Env.t<int, string> option ref = ref None
+    let forall : Set<var> ref = ref Set.empty
+
+type var with
     member this.uid =
         match this with
         | Va (n, _) -> n
 
     static member fresh =
         let r = Va (fresh_int (), None)
-        #if DEBUG_UNIFY
         L.hint Low "new fresh var: %O" r
-        #endif
         r
 
-    static member fresh_named s = Va (fresh_int (), Some s)
-
-//    static member alpha = Va (0, None)
+    static member fresh_named s =
+        let r = Va (fresh_int (), Some s)
+        L.hint Low "new fresh var: %O" r
+        r
 
     member this.refresh =
         match this with
@@ -180,23 +187,14 @@ with
         in
             div n
 
-
-// this module is needed and cannot be turn into static members within the var class because static members are unit closures and cannot be constants
-[< CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix) >]
-module private var =
-    let cnt = ref 0
-    let env : Env.t<int, string> option ref = ref None
-    let forall : Set<var> ref = ref Set.empty
-
-
-type var with
     static member reset_normalization =
+        #if !DISABLE_TYVAR_NORM
         var.cnt := 0
-        #if !DEBUG_NO_TYVAR_NORM
         var.env := Some Env.empty
         #endif
         { new IDisposable with
-            member __.Dispose () = var.env := None
+            member __.Dispose () =
+                var.env := None
         }
 
     static member add_quantified α =

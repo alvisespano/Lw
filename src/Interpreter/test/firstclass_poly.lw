@@ -5,11 +5,18 @@
 
 namespace Test 
 
+(*
+let const x y = x
+let const2 x y z = z
+let const3 x y z = y
+*)
+
 let app f x = f x
 
-let id x = x
+(*let id x = x
 
 let i = id id
+*)
 
 (*
 let comb (id : forall 'a. 'a -> 'a) = id id

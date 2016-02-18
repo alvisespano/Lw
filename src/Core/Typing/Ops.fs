@@ -296,7 +296,6 @@ type fxty with
                 let r = R (Fx_ForallsQ (Q, subst_fxty θ ϕ2))
                 in
                     r
-//            | ϕ -> unexpected_case __SOURCE_FILE__ __LINE__ ϕ
         let r = R this.nf
         #if DEBUG_NF
         L.debug High "[ftype] ftype(%O) = %O" this r
@@ -381,7 +380,7 @@ type prefix with
                     in
                         Q1, Q_Cons (Q2, (α, t))
         let Q1, Q2 as r = R Q αs
-        #if DEBUG_UNIFY
+        #if DEBUG_HML
         L.debug Normal "[split] %O ; { %s }\n        = %O\n          %O" Q (flatten_stringables ", " αs) Q1 Q2
         #endif
         r
@@ -391,7 +390,7 @@ type prefix with
             match ϕ.nf with
             | FxU_Unquantified t -> Q, !> (new tsubst (α, t))
             | _                  -> Q + (α, ϕ), tksubst.empty
-        #if DEBUG_UNIFY
+        #if DEBUG_HML
         L.debug Normal "[ext] %O ; (%O : %O)\n      = %O\n        %O" Q α ϕ Q' θ'
         #endif
         r
@@ -423,34 +422,68 @@ let (|Q_Slice|_|) α (Q : prefix) = Q.slice_by (fst >> (=) α)
 
 type prefix with
     // TODO: rewrite these update methods without the overcomplicated slicing thing
-    member inline private Q.update f (α, ty : ^t) =
-        match Q.split (^t : (member fv : _) ty) with
-        | Q0, Q_Slice α (Q1, _, Q2) -> f (α, ty, Q0, Q1, Q2)
-        | _                         -> unexpected "item %O : %O is not in prefix: %O" __SOURCE_FILE__ __LINE__ α ty Q
 
-    static member private update_prefix__reusable_part (α, t : ty, Q0 : prefix, Q1, Q2) =
-        let θ = !> (new tsubst (α, t))
-        in
-            Q0 + Q1 + subst_prefix θ Q2, θ
+//    member inline private Q.update f (α, ty : ^t) =
+//        match Q.split (^t : (member fv : _) ty) with
+//        | Q0, Q_Slice α (Q1, _, Q2) -> f (α, ty, Q0, Q1, Q2)
+//        | _                         -> unexpected "item %O : %O is not in prefix: %O" __SOURCE_FILE__ __LINE__ α ty Q
+//
+//    static member private update_prefix__reusable_part (α, t : ty, Q0 : prefix, Q1, Q2) =
+//        let θ = !> (new tsubst (α, t))
+//        in
+//            Q0 + Q1 + subst_prefix θ Q2, θ
+//
+//    member this.update_prefix_with_bound (α, ϕ) =
+//        let Q, θ as r =
+//            this.update <| fun (α, ϕ : fxty, Q0, Q1, Q2) ->
+//                match ϕ.nf with
+//                | FxU_Unquantified t' -> prefix.update_prefix__reusable_part (α, t', Q0, Q1, Q2)
+//                | ϕ                   -> Q0 + Q1 + (α, ϕ) + Q2, tksubst.empty       // HACK: here normalized flex type is used, oppsedly to what HML paper says
+//            <| (α, ϕ)
+//        #if DEBUG_HML
+//        L.debug Normal "[up-Q] %O ; %s\n       = %O\n         %O" this (prefix.pretty_item (α, ϕ)) Q θ
+//        #endif
+//        r
+//
+//    member this.update_prefix_with_subst (α, t : ty) =
+//        let Q, θ as r = this.update prefix.update_prefix__reusable_part (α, t)
+//        #if DEBUG_HML
+//        L.debug Normal "[up-S] %O ; %s\n       = %O\n         %O" this (subst<_>.pretty_item ("(", ")", α, t)) Q θ
+//        #endif
+//        r
 
-    member this.update_prefix_with_bound (α, ϕ) =
-        let Q, θ as r =
-            this.update <| fun (α, ϕ : fxty, Q0, Q1, Q2) ->
-                match ϕ.nf with
-                | FxU_Unquantified t' -> prefix.update_prefix__reusable_part (α, t', Q0, Q1, Q2)
-                | ϕ                   -> Q0 + Q1 + (α, ϕ) + Q2, tksubst.empty       // HML paper does not extend prefix with the normalized ϕ, but it makes sense to do so
-            <| (α, ϕ)
-        #if DEBUG_UNIFY
-        L.debug Normal "[up-Q] %O ; %s\n       = %O\n         %O" this (prefix.pretty_item (α, ϕ)) Q θ
+    member Q.update_with_subst (α, t : ty) =
+        let Q', θ as r =
+            match Q.split t.fv with
+            | Q0, Q_Slice α (Q1, (_, ϕ), Q2) ->
+                let θ = !> (new tsubst (α, t))
+                in
+                    Q0 + Q1 + (α, ϕ) + subst_prefix θ Q2, θ     // HACK: occhio che ho reintrodotto nel prefisso la α
+                
+            | _ -> unexpected "item %O : %O is not in prefix: %O" __SOURCE_FILE__ __LINE__ α t Q
+        #if DEBUG_HML
+        L.debug Normal "[up-Q] %O ; %s\n       = %O\n         %O" Q (prefix.pretty_item (α, ϕ)) Q' θ
         #endif
         r
 
-    member this.update_prefix_with_subst (α, t : ty) =
-        let Q, θ as r = this.update prefix.update_prefix__reusable_part (α, t)
-        #if DEBUG_UNIFY
-        L.debug Normal "[up-S] %O ; %s\n       = %O\n         %O" this (subst<_>.pretty_item ("(", ")", α, t)) Q θ
+    member Q0.update_with_bound (α, ϕ2 : fxty) =
+        let Q', θ as r =
+            match Q0.split ϕ2.fv with
+            | Q0, Q_Slice α (Q1, (_, ϕ2), Q2) ->
+                match ϕ2.nf with
+                | FxU_Unquantified t ->
+                    let θ = !> (new tsubst (α, t))
+                    in
+                        Q0 + Q1 + subst_prefix θ Q2, θ
+
+                | _ -> Q0 + Q1 + (α, ϕ2) + Q2, tksubst.empty
+                
+            | _ -> unexpected "item %O : %O is not in prefix: %O" __SOURCE_FILE__ __LINE__ α ϕ2 Q0
+        #if DEBUG_HML
+        L.debug Normal "[up-S] %O ; %s\n       = %O\n         %O" Q (subst<_>.pretty_item ("(", ")", α, ϕ2)) Q' θ
         #endif
         r
+
 
 [< CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix) >]
 module prefix =

@@ -15,13 +15,14 @@ open FSharp.Common.Prelude
  * Activate them in the project panel as compilation symbols.
  * Mind that logger special methods such as .mgu and .resolve are independent from these.
  *
- * DEBUG_NO_TYVAR_NORM      // turn off variable normalization
  * DEBUG_TYVAR_NAMES        // print var number and make it clear whether it is named or anonymous
- * DEBUG_UNIFY
+ * DEBUG_HML                // turn on log for functions involved into HML type inference
  * DEBUG_CONSTRAINTS
  * DEBUG_PERF
  * DEBUG_RESOLVE
  * DEBUG_BEFORE_INFERENCE   // print debug information for each expression also BEFORE typing (useful for comparing what happens at each inference step)
+ *
+ * DISABLE_TYVAR_NORM       // turn off variable normalization
  * ENABLE_HML_FIXES         // enable little fixes done by me
  *)
 
@@ -43,8 +44,6 @@ module Typing =
         let htuple = "HTuple"
 
     let skolemized_tyvar_fmt : StringFormat<string -> string> = "|%O|"
-
-//    let mutable flex_let = false
 
 
 module Printing =
@@ -75,7 +74,7 @@ module Printing =
                 
         member this.forall = if this.unicode then "\u2200\b" else "forall"
         member this.flex_forall =
-            #if DEBUG
+            #if DEBUG_HML
             "Forall"
             #else
             this.forall
@@ -107,8 +106,8 @@ module Printing =
     let tuple_index_label_fmt : StringFormat<int -> string> = "#%d"
     let already_existing_named_var_fmt : StringFormat<string -> int -> string> = "%s%d" // this is needed for disambiguating name for a named var that already existed and whose name conflicted with automatically-named vars
     #if DEBUG_TYVAR_NAMES
-    let anonymous_var_fmt : StringFormat<string -> int -> string> = "%s?%d"
-    let named_var_fmt : StringFormat<string -> int -> string> = "%s_%d"
+    let anonymous_var_fmt : StringFormat<string -> int -> string> = "%s$%d"
+    let named_var_fmt : StringFormat<string -> int -> string> = "[%s]$%d"
     #endif
     let empty_prefix = "()"
     let ftype_instance_of_fxty_sep = "<:"

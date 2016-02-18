@@ -24,7 +24,7 @@
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
     <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;DEBUG_BEFORE_INFERENCE;DEBUG_UNIFY</DefineConstants>
+    <DefineConstants>DEBUG;DEBUG_BEFORE_INFERENCE;DEBUG_HML</DefineConstants>
     <WarningLevel>5</WarningLevel>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <DocumentationFile>

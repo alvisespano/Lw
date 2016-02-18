@@ -189,8 +189,9 @@ type type_inference_builder (loc) =
 
     member M.Yield (ϕ : fxty) =
         M {
-            let! ϕ = M.updated ϕ
-            return ϕ
+            let! ϕ' = M.updated ϕ
+            L.debug High "[yield] %O ~> %O" ϕ ϕ'
+            return ϕ'
         }
 
     member M.Yield (t : ty) = M { yield Fx_F_Ty t }   
@@ -263,7 +264,7 @@ type type_inference_builder (loc) =
     member M.update_prefix_with_bound (Q : prefix) (α, ϕ : fxty) =
         M {
             let! ϕ = M.updated ϕ
-            let Q, θ = Q.update_prefix_with_bound (α, ϕ)
+            let Q, θ = Q.update_with_bound (α, ϕ)
             do! M.set_Q Q
             do! M.update_θ θ
         }
@@ -271,7 +272,7 @@ type type_inference_builder (loc) =
     member M.update_prefix_with_subst (Q : prefix) (α, t : ty) =
         M {
             let! t = M.updated t
-            let Q, θ = Q.update_prefix_with_subst (α, t)
+            let Q, θ = Q.update_with_subst (α, t)
             do! M.set_Q Q
             do! M.update_θ θ            
         }
@@ -306,7 +307,7 @@ type type_inference_builder (loc) =
             return! M.bind_Γ (Jk_Var x) { mode = Jm_Normal; scheme = Ungeneralized t }
         }
 
-    // TODOH: check generalization and finalization: for example deal with scoped vars
+    // HACK: generalization need to deal with scoped vars
     member M.bind_generalized_Γ jk jm ϕ =
         M {
             let! cs = M.get_constraints

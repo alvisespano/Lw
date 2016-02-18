@@ -32,9 +32,9 @@ let inline prompt ctx prefixes x (σ : ^s) o =
     let top_level = (^a : (member top_level_decl : bool) ctx)
     let log = if top_level then L.msg High else L.msg Normal
     let prefixes = List.distinct <| if top_level then prefixes else Config.Printing.Prompt.nested_decl_prefix :: prefixes
-    use N = var.reset_normalization
     let header = sprintf "%s %s" (flatten_and_trim_strings Config.Printing.Prompt.prefix_sep (prefixes @ [x])) (^s : (static member binding_separator : string) ())
-    let σ = σ.ToString ()
+    use N = var.reset_normalization
+    let σ = (^s : (member pretty : string) σ)
     let reduction = 
         match o with
         | None -> ""

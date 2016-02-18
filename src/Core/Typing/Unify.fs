@@ -115,7 +115,7 @@ module internal Mgu =
         let rec subsume ctx (Q : prefix) (T_ForallsK0 (αs, t1) as t : ty) (ϕ : fxty) =
 //            let ϕ = ϕ.nf
             assert ϕ.is_nf
-            #if DEBUG_UNIFY
+            #if DEBUG_HML
             L.mgu "[sub] %O :> %O\n      Q = %O\n" t ϕ Q
             #endif
             let Q, θ as r =
@@ -136,7 +136,7 @@ module internal Mgu =
                 | FxU0_Bottom k ->          // this case comes from HML implementation - it is not in the paper
                     Q, kmgu ctx t.kind k                    
 
-            #if DEBUG_UNIFY
+            #if DEBUG_HML
             L.mgu "[sub=] %O :> %O\n       %O\n       Q' = %O" t ϕ θ Q
             #endif
             r
@@ -147,7 +147,7 @@ module internal Mgu =
 //            let ϕ2 = ϕ2.nf
             assert ϕ1.is_nf
             assert ϕ2.is_nf
-            #if DEBUG_UNIFY
+            #if DEBUG_HML
             L.mgu "[mgu-scheme] %O == %O\n             Q = %O" ϕ1 ϕ2 Q
             #endif
             let Q, θ, t as r =
@@ -162,7 +162,7 @@ module internal Mgu =
                     in
                         Q4, θ3, Fx_ForallsQ (Q5, Fx_F_Ty (S θ3 t1))
 
-            #if DEBUG_UNIFY
+            #if DEBUG_HML
             L.mgu "[mgu-scheme=] %O == %O\n              %O\n              Q' = %O\n              t = %O" ϕ1 ϕ2 θ Q t
             #endif
             r
@@ -171,7 +171,7 @@ module internal Mgu =
         and mgu (ctx : mgu_context) Q0 t1_ t2_ : prefix * tksubst =
             let loc = ctx.loc
             let rec R (Q0 : prefix) (t1 : ty) (t2 : ty) =
-                #if DEBUG_UNIFY
+                #if DEBUG_HML
                 L.mgu "[mgu] %O == %O\n      Q = %O" t1 t2 Q0
                 #endif
                 let Q, θ as r =
@@ -206,8 +206,8 @@ module internal Mgu =
                         check α1 ϕ2
                         check α2 ϕ1
                         let Q1, θ1, ϕ = let S = subst_fxty in mgu_scheme ctx Q0 (S θ0 ϕ1) (S θ0 ϕ2)  // TODO: this θ0 subst should be applied also on the 2 types involved in the 2 updates below?
-                        let Q2, θ2 = Q1.update_prefix_with_subst (α1, T_Var (α2, k2))   // do not use t2 here! it would always refer to right-hand type of the pattern, and in case of reversed named var it would refer to α1!
-                        let Q3, θ3 = Q2.update_prefix_with_bound (α2, ϕ)
+                        let Q2, θ2 = Q1.update_with_subst (α1, T_Var (α2, k2))   // do not use t2 here! it would always refer to right-hand type of the pattern, and in case of reversed named var it would refer to α1!
+                        let Q3, θ3 = Q2.update_with_bound (α2, ϕ)
                         in
                             Q3, θ3 ** θ2 ** θ1 ** θ0
 
@@ -218,7 +218,7 @@ module internal Mgu =
                         // occurs check
                         if check_circularity_wrt α Q0 (Fx_F_Ty t) then let S = S θ0 in Report.Error.circularity loc (S t1_) (S t2_) (S (T_Var (α, k))) (S t)
                         let Q1, θ1 = subsume ctx Q0 (S θ0 t) (subst_fxty θ0 ϕ)
-                        let Q2, θ2 = let S = S <| θ1 ** θ0 in Q1.update_prefix_with_subst (α, S t)
+                        let Q2, θ2 = let S = S <| θ1 ** θ0 in Q1.update_with_subst (α, S t)
                         in
                             Q2, θ2 ** θ1 ** θ0
 
@@ -232,7 +232,7 @@ module internal Mgu =
                     | t1, t2 -> 
                         raise (Mismatch (t1, t2))
 
-                #if DEBUG_UNIFY
+                #if DEBUG_HML
                 L.mgu "[mgu=] %O == %O\n       %O\n       Q' = %O" t1 t2 θ Q
                 #endif
                 r

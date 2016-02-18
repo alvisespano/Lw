@@ -97,7 +97,7 @@ and W_decl ctx d =
             use N = var.reset_normalization
             #endif
             do! M.fork_scoped_vars <| M {
-                    do! W_decl' ctx d   
+                do! W_decl' ctx d   
             }
         else
             // when it's an inner binding
@@ -206,7 +206,7 @@ and W_expr' ctx e0 =
             }
             let! t = M.fork_Γ <| M {
                 let! _ = M.bind_ungeneralized_Γ x tx
-                yield! W_expr ctx e
+                return! W_expr ctx e
             }            
             let! tx = M.updated tx
             // check that the inferred type of parameter is a monotype when no annotation was provided
@@ -270,7 +270,7 @@ and W_expr' ctx e0 =
                 do! M.unify e.loc tr0 te
             yield tr0
         
-        // TODOH: treat Annot as an application to an annotated lambda
+        // HACK: Annot must be rewritten as an application to an annotated lambda
         | Annot (e, τ) ->
             let! t, _ = Wk_and_eval_ty_expr_F ctx τ
             let! te = W_expr_F ctx e 
@@ -494,7 +494,7 @@ and W_decl' (ctx : context) (d0 : decl) =
 
                                 | B_Patt p ->
                                     let! tp = W_patt_F ctx p
-                                    do! M.unify e.loc tp te                 // TODOH: redesign the behaviour of pattern-based let-bindings reusing (LAMBDA) and (APP) rules
+                                    do! M.unify e.loc tp te                 // HACK: pattern-based let-bindings needs to be written in terms of (LAMBDA) and (APP) rules
                                     do! resolve_constraints ctx e
                                     let! cs = M.get_constraints
                                     return! vars_in_patt p |> Set.toList |> M.List.map (fun x -> M {
@@ -513,7 +513,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                     do! M.clear_constraints
                     // introduce fresh type variables or the annotated type for each rec binding
                     let! l = M.List.map (fun ({ qual = dq; par = x, _; expr = e } as b) -> M {
-                                // TODOH: verify how let rec works
+                                // HACK: let rec implemented roughly
                                 let! tx = M {
                                     match b.par with
                                     | _, None ->
@@ -678,7 +678,7 @@ and W_patt ctx (p0 : patt) : M<fxty> =
             yield t1
 
         | P_App (p1, p2) ->
-            // TODOH: consider using HML (APP) rule for pattern application
+            // HACK: better rewrite pattern application using HML (APP) rule
             let! t1 = W_patt_F ctx p1
             let! t2 = W_patt_F ctx p2
             let α = ty.fresh_star_var

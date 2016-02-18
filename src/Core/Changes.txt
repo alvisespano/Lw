@@ -1,9 +1,15 @@
 ﻿
+18/2/2016:
+* I'm starting to think that HML paper shows a wrong implementation of the type inferece. The prototype in Haskel seem to not perform generalization on (APP) when typing "let app f x = f x".
+* DEBUG: some more debug for HML
+
+
 17/2/2016:
 * NEW: new compilation switch: ENABLE_HML_FIXES; currently 2 fixes exist:
        (1) detection of forall ('a :> _|_). 'a in nf;
        (2) subsume prunes all variables introduced locally within the result substitution
 * BUG: without any HML fix, inferece still produce 2 unquantified variables in typing "let app f x = f x"
+
 
 15/2/2016:
 * HML seems to work now
@@ -82,7 +88,7 @@
 * FIX: monadic extend was bugged: now there's only a pretty natural extend dealing with the Q within the monad, and no more extend overloads dealing with Q as a parameter
 * FIX: in rule (LAMBDA) uses of former monadic extend overloads have been rewritten using the pure version of extend
 * REFACT: var.reset_normalization does not take a set of quantified variables anymore: it just resets normalization; it is now used only by Report, not by scheme and kscheme pretty printers anymore
-* FIX: var.reset_normalization didn't work as intended when compilation flag DEBUG_NO_TYVAR_NORM was enabled; now it should
+* FIX: var.reset_normalization didn't work as intended when compilation flag DISABLE_TYVAR_NORM was enabled; now it should
 * REFACT: some new var.add_quantified static overloads dealing with a single var, a sequence of vars and a prefix
 * REFACT: substitution composition (again!!) was reversed: probably it didn't matter anyway, but hey...
 
