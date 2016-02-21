@@ -26,7 +26,7 @@ exception Mismatch of ty * ty
 
 let rec rewrite_row loc t1 t2 r0 l =
     let R = rewrite_row loc t1 t2
-    L.mgu "[I] %O ~= %s" r0 l
+    L.uni Normal "[I] %O ~= %s" r0 l
     match r0 with
     | T_Row_Ext (l', t', r) ->
         if l' = l then t', r, tsubst.empty
@@ -98,46 +98,43 @@ module internal Mgu =
         let cons_in_tsubst (tθ : tsubst) = Computation.B.set { for _, t : ty in tθ do yield! t.cons }
         let cons_in_tksubst θ = cons_in_tsubst θ.t
 
-        let check_skolem_escape ctx c θ (Q : prefix) =
+        let check_skolem_escape ctx c (Q : prefix, θ) =
             let cons = cons_in_tksubst θ + Q.cons
             in
                 if Set.contains c cons then Report.Error.skolemized_type_variable_escaped ctx.loc c
 
-        let inline check_skolems_escape ctx cs θ Q =
+        let inline check_skolems_escape ctx cs (Q, θ) =
             for c in cs do
-                check_skolem_escape ctx c θ Q
+                check_skolem_escape ctx c (Q, θ)
 
-        let check_circularity_wrt α Q t =
+        let check_circularity_wrt α Q ϕ =
             match Q with
-            | Q_Slice α (_, _, Q2) -> Set.contains α (Fx_ForallsQ (Q2, t)).fv
+            | Q_Slice α (_, _, Q2) -> Set.contains α (Fx_ForallsQ (Q2, ϕ)).fv
             | _                    -> false
  
-        let rec subsume ctx (Q : prefix) (T_ForallsK0 (αs, t1) as t : ty) (ϕ : fxty) =
-//            let ϕ = ϕ.nf
+        let rec subsume ctx (Q0 : prefix) (T_ForallsK0 (αks, t1) as t : ty) (ϕ : fxty) =
+            assert t.is_nf
             assert ϕ.is_nf
             #if DEBUG_HML
-            L.mgu "[sub] %O :> %O\n      Q = %O\n" t ϕ Q
+            L.uni Unmaskerable "[sub] %O :> %O\n      Q = %O\n" t ϕ Q0
             #endif
             let Q, θ as r =
                 match ϕ with            
                 | FxU0_ForallsQ (Mapped fxty.instantiate_unquantified (Q', t2)) ->
-                    assert Q.is_disjoint Q'
-                    let skcs, t1' = skolemize_ty αs t1
-                    let Q1, θ1 = mgu ctx (Q + Q') t1' t2
-                    let Q2, Q3 = Q1.split Q.dom
-                    let αs = Q3.dom
-                    #if ENABLE_HML_FIXES
-                    let αs = αs + Q'.dom  // HACK: this has been nodified by me: it should remove from the prefix any variable introduced by the unification with the 
-                    #endif
-                    let θ2 = { θ1 with t = θ1.t.remove αs }
-                    check_skolems_escape ctx skcs θ2 Q2
-                    Q2, θ2
+                    assert Q0.is_disjoint Q'
+                    let skcs, t1' = skolemize_ty αks t1
+                    let Q1, θ1 = mgu ctx (Q0 + Q') t1' t2
+                    let Q2, Q3 = Q1.split Q0.dom //(Q0.dom + (fv_Γ <| subst_jenv θ1 ctx.Γ))     // TODOH: should we introduce the fv_Γ trick here as well? that might even fix the skolem escape issue, by the way!
+                    let θ2 = { θ1 with t = θ1.t.remove Q3.dom } //(Q3.dom + Q'.dom + t.fv) }           // HACK: why not restrict θ1 to the fv in t1 and t2?                            
+                    let r = Q1, θ2
+                    check_skolems_escape ctx skcs r                                             // HACK: HML paper is ambiguous here cause it binds Q2 twice: I believe it should check what's returned as result
+                    r                                                                           // HACK: in HML paper the original result was Q3, θ2
 
                 | FxU0_Bottom k ->          // this case comes from HML implementation - it is not in the paper
-                    Q, kmgu ctx t.kind k                    
+                    Q0, kmgu ctx t.kind k                    
 
             #if DEBUG_HML
-            L.mgu "[sub=] %O :> %O\n       %O\n       Q' = %O" t ϕ θ Q
+            L.uni Unmaskerable "[sub=] %O :> %O\n       %O\n       Q' = %O" t ϕ θ Q
             #endif
             r
 
@@ -148,31 +145,34 @@ module internal Mgu =
             assert ϕ1.is_nf
             assert ϕ2.is_nf
             #if DEBUG_HML
-            L.mgu "[mgu-scheme] %O == %O\n             Q = %O" ϕ1 ϕ2 Q
+            L.uni High "[mgu-scheme] %O == %O\n             Q = %O" ϕ1 ϕ2 Q
             #endif
-            let Q, θ, t as r =
+            let Q', θ, ϕ as r =
                 match ϕ1, ϕ2 with
-                | (FxU0_Bottom k, (_ as t))
-                | (_ as t, FxU0_Bottom k) -> Q, kmgu ctx k t.kind, t
+                | (FxU0_Bottom k, (_ as ϕ))
+                | (_ as ϕ, FxU0_Bottom k) -> Q, kmgu ctx k ϕ.kind, ϕ
 
                 | FxU0_ForallsQ  (Mapped fxty.instantiate_unquantified (Q1, t1)), FxU0_ForallsQ (Mapped fxty.instantiate_unquantified (Q2, t2)) ->
                     assert (let p (a : prefix) b = a.is_disjoint b in p Q Q1 && p Q1 Q2 && p Q Q2)  // instantiating ϕ1 and ϕ2 makes this assert always false
                     let Q3, θ3 = mgu ctx (Q + Q1 + Q2) t1 t2
-                    let Q4, Q5 = Q3.split Q.dom
+                    let Q4, Q5 = Q3.split (Q.dom + (fv_Γ <| subst_jenv θ3 ctx.Γ))
                     in
                         Q4, θ3, Fx_ForallsQ (Q5, Fx_F_Ty (S θ3 t1))
 
             #if DEBUG_HML
-            L.mgu "[mgu-scheme=] %O == %O\n              %O\n              Q' = %O\n              t = %O" ϕ1 ϕ2 θ Q t
+            L.uni High "[mgu-scheme=] %O == %O\n              %O\n              Q' = %O\n              res = %O" ϕ1 ϕ2 θ Q' ϕ
             #endif
             r
 
 
-        and mgu (ctx : mgu_context) Q0 t1_ t2_ : prefix * tksubst =
+        // TODOL: rewrite the whole unification with monads?
+        and mgu (ctx : uni_context) Q0 t1_ t2_ : prefix * tksubst =
+            assert t1_.is_nf
+            assert t2_.is_nf
             let loc = ctx.loc
             let rec R (Q0 : prefix) (t1 : ty) (t2 : ty) =
                 #if DEBUG_HML
-                L.mgu "[mgu] %O == %O\n      Q = %O" t1 t2 Q0
+                L.uni Low "[mgu] %O == %O\n      Q = %O" t1 t2 Q0
                 #endif
                 let Q, θ as r =
                     match t1, t2 with
@@ -192,7 +192,7 @@ module internal Mgu =
                         let skcs1, t1 = skolemize_ty [α, k1] t1
                         let skcs2, t2 = skolemize_ty [β, k2] t2
                         let Q1, θ1 = R Q0 t1 t2
-                        check_skolems_escape ctx (skcs1 + skcs2) θ1 Q1
+                        check_skolems_escape ctx (skcs1 + skcs2) (Q1, θ1)
                         Q1, θ1
 
                     | T_Var (α1, k1), T_NamedVar (α2, k2) // prefer propagating named over anonymous vars in substitutions
@@ -202,9 +202,9 @@ module internal Mgu =
                         let ϕ1 = Q0.lookup α1
                         let ϕ2 = Q0.lookup α2
                         // occurs check between one tyvar into the other's type bound and the other way round
-                        let check α t = if check_circularity_wrt α Q0 t then let S = S θ0 in Report.Error.circularity loc (S t1_) (S t2_) (T_Var (α, t.kind)) (S t2_)
-                        check α1 ϕ2
-                        check α2 ϕ1
+                        let check_wrt α t = if check_circularity_wrt α Q0 t then let S = S θ0 in Report.Error.circularity loc (S t1_) (S t2_) (T_Var (α, t.kind)) (S t2_)
+                        check_wrt α1 ϕ2
+                        check_wrt α2 ϕ1
                         let Q1, θ1, ϕ = let S = subst_fxty in mgu_scheme ctx Q0 (S θ0 ϕ1) (S θ0 ϕ2)  // TODO: this θ0 subst should be applied also on the 2 types involved in the 2 updates below?
                         let Q2, θ2 = Q1.update_with_subst (α1, T_Var (α2, k2))   // do not use t2 here! it would always refer to right-hand type of the pattern, and in case of reversed named var it would refer to α1!
                         let Q3, θ3 = Q2.update_with_bound (α2, ϕ)
@@ -233,7 +233,7 @@ module internal Mgu =
                         raise (Mismatch (t1, t2))
 
                 #if DEBUG_HML
-                L.mgu "[mgu=] %O == %O\n       %O\n       Q' = %O" t1 t2 θ Q
+                L.uni Low "[mgu=] %O == %O\n       %O\n       Q' = %O" t1 t2 θ Q
                 #endif
                 r
             in
@@ -257,7 +257,8 @@ type type_inference_builder with
             let! Q = M.get_Q
             let! t1 = M.updated t1
             let! t2 = M.updated t2
-            let Q, θ = mgu { loc = loc; γ = γ } Q t1 t2
+            let! uctx = M.get_uni_context loc
+            let Q, θ = mgu uctx Q t1 t2
             do! M.set_Q Q
             do! M.update_θ θ
         }
@@ -268,7 +269,8 @@ type type_inference_builder with
             let! Q = M.get_Q
             let! t = M.updated t
             let! ϕ = M.updated ϕ
-            let Q, θ = subsume { loc = loc; γ = γ } Q t ϕ
+            let! uctx = M.get_uni_context loc
+            let Q, θ = subsume uctx Q t ϕ
             do! M.set_Q Q
             do! M.update_θ θ
         }

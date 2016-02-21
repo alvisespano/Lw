@@ -73,6 +73,7 @@ and tokenize = parse
     | "=>"          { IMPLIES }
 	| ":="			{ ASSIGN }
     | ":>"          { COLONGT }
+    | "_|_"         { BOTTOM }
     | op            
     | '`' id '`'    { INFIX (lexeme lexbuf) }
 

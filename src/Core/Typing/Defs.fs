@@ -118,30 +118,6 @@ with
                     | _                             -> false
 
 
-// pure contexts
-//
-
-type resolution = Res_Strict | Res_Loose | Res_No
-
-type [< NoComparison; NoEquality >] context =
-    { 
-        top_level_decl  : bool
-        resolution      : resolution
-//        strict          : bool
-    }
-with
-    static member top_level = {
-        top_level_decl  = true
-        resolution      = Res_Strict
-//        strict          = true
-    }
-
-type [< NoComparison; NoEquality >] mgu_context =
-    { 
-        loc            : location
-        γ              : kjenv
-    }
-
 
 // overloaded symbol constraints
 //
@@ -274,7 +250,6 @@ module constraints =
 
 // schemes and predicates
 //
-
     
 type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] scheme =
     {
@@ -286,6 +261,7 @@ type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] scheme =
 type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] prefix =
     | Q_Nil
     | Q_Cons of prefix * (var * fxty)
+
     interface IEnumerable<var * fxty> with
         member this.GetEnumerator () = this.toSeq.GetEnumerator ()
 
@@ -311,7 +287,7 @@ type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] prefix =
         | α, Fx_Bottom K_Star        -> sprintf "%O" α
         | α, Fx_Bottom k             -> sprintf "(%O :: %O)" α k
         | α, t when t.kind = K_Star  -> sprintf "(%O %s %O)" α Config.Printing.var_bound_sep t
-        | α, t                       -> sprintf "(%O :: %O >= %O)" α t.kind t
+        | α, t                       -> sprintf "((%O :: %O) %s %O)" α t.kind Config.Printing.var_bound_sep t
 
     static member pretty_as_prefix Q = mappen_strings_or_nothing prefix.pretty_item Config.Printing.empty_prefix Config.Printing.forall_prefix_sep Q
     member Q.pretty = prefix.pretty_as_prefix Q
@@ -328,7 +304,7 @@ type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] prefix =
 
 [< CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix) >]
 module prefix =
-    let B = new Computation.Builder.itemized_collection<_, _> (empty = Q_Nil, plus1 = (fun i Q -> Q_Cons (Q, i)), plus = fun Q1 Q2 -> Q1 + Q2)
+    let B = new Computation.Builder.itemized_collection<_, _> (empty = Q_Nil, plus1 = (fun i Q -> Q + i), plus = fun Q1 Q2 -> Q1 + Q2)
     let ofSeq sq = B { for α, t in sq do yield α, t }
     let of_bottoms αks = B { for α, k in αks do yield α, Fx_Bottom k }
 
@@ -381,6 +357,34 @@ with
         | Jm_Normal       -> sprintf "%O" this.scheme
 
 type jenv = Env.t<jenv_key, jenv_value>
+
+
+
+// contexts for non-monadic algorithms
+//
+
+type resolution = Res_Strict | Res_Loose | Res_No
+
+type [< NoComparison; NoEquality >] context =
+    { 
+        top_level_decl  : bool
+        resolution      : resolution
+//        strict          : bool
+    }
+with
+    static member top_level = {
+        top_level_decl  = true
+        resolution      = Res_Strict
+//        strict          = true
+    }
+
+type [< NoComparison; NoEquality >] uni_context =
+    { 
+        loc            : location
+        γ              : kjenv
+        Γ              : jenv
+    }
+
 
 
 // type shortcuts and augmentations
@@ -517,9 +521,10 @@ type [< NoComparison; NoEquality >] subst<'t> (env : Env.t<var, 't>) =
   
     // from "Typing Haskell in Haskell":
     //      s1 @@ s2    = [ (u, apply s1 t) | (u,t) <- s2 ] ++ s1
-    // HACK: this does not check that domains are disjoint and might trigger the assert in method append
+    // HACK: this does not restrict domain of appended substitution, thus the assert in method append might get triggered
     member θ1.compose apply_subst (θ2 : subst<'t>) = (θ2.map (fun _ -> apply_subst θ1)).append θ1 // (θ2.restrict (θ2.dom - θ1.dom))
-    // when θ1 and θ2 are swapped, the inference algorithm seems to behave in the same way....mysteriously :P
+    // when θ1 and θ2 are swapped, the composition seems to make more sense, but it is undoubtly wrong according to every specification in literature and on the web.
+    // inference algorithm however seems to behave in the very same way
 
 type ksubst = subst<kind>
 type tsubst = subst<ty>
@@ -631,8 +636,8 @@ type ty with
         | T_App (t1, t2)    -> t1.is_monomorphic && t2.is_monomorphic
         | T_HTuple ts       -> List.fold (fun r (t : ty) -> r && t.is_monomorphic) true ts
 
-    member t.search p =
-        let l ts = List.tryFind p ts
+    member private t.search p =
+        let l ts = List.tryPick (fun (t : ty) -> t.search p) ts
         match t with
         | (T_Cons _
         | T_Var _ as t)
@@ -642,9 +647,19 @@ type ty with
         | T_Closure _       -> None
 
     member t.search_var α =
-        match t.search (function T_Var (β, _) -> α = β | _ -> false) with
-        | Some (T_Var (_, k)) -> Some k
-        | _ -> None
+        let rec R = function
+            | T_Var (β, k) when α = β -> Some k
+            | T_Forall (_, t) -> R t
+            | T_App (t1, t2)  -> l [t1; t2]
+            | T_HTuple ts     -> l ts
+            | _ -> None
+        and l = List.tryPick R
+        in
+            l [t]
+
+//        match t.search (function T_Var (β, _) -> L.hint High "%O = %O = %b" α β (α = β); α = β | _ -> false) with
+//        | Some (T_Var (_, k)) -> Some k
+//        | _ -> None
 
 
 type fxty with

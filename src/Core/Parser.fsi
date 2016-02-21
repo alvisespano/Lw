@@ -20,6 +20,7 @@ type token =
   | DATATYPE
   | DATA
   | FORALL
+  | BOTTOM
   | LET
   | REC
   | IN
@@ -106,6 +107,7 @@ type tokenId =
     | TOKEN_DATATYPE
     | TOKEN_DATA
     | TOKEN_FORALL
+    | TOKEN_BOTTOM
     | TOKEN_LET
     | TOKEN_REC
     | TOKEN_IN

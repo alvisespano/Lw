@@ -54,6 +54,66 @@ let W_lit = function
     | Char _      -> T_Char
     | Unit        -> T_Unit
 
+
+// pure implementation of HML - basic rules only
+
+// TODO: remove this when it's safe to
+#if PURE_HML
+module private Pure =
+    let S = subst_ty
+
+    let ( ** ) = compose_tksubst
+
+//    let ret (Q, t : ty) = FxU_ForallsQ (Q, t)
+    let ret (Q, t : ty) = Fx_ForallsQ (Q, Fx_F_Ty t)
+
+    type gamma = Env.t<id, fxty>
+
+    let fv_Γ (Γ : gamma) = Γ.fold (fun r _ ϕ -> r + ϕ.fv) Set.empty
+
+    let subst_Γ θ (Γ : gamma) = Γ.map (fun _ -> subst_fxty θ)
+
+    let rec private infer (Q : prefix) (Γ : gamma) (e0 : expr) =
+        match e0.value with
+        | Var x -> Q, tksubst.empty, Γ.lookup x
+
+        | Lambda ((x, None), e) ->
+            let α, tα = ty.fresh_star_var_and_ty
+            let Q1, θ1, ϕ1 = infer (Q + (α, Fx_Bottom K_Star)) (Γ.bind x (Fx_F_Ty tα)) e
+            let tx = S θ1 tα
+            if not tx.is_monomorphic then Report.Error.inferred_lambda_parameter_is_not_monomorphic e0.loc x tx
+            let Q2, Q3 = Q1.split (Q.dom + fv_Γ (subst_Γ θ1 Γ))
+            let β, tβ = ty.fresh_star_var_and_ty
+            let Q3', θ3' = Q3.extend (β, ϕ1)
+            in
+                Q2, θ1, ret (Q3', T_Arrow (S θ1 tα, S θ3' tβ))
+
+        | App (e1, e2) ->
+            let Q1, θ1, ϕ1 = infer Q Γ e1
+            let Q2, θ2, ϕ2 = infer Q1 Γ e2
+            let α1, tα1 = ty.fresh_star_var_and_ty
+            let α2, tα2 = ty.fresh_star_var_and_ty
+            let β, tβ = ty.fresh_star_var_and_ty
+            let Q2', θ2' = List.fold (fun (Q : prefix, θ) (α, ϕ) -> let Q', θ' = Q.extend (α, ϕ) in Q', θ' ** θ) (Q2, θ2) [α1, subst_fxty θ2 ϕ1; α2, ϕ2; β, Fx_Bottom K_Star]
+            let Q3, θ3 = mgu { uni_context.γ = Env.empty; loc = e1.loc } Q2' (S θ2' tα1) (T_Arrow (S θ2' tα2, tβ))
+            let Q4, Q5 = Q3.split (Q.dom + fv_Γ (subst_Γ θ3 Γ))
+            in
+                Q4, θ3 ** θ2 ** θ1, ret (Q5, S θ3 tβ)
+
+        | e -> not_implemented "infer: %O" __SOURCE_FILE__ __LINE__ e
+
+    let W_expr Q jenv e =
+        let Γ = Env.t.B {
+                for k, v in jenv do
+                    match k with
+                    | Jk_Var x -> yield x, v.scheme.fxty
+                    | _ -> ()
+            }
+        in
+            infer Q gamma.empty e
+#endif
+
+
 // some wrappers
 
 let rec W_expr (ctx : context) (e0 : expr) =
@@ -72,12 +132,19 @@ let rec W_expr (ctx : context) (e0 : expr) =
             | Let _     -> "LET"
             | _         -> "e"
         L.tabulate 2
-        L.debug Min "(%-3s) %O\n[C]   %O\n[Q]   %O\n[S]   %O" rule e cs Q θ
+        L.debug Min "(%-3s) %O\n[C]   %O\n[Q]   %O" rule e cs Q
         #endif
+        #if PURE_HML
+        let! Γ = M.get_Γ
+        let Q', θ', ϕ = Pure.W_expr Q Γ e0
+        do! M.set_Q Q'
+        do! M.set_θ θ'
+        #else
         let! (ϕ : fxty) = W_expr' ctx e0
-        do! resolve_constraints ctx e0
         let! Q' = M.get_Q
         let! θ' = M.get_θ
+        #endif
+        do! resolve_constraints ctx e0
         let! cs' = M.get_constraints
         // TODOL: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)
         L.debug Low "(%-3s) %O\n[:T]  %O\n[nf]  %O\n[F-t] %O\n[e*]  %O\n[C]   %O\n[Q]   %O\n[S]   %O\n[C']  %O\n[Q']  %O\n[S']  %O" rule e ϕ ϕ.nf ϕ.ftype e0 cs Q θ cs' Q' θ'
@@ -115,7 +182,7 @@ and W_expr_F ctx e0 =
         return ϕ.ftype
     }
 
-and W_expr' ctx e0 =
+and W_expr' ctx (e0 : expr) =
     let Lo x = Lo e0.loc x
     let M = new translatable_type_inference_builder< _> (e0)
     let desugar = desugar M (W_expr ctx) e0
@@ -172,7 +239,7 @@ and W_expr' ctx e0 =
         | FreeVar x ->
             let! jb = M.search_binding_by_name_Γ x
             let ot =
-                // TODO: double check the behaviour of free vars in conjunction with the following cases
+                // TODO: check the behaviour of free vars in conjunction with the following cases
                 match jb with
                 | Jb_Overload t -> Some t
                 | Jb_OverVar    
@@ -204,16 +271,17 @@ and W_expr' ctx e0 =
                     do! M.kunify τ.loc K_Star k
                     return t
             }
-            let! t = M.fork_Γ <| M {
+            let! ϕ1 = M.fork_Γ <| M {
                 let! _ = M.bind_ungeneralized_Γ x tx
                 return! W_expr ctx e
             }            
             let! tx = M.updated tx
             // check that the inferred type of parameter is a monotype when no annotation was provided
-            if τo.IsNone && not tx.is_monomorphic then Report.Error.inferred_lambda_parameter_is_not_monomorphic e0.loc x t
-            let! Q3 = M.split_prefix Q0.dom
+            if τo.IsNone && not tx.is_monomorphic then Report.Error.inferred_lambda_parameter_is_not_monomorphic e0.loc x tx
+            let! Γ = M.get_Γ
+            let! Q3 = M.split_prefix (Q0.dom + fv_Γ Γ)
             let β, tβ = ty.fresh_star_var_and_ty
-            let Q3', θ3' = Q3.extend (β, t)
+            let Q3', θ3' = Q3.extend (β, ϕ1)
             do! M.update_θ θ3'
             yield Q3', T_Arrow (tx, tβ)
 
@@ -228,7 +296,8 @@ and W_expr' ctx e0 =
             do! M.extend (α2, ϕ2)
             do! M.extend (β, Fx_Bottom K_Star)
             do! M.unify e1.loc (T_Arrow (tα2, tβ)) tα1
-            let! Q5 = M.split_prefix Q0.dom
+            let! Γ = M.get_Γ
+            let! Q5 = M.split_prefix (Q0.dom + fv_Γ Γ)
             yield Q5, tβ
            
         | Tuple ([] | [_]) as e ->
@@ -405,7 +474,8 @@ and W_decl' (ctx : context) (d0 : decl) =
             let! jb = M.search_binding_by_name_Γ x
             if dq.over then
                 match jb with                
-                | Jb_Overload pt -> if not (ϕ.is_instance_of { loc = loc; γ = γ } pt) then Report.Error.instance_not_valid loc x ϕ pt   // open-world overloadable instance
+                | Jb_Overload pt -> let! uctx = M.get_uni_context loc
+                                    if not (ϕ.is_instance_of uctx pt) then Report.Error.instance_not_valid loc x ϕ pt   // open-world overloadable instance
                 | Jb_Unbound     -> Report.Warn.let_over_without_previous_let loc x                                                     // let-over binding without a previous let-non-over is a warning
                 | _              -> ()                                                                                                  // let-over binding after anything else is valid closed-world overloading
             else
@@ -467,7 +537,8 @@ and W_decl' (ctx : context) (d0 : decl) =
                             do! M.clear_constraints     // TODOH: probably there's a relation between contraints to be kept (i.e. not cleared) and the free vars in Γ
                             let! ϕe = W_expr ctx e
                             let te = ϕe.ftype
-                            return! M.fork_Γ <| M {     // fork Γ in such a way that vars bound by patterns are removed afterwards
+                            return! M.fork_Γ <| M {
+                                // TODOL: support codomain annotations after parameters like in "let f x y : int = ..."
                                 let (|B_Unannot|B_Annot|B_Patt|) = function
                                     | ULo (P_Var x)                    -> B_Unannot x
                                     | ULo (P_Annot (ULo (P_Var x), τ)) -> B_Annot (x, τ)
@@ -540,7 +611,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                 }
                 let! bs' = M.List.map (fun (b : rec_binding, x, tx) -> M {
                                 let ϕ = Fx_F_Ty tx
-                                let! cs = M.get_constraints // TODOH: every rec..and binding has the same contraints?
+                                let! cs = M.get_constraints // TODOH: every rec..and binding must have the same contraints, right?
                                 return! gen_bind Config.Printing.Prompt.rec_value_decl_prefixes { expr = b.expr; qual = b.qual; id = x; constraints = cs; inferred = ϕ; to_bind = ϕ }
                             }) l
                 M.translated <- D_Rec [for jk, e in bs' -> { qual = decl_qual.none; par = jk.pretty, None; expr = e }]
@@ -589,8 +660,8 @@ and W_decl' (ctx : context) (d0 : decl) =
                 // each data constructor's codomain must be the type constructor being defined
                 let pt = T_Apps [ yield T_Cons (c, kc); for _ in kdom -> ty.fresh_star_var ]
                 let _, tcod = split (|T_Arrows|_|) tx
-                let! γ = M.get_γ
-                if not (tcod.is_instance_of { γ = γ; loc = τx.loc } pt) then return Report.Error.data_constructor_codomain_invalid τx.loc x c tcod
+                let! uctx = M.get_uni_context τx.loc
+                if not (tcod.is_instance_of uctx pt) then return Report.Error.data_constructor_codomain_invalid τx.loc x c tcod
                 let! σ = M.bind_generalized_Γ (Jk_Data x) Jm_Normal (Fx_F_Ty tx)
                 Report.prompt ctx Config.Printing.Prompt.data_decl_prefixes x σ None
 
@@ -678,7 +749,7 @@ and W_patt ctx (p0 : patt) : M<fxty> =
             yield t1
 
         | P_App (p1, p2) ->
-            // HACK: better rewrite pattern application using HML (APP) rule
+            // HACK: this is wrong, probabily: better rewrite pattern application using HML (APP) rule
             let! t1 = W_patt_F ctx p1
             let! t2 = W_patt_F ctx p2
             let α = ty.fresh_star_var

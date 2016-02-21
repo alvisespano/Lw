@@ -24,7 +24,7 @@ type logger () =
     inherit Log.console_logger (Config.Log.cfg)
 
     member this.not_implemented fmt = this.custom_error Config.Log.not_implemented_color "NOT IMPLEMENTED" fmt
-    member this.mgu fmt = this.custom_debug Config.Log.mgu_color "MGU" Min fmt
+    member this.uni pri fmt = this.custom_debug Config.Log.uni_color "UNI" pri fmt
     member this.resolve pri fmt = this.custom_debug Config.Log.resolve_color "RESOLVE" pri fmt
     member this.test pri fmt = this.custom Config.Log.test_color "TEST" Config.Log.cfg.test_threshold pri fmt
 

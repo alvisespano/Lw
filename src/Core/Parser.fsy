@@ -15,7 +15,7 @@ let parse_error_rich = Some (fun ctx -> raise (ParseErrorContextException ctx))
 %token <System.Double> FLOAT
 %token <System.Char> CHAR
 %token <System.String> STRING UID LID INFIX TICK_ID BACKTICK_ID AT_ID
-%token TYPE EQ STAR ARROW VAL OVER BRAGT LTKET BRALT GTKET HASH DO INJECT EJECT IMPLIES DATATYPE DATA FORALL
+%token TYPE EQ STAR ARROW VAL OVER BRAGT LTKET BRALT GTKET HASH DO INJECT EJECT IMPLIES DATATYPE DATA FORALL BOTTOM
        LET REC IN IF THEN ELSE FUN MATCH WHEN WITH FUNCTION TRUE FALSE AS OF NAMESPACE OPEN WHERE OVERLOAD
        DOUBLEAMP DOUBLEPIPE UNDERSCORE BACKSLASH KIND QUESTION
        BRA KET CURBRA CURKET SQBRA SQKET 
@@ -367,6 +367,7 @@ ty_expr_app_atom_:
   | id                                              { Te_Id $1 }
   | TICK_ID                                         { Te_PolyVar $1 }
   | UNDERSCORE                                      { Te_PolyVar (wildcard_reserved_id ()) }
+  | BOTTOM                                          { Te_Bottom }
   | BRA ty_expr KET                                 { $2.value }
   | CURBRA ty_expr_record CURKET                    { Te_Record ($2, None) }
   | CURBRA ty_expr_record PIPE ty_expr CURKET       { Te_Record ($2, Some $4) }

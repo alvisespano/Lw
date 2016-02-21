@@ -20,7 +20,7 @@ open Lw.Core.Typing.Ops
 // kind unification
 //
 
-let rec kmgu (ctx : mgu_context) k1_ k2_ =
+let rec kmgu (ctx : uni_context) k1_ k2_ =
     let ( ** ) = compose_ksubst
     let loc = ctx.loc
     let rec R k1 k2 =
@@ -44,9 +44,11 @@ let rec kmgu (ctx : mgu_context) k1_ k2_ =
 type basic_builder with
     member M.kunify loc (k1 : kind) (k2 : kind) =
         M {
-            let! { θ = { k = kθ }; γ = γ } = M.get_state
-            let kθ = kmgu { loc = loc; γ = γ } (subst_kind kθ k1) (subst_kind kθ k2)
-            L.mgu "[kU] %O == %O\n     %O" k1 k2 kθ
+            let! θ = M.get_θ
+            let kθ = θ.k
+            let! ctx = M.get_uni_context loc
+            let kθ = kmgu ctx (subst_kind kθ k1) (subst_kind kθ k2)
+            L.uni Normal "[kU] %O == %O\n     %O" k1 k2 kθ
             do! M.update_θ (!> kθ)
         }
 
@@ -79,20 +81,23 @@ module private Eval =
         let E = ty_expr ctx
         let E_F τ = M { let! (ϕ : fxty) = E τ in return ϕ.ftype }
         M {
-            let k0 = τ0.typed
+            let k0 = τ0.typed       // this is the kind of the current ty_expr node being evaluated (annotated by previous Wk kind inference algorithm)
             match τ0.value with
+            | Te_Bottom ->
+                yield Fx_Bottom k0
+
             | Te_PolyVar x ->
                 let! α = M.add_scoped_var x
                 yield T_Var (α, k0)
 
             | Te_Id x ->
-                let! too = M.search_Δ x
+                let! too = M.search_δ x
                 match too with
                 | None   -> yield T_Cons (x, k0)
                 | Some t -> yield t
 
             | Te_Lambda ((x, _), τ) ->
-                let! Δ = M.get_Δ
+                let! Δ = M.get_δ
                 yield T_Closure (x, ref Δ, τ, k0)
 
             | Te_App (τ1, τ2) ->
@@ -100,9 +105,9 @@ module private Eval =
                 let! t2 = E_F τ2
                 match t1 with
                 | T_Closure (x, Δr, τ, _) ->
-                    return! M.fork_Δ <| M {
-                        do! M.set_Δ !Δr
-                        do! M.bind_Δ x t2
+                    return! M.fork_δ <| M {
+                        do! M.set_δ !Δr
+                        do! M.bind_δ x t2
                         yield! E τ
                     }
 
@@ -134,7 +139,7 @@ module private Eval =
                 | _                      -> yield Fx_Forall ((α, ϕ1), ϕ2)
 
             | Te_Let (d, τ1) ->
-                yield! M.fork_Δ <| M {
+                yield! M.fork_δ <| M {
                     do! ty_decl ctx d
                     yield! E τ1
                 }
@@ -155,7 +160,7 @@ module private Eval =
 
             | Te_Match (τ1, cases) ->
                 let! t1 = E_F τ1
-                yield! M.fork_Δ <| M {
+                yield! M.fork_δ <| M {
                     let! τo = M.List.tryPick (fun (p, _, τ) -> M { let! b = ty_patt ctx p t1 in if b then return Some τ else return None }) cases
                     match τo with
                     | None   -> return Report.Error.type_patterns_not_exhaustive τ1.loc t1
@@ -170,7 +175,7 @@ module private Eval =
                 let! ϕ = ty_expr ctx τ
                 do! M.ignore <| ty_patt ctx p ϕ.ftype
                 // prompt evaluated types
-                let! Δ = M.get_Δ
+                let! Δ = M.get_δ
                 for x in vars_in_ty_patt p do
                     prompt_evaluated_type x (Δ.lookup x)
         }
@@ -178,13 +183,13 @@ module private Eval =
     and ty_rec_bindings<'e> (ctx : context) (d : node<'e, _>) bs =
         let M = new type_eval_builder<_> (d)
         M {
-            let! Δ = M.get_Δ
+            let! Δ = M.get_δ
             let Δr = ref Env.empty
             Δr := List.fold (fun (Δ : tenv) { par = x, _; expr = τ } ->
                         let t = T_Closure (x, Δr, τ, τ.typed)
                         prompt_evaluated_type x t
                         Δ.bind x t) Δ bs
-            do! M.set_Δ !Δr
+            do! M.set_δ !Δr
         }
 
     // like Wk_ty_decl, this must be defined AFTER the functions it calls
@@ -208,7 +213,7 @@ module private Eval =
         M {
             match p.value, t with
             | Tp_Var x, t ->
-                do! M.bind_Δ x t
+                do! M.bind_δ x t
                 return true
 
             | Tp_Or (p1, p2), t ->
@@ -229,7 +234,7 @@ module private Eval =
 
             | Tp_As (p, x), v ->
                 let! b = R p v
-                if b then do! M.bind_Δ x v
+                if b then do! M.bind_δ x v
                 return b
 
             | Tp_Wildcard, _ ->
@@ -279,6 +284,9 @@ and Wk_ty_expr' (ctx : context) (τ0 : ty_expr) =
     let R = Wk_ty_expr ctx
     K {
         match τ0.value with
+        | Te_Bottom ->
+            yield kind.fresh_var
+
         | Te_PolyVar x ->
             let! o = K.search_γ x
             match o with

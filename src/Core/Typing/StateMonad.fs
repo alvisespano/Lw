@@ -67,23 +67,23 @@ type basic_builder (loc : location) =
     inherit Monad.state_builder<state> ()
 
     member __.get_Γ st = st.Γ, st
-    member __.get_Δ st = st.δ, st
+    member __.get_δ st = st.δ, st
     member __.get_γ st = st.γ, st
     member __.get_Q st = st.Q, st
     member __.get_constraints st = st.constraints, st
-    member M.get_θ = M { let! s = M.get_state in return s.θ }
+    member __M.get_θ st = st.θ, st
     member __.get_scoped_vars st = st.scoped_vars, st
 
-    member __.lift_Γ f st = (), { st with Γ = f st.Γ |> subst_jenv st.θ }
-    member __.lift_Δ f st = (), { st with δ = f st.δ }
-    member __.lift_γ f st = (), { st with state.γ = f st.γ |> subst_kjenv st.θ.k }
+    member __.lift_Γ f st = (), { st with state.Γ = f st.Γ }
+    member __.lift_δ f st = (), { st with δ = f st.δ }
+    member __.lift_γ f st = (), { st with state.γ = f st.γ }
     member __.lift_Q f st = (), { st with Q = f st.Q }
     member __.lift_θ f st = (), { st with θ = f st.θ }
-    member __.lift_constraints f (st : state) = (), { st with constraints = subst_constraints st.θ (f st.constraints) }
+    member __.lift_constraints f (st : state) = (), { st with constraints = f st.constraints }
     member __.lift_scoped_vars f (st : state) = (), { st with scoped_vars = f st.scoped_vars }
 
     member M.set_Γ x = M.lift_Γ (fun _ -> x)
-    member M.set_Δ x = M.lift_Δ (fun _ -> x)
+    member M.set_δ x = M.lift_δ (fun _ -> x)
     member M.set_γ x = M.lift_γ (fun _ -> x)
     member M.set_Q x = M.lift_Q (fun _ -> x)
     [< System.Obsolete("Global substitution should never be set explicitly: use update_θ method instead.") >]
@@ -93,26 +93,30 @@ type basic_builder (loc : location) =
 
     member M.clear_constraints = M.set_constraints constraints.empty
 
-    // TODO: design a smart system for pruning substition automatically via weak pointers.
+    member private M.update_state =
+        M {
+            let! θ = M.get_θ
+            do! M.lift_state (fun s ->
+                { s with
+                    γ = subst_kjenv θ.k s.γ
+                    δ = subst_tenv θ s.δ
+                    Γ = subst_jenv θ s.Γ
+                    Q = subst_prefix θ s.Q
+                    constraints = subst_constraints θ s.constraints })
+        }
+
+    // TODO: design a smart system for pruning substition automatically via gargabe collection.
     //       The basic implementation idea behind it is to use weak references: each object of type var carries a reference count, which implies that each type a given var 
     //       appears in increases the counter. Naturally, also substitutions carry objects of type var, but substitutions should count as weak references, in such a way
     //       that when a var is being referenced only from within a substitution, the substitution entry can be safely removed because we ensure no other type is referencing that var any longer.
-    member M.update_θ θ =
+    member M.update_θ θ1 =
         M {
-            do! M.lift_state (fun s ->
-                    let θ = compose_tksubst θ s.θ
-                    in
-                        { γ = subst_kjenv θ.k s.γ
-                          δ = subst_tenv θ s.δ
-                          θ = θ
-                          Γ = subst_jenv θ s.Γ
-                          Q = subst_prefix θ s.Q
-                          constraints = subst_constraints θ s.constraints
-                          scoped_vars = s.scoped_vars })
+            do! M.lift_θ (compose_tksubst θ1)
+            // TMP: state update disabled
+            do! M.update_state
             let! θ' = M.get_θ
-            L.debug Normal "[S+] %O\n     = %O" θ θ'
+            L.debug Normal "[S+] %O\n     = %O" θ1 θ'
         }
-
 
     member internal __.lookup report (env : Env.t<_, _>) x =
         try env.lookup x
@@ -172,10 +176,24 @@ type basic_builder (loc : location) =
 
     member M.fork_γ f =
         M {
-            let! Γ = M.get_γ
+            let! γ = M.get_γ
             let! r = f
-            do! M.set_γ Γ
+            let! γ = M.updated γ
+            do! M.set_γ γ
             return r
+        }
+
+    member M.updated (γ : kjenv) =
+        M {
+            let! θ = M.get_θ
+            return subst_kjenv θ.k γ
+        }
+
+    member M.get_uni_context loc =
+        M {
+            let! Γ = M.get_Γ
+            let! γ = M.get_γ
+            return { uni_context.Γ = Γ; γ = γ; loc = loc }
         }
 
 
@@ -190,20 +208,35 @@ type type_inference_builder (loc) =
     member M.Yield (ϕ : fxty) =
         M {
             let! ϕ' = M.updated ϕ
-            L.debug High "[yield] %O ~> %O" ϕ ϕ'
+//            L.debug High "[yield] %O ~> %O" ϕ ϕ'
             return ϕ'
         }
 
     member M.Yield (t : ty) = M { yield Fx_F_Ty t }   
     member M.Yield ((x : id, t : ty)) = M { let! t = M.updated t in return x, t }    // used for row types
 
+    member M.updated (t : ty) =
+        M {
+            let! θ = M.get_θ
+            return subst_ty θ t
+        }
+
     // used by some HML rules inferring foralls where the type part have been substituted
     member M.Yield ((Q : prefix, t : ty)) =
         M {
-            assert Q.dom.IsSubsetOf t.fv
+            let! t = M.updated t
             let! θ = M.get_θ
-            assert (Set.intersect Q.dom θ.dom).IsEmpty  // HACK: this assert might not be wise
-            yield Fx_ForallsQ (Q, Fx_F_Ty t)
+            let! Γ = M.get_Γ
+            let p set = sprintf "{ %s }" <| flatten_stringables ", " set
+//            L.debug High "[yield-Q] S.dom = %O\n          Q.dom = %O\n          fv_gamma = %O" (p θ.dom) (p Q.dom) (p <| fv_Γ Γ)
+//            let Q = prefix.B { for α, _ as i in Q do if not <| Set.contains α (fv_Γ Γ) then yield i }
+//            let Q1, Q = Q.split (fv_Γ Γ)
+            L.debug High "[yield-Q] S.dom = %O\n          Q.dom = %O\n          fv_gamma = %O\n          t.fv = %O" (p θ.dom) (p Q.dom) (p <| fv_Γ Γ) (p t.fv)
+
+            assert Q.dom.IsSubsetOf t.fv                    // generalizable vars must be present in t
+            assert (Set.intersect Q.dom θ.dom).IsEmpty      // prefix and subst must involve different variables
+            assert (Set.intersect Q.dom (fv_Γ Γ)).IsEmpty   // no variable free in Γ must be generalized
+            return Fx_ForallsQ (Q, Fx_F_Ty t)
         }
 
     // banged versions
@@ -213,22 +246,15 @@ type type_inference_builder (loc) =
         M {
             let! Γ = M.get_Γ
             let! r = f
+            let! Γ = M.updated Γ        // it's important to apply the current substitution to the previously-saved env before setting it, or some changes will be lost
             do! M.set_Γ Γ
             return r
         }
 
-    member M.fork_Q f =
-        M {
-            let! Q = M.get_Q
-            let! r = f
-            do! M.set_Q Q
-            return r
-        }
-
-    member M.updated (t : ty) =
+    member M.updated (Γ : jenv) =
         M {
             let! θ = M.get_θ
-            return subst_ty θ t
+            return subst_jenv θ Γ
         }
 
     member M.updated (ϕ : fxty) =
@@ -237,7 +263,7 @@ type type_inference_builder (loc) =
             return subst_fxty θ ϕ
         }
 
-    member M.updated cs =
+    member M.updated (cs : constraints) =
         M {
             let! θ = M.get_θ
             return subst_constraints θ cs
@@ -246,7 +272,6 @@ type type_inference_builder (loc) =
     member M.split_prefix αs =
         M {
             let! Q = M.get_Q
-//            let! Q = M.updated Q    // TODO: is this really needed?
             let Q1, Q2 = Q.split αs
             do! M.set_Q Q1
             return Q2
@@ -257,24 +282,24 @@ type type_inference_builder (loc) =
             let! ϕ = M.updated ϕ
             let! Q = M.get_Q
             let Q, θ = Q.extend (α, ϕ)
-            do! M.set_Q Q
             do! M.update_θ θ
+            do! M.set_Q Q
         }
 
     member M.update_prefix_with_bound (Q : prefix) (α, ϕ : fxty) =
         M {
             let! ϕ = M.updated ϕ
             let Q, θ = Q.update_with_bound (α, ϕ)
-            do! M.set_Q Q
             do! M.update_θ θ
+            do! M.set_Q Q
         }
 
     member M.update_prefix_with_subst (Q : prefix) (α, t : ty) =
         M {
             let! t = M.updated t
             let Q, θ = Q.update_with_subst (α, t)
+            do! M.update_θ θ
             do! M.set_Q Q
-            do! M.update_θ θ            
         }
 
     member M.search_binding_by_name_Γ x =
@@ -349,6 +374,8 @@ type type_inference_builder (loc) =
             return r
         }
 
+
+
 type translatable_type_inference_builder<'e> (e : node<'e, unit>) =
     inherit type_inference_builder (e.loc)
     member __.translated with set x = e.value <- x 
@@ -366,25 +393,31 @@ type type_eval_builder<'e> (τ : node<'e, kind>) =
     member M.YieldFrom f = M { let! (r : ty) = f in yield r }
     member M.YieldFrom f = M { let! (r : fxty) = f in yield r }
 
-    member M.search_Δ x =
+    member M.search_δ x =
         M {
-            let! Δ = M.get_Δ
+            let! Δ = M.get_δ
             return Δ.search x
         }
 
-    member M.bind_Δ x t =
+    member M.bind_δ x t =
         M {
-            do! M.lift_Δ (fun Δ -> Δ.bind x t)
+            do! M.lift_δ (fun Δ -> Δ.bind x t)
         }
     
-    member M.fork_Δ f =
+    member M.fork_δ f =
         M {
-            let! Δ = M.get_Δ
+            let! δ = M.get_δ
             let! r = f
-            do! M.set_Δ Δ
+            let! δ = M.updated δ
+            do! M.set_δ δ
             return r
         }
 
+    member M.updated (δ : tenv) =
+        M {
+            let! θ = M.get_θ
+            return subst_tenv θ δ
+        }
 
 
 // specialized monad kind inference

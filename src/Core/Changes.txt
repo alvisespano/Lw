@@ -1,10 +1,22 @@
-﻿
-18/2/2016:
+﻿20-21/2/2016:
+* FIX: finally I found the reason why HML did not work! More tests must be done but it's likely the right direction: generalization (performed by calling split) did not take into account
+       the free variables in Γ; now split call sites have been fixed
+* FIX: ty.search_var did not work and caused active pattern T_ForallsK and all other patterns relying on it to throw an unexpected exception. Now fixed
+* UP: var type has now custom equality and comparison
+* FIX: subsume used to be bugged for a long time, but now a few changed seems to have fixed it; skolem escape check not tested yet, though
+* TEST: finally some tests are successful: the following Lw function seem to typecheck correctly: const, app, id, i (which is the application "id id") and the monomorphic expression "app id 3"
+
+
+20/2/2016:
+* DEBUG: new pure version of HML infer algorithm written in a private module
+
+
+18-19/2/2016:
 * I'm starting to think that HML paper shows a wrong implementation of the type inferece. The prototype in Haskel seem to not perform generalization on (APP) when typing "let app f x = f x".
 * DEBUG: some more debug for HML
 
 
-17/2/2016:
+16-17/2/2016:
 * NEW: new compilation switch: ENABLE_HML_FIXES; currently 2 fixes exist:
        (1) detection of forall ('a :> _|_). 'a in nf;
        (2) subsume prunes all variables introduced locally within the result substitution

@@ -69,17 +69,18 @@ let rec resolve_constraints (ctx : context) e0 =
     let L0 x = Lo loc x
     M {
         if ctx.resolution <> Res_No then
-            let! { γ = γ; Γ = Γ; constraints = cs } = M.get_state
+            let! Γ = M.get_Γ
+            let! cs = M.get_constraints
             #if DEBUG_RESOLVE
             L.debug Low "resolving constraints: %O" cs
             #endif
             if not cs.is_empty then
-                let mgu_ctx = { mgu_context.loc = loc; γ = γ }
+                let! uctx = M.get_uni_context e0.loc
                 for { name = x; ty = t } as c in cs do
                     let strict = ctx.resolution = Res_Strict && c.strict
                     let jkσs = restrict_overloaded x Γ
                     if not (Seq.isEmpty jkσs) then
-                        match search_best_candidate mgu_ctx (fun cand -> if strict then cand.δ = 0 else true) x t jkσs with
+                        match search_best_candidate uctx (fun cand -> if strict then cand.δ = 0 else true) x t jkσs with
                         | None -> ()
                         | Some cand ->
                             L.resolve Normal "%s : %O\n ~~> %O" x t cand

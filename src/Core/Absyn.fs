@@ -149,7 +149,19 @@ let pretty_param sep (id, tyo) =
 //
 
 [< System.Diagnostics.DebuggerDisplay("{ToString()}") >]
+[< CustomEquality; CustomComparison >]
 type var = Va of int * string option
+with
+    member this.uid =
+        match this with
+        | Va (n, _) -> n
+
+    override x.Equals y = CustomCompare.equals_by (fun (α : var) -> α.uid) x y
+ 
+    override x.GetHashCode () = match x with Va (n, so) -> hash (x, so)
+ 
+    interface System.IComparable with
+      member x.CompareTo y = CustomCompare.compare_by (fun (α : var) -> α.uid) x y
 
 // this module is needed and cannot be turn into static members within the var class because static members are unit closures and cannot be constants
 [< CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix) >]
@@ -159,10 +171,6 @@ module private var =
     let forall : Set<var> ref = ref Set.empty
 
 type var with
-    member this.uid =
-        match this with
-        | Va (n, _) -> n
-
     static member fresh =
         let r = Va (fresh_int (), None)
         L.hint Low "new fresh var: %O" r
@@ -170,7 +178,7 @@ type var with
 
     static member fresh_named s =
         let r = Va (fresh_int (), Some s)
-        L.hint Low "new fresh var: %O" r
+        L.hint Low "new fresh named var: %O" r
         r
 
     member this.refresh =
@@ -428,8 +436,9 @@ with
         member __.annot_sep = Config.Printing.kind_annotation_sep
 
 and [< NoComparison; NoEquality >] ty_uexpr =
-    | Te_PolyVar of id
+    | Te_PolyVar of id      // TODOL: this could be renamed as Te_Var simply
     | Te_Id of id
+    | Te_Bottom
     | Te_Lambda of kinded_param * ty_expr
     | Te_HTuple of ty_expr list
     | Te_App of (ty_expr * ty_expr)
@@ -566,6 +575,7 @@ type ty_uexpr with
             | Te_Arrow (Te_Arrow _ as t1, t2) -> sprintf "(%O) -> %Os" t1 t2
             | Te_Arrow (t1, t2)               -> sprintf "%O -> %O" t1 t2
 
+            | Te_Bottom                -> Config.Printing.dynamic.bottom
             | Te_App (App s)           -> s
             | Te_Lambda (kpar, τ)      -> sprintf "fun %s -> %O" (pretty_param Config.Printing.kind_annotation_sep kpar) τ
             | Te_Annot (e, ty)         -> sprintf "(%O : %O)" e ty

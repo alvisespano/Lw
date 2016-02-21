@@ -115,9 +115,9 @@ let rec subst_kind (kθ : ksubst) =
 let subst_var (tθ : tsubst) α =
     match tθ.search α with
     #if DEBUG
-    | Some (T_Var (β, _) as t) -> L.warn Min "substituting quantified var: %s" (subst<_>.pretty_item (α, t)); β
+    | Some (T_Var (β, _) as t) -> L.warn Min "substituting var: %s" (subst<_>.pretty_item (α, t)); β
     | None                     -> α
-    | t                        -> unexpected "substituting quantified var to non-var type: %s" __SOURCE_FILE__ __LINE__ (subst<_>.pretty_item (α, t))
+    | t                        -> unexpected "substituting var to non-var type: %s" __SOURCE_FILE__ __LINE__ (subst<_>.pretty_item (α, t))
     #else
     | Some (T_Var (β, _)) -> β
     | _                   -> α
@@ -148,12 +148,11 @@ let rec subst_fxty θ =
     | Fx_Forall ((α, ϕ1), ϕ2) -> Fx_Forall ((subst_var θ.t α, S ϕ1), S ϕ2)
 
 
-//// first argument is the NEW subst, second argument is the OLD one
-let compose_ksubst (kθ' : ksubst) (kθ : ksubst) = kθ.compose subst_kind kθ'
-
+// first argument is the NEW subst, second argument is the OLD one
+let compose_ksubst (kθ' : ksubst) (kθ : ksubst) = kθ'.compose subst_kind kθ
 let compose_tksubst { t = tθ'; k = kθ' } { t = tθ; k = kθ } =
     let kθ = compose_ksubst kθ' kθ
-    let tθ = tθ.compose (fun tθ -> subst_ty { t = tθ; k = kθ }) tθ'
+    let tθ = tθ'.compose (fun tθ -> subst_ty { t = tθ; k = kθ }) tθ     // this correct! left argument of compose is 'this' when calling method compose, and composition have the NEW subst as first argument, i.e. left
     in
         { t = tθ; k = kθ }
 
@@ -182,9 +181,17 @@ let subst_tenv θ (env : tenv) = env.map (fun _ -> subst_ty θ)
 // active patterns for dealing with quantification, instantiation etc. 
 //
 
+let T_Bottom k =
+    let α, tα = ty.fresh_var_and_ty k
+    in
+        T_Forall (α, tα)
+
 let T_ForallK ((α, _), t) = T_Forall (α, t)
-let (|T_ForallK|_|) = function
-    | T_Forall (α, t) -> let k = (t.search_var α).Value in Some ((α, k), t)
+let (|T_ForallK|_|) t =
+    match t with
+    | T_Forall (α, t) ->
+        let k = (t.search_var α).Value
+        in Some ((α, k), t)
     | _ -> None
 
 let T_ForallsK, (|T_ForallsK0|), (|T_ForallsK|_|) = make_foralls T_ForallK (|T_ForallK|_|)
@@ -195,8 +202,19 @@ type ty with
         | T_Forall _ -> false
         | _          -> true
 
-// only flex type quantifiers are collected into Q: possible quantified variables within the right-hand F-type are not included
 let Fx_ForallsQ (Q : prefix, ϕ : fxty) = Fx_Foralls (Seq.toList Q, ϕ)
+
+[< System.Obsolete("Using this virtual constructor actually should not be necessary for making HML type inference work. If it actually does make things work, think twice and try to discover what makes it work.") >]
+let FxU_ForallsQ (Q, t : ty) =
+    let rec R Q t =
+        match Q with
+        | Q_Nil                        -> Q, t
+        | Q_Cons (Q, (α, Fx_Bottom _)) -> R Q (T_Forall (α, t))
+        // logga qui così vedi quando effettivamente viene quantificato un f-type; inoltre prova a cambiare la fxty.nf in modo che faccia Fx_Bottom nel caso aggunto da me e scopri le relazioni con questo
+        | Q_Cons _                     -> Q, t
+    let Q, t = R Q t
+    in
+        Fx_ForallsQ (Q, Fx_F_Ty t)
 
 // all outer quantified vars are taken, both from the flex type and from possible F-type quantifiers, hence right hand is guaranteed unquantified
 let (|FxU_ForallsQ|FxU_Unquantified|FxU_Bottom|) = function
@@ -241,6 +259,22 @@ type ty with
 
     member t.instantiate = t.instantiate_wrt t.fv
 
+    member t.nf =
+        match t with
+        | T_Closure _
+        | T_Var _
+        | T_Cons _ -> t
+
+        | T_App (t1, t2) -> T_App (t1.nf, t2.nf)
+        | T_HTuple ts    -> T_HTuple (List.map (fun (t : ty) -> t.nf) ts)
+
+        | T_Forall (α, t2) ->
+            if not <| Set.contains α t2.fv then t2.nf
+            else T_Forall (α, t2.nf)
+
+    member t.is_nf = t = t.nf
+        
+
 
 type fxty with
     static member instantiate_unquantified (Q : prefix, t : ty) =
@@ -253,18 +287,19 @@ type fxty with
     member this.nf =
         let r =
             match this with
-            | Fx_F_Ty _
+            | Fx_F_Ty t        -> Fx_F_Ty t.nf
             | Fx_Bottom _ as ϕ -> ϕ
 
+            #if ENABLE_HML_FIXES
+            | Fx_Forall ((α, Fx_Bottom k), Fx_F_Ty (T_Var (β, _))) when α = β -> Fx_F_Ty (T_Bottom k)   // HACK: this special case has been added by me: nf(forall ('a :> _|_). 'a) = forall 'a. 'a; original HML spec would reduce to _|_ instead
+            #endif
+ 
             | Fx_Forall ((α, ϕ1), ϕ2) ->
                 if not <| Set.contains α ϕ2.fv then ϕ2.nf
                 else
                     match ϕ2.nf with
                     | Fx_F_Ty (T_Var (β, _) as t) when α = β ->
                         match ϕ1.nf with                        
-                        #if ENABLE_HML_FIXES
-                        | Fx_Bottom _ -> Fx_F_Ty (T_Forall (α, t))   // HACK: this special case has been added by me: nf(forall ('a :> _|_). 'a) = forall 'a. 'a; original HML spec would reduce to _|_ instead
-                        #endif
                         | ϕ           -> ϕ
 
                     | _ -> 
@@ -283,19 +318,15 @@ type fxty with
         let rec R = function
             | Fx_F_Ty t -> t
 
-            | Fx_Bottom k ->
-                let α, tα = ty.fresh_var_and_ty k
-                in
-                    T_Forall (α, tα)
+            | Fx_Bottom k -> T_Bottom k
 
             | Fx_Forall ((α, FxU0_Bottom _), ϕ) ->
                 T_Forall (α, R ϕ)
 
             | Fx_Forall ((α, FxU0_ForallsQ (Q, t1)), ϕ2) ->
                 let θ = !> (new tsubst (α, t1))
-                let r = R (Fx_ForallsQ (Q, subst_fxty θ ϕ2))
                 in
-                    r
+                    R (Fx_ForallsQ (Q, subst_fxty θ ϕ2))
         let r = R this.nf
         #if DEBUG_NF
         L.debug High "[ftype] ftype(%O) = %O" this r
@@ -326,10 +357,7 @@ type scheme with
         in
             cs.fv + t.fv
 
-    member σ.instantiate =
-        match σ.fxty with
-        | FxU_ForallsQ (Q, _) as ϕ -> { constraints = σ.constraints.instantiate Q.dom; fxty = ϕ }
-        | _                        -> σ
+    member σ.instantiate = σ    // TODOH: there must be something to do with constraints and quantified variables
 
 let internal fv_env fv (env : Env.t<_, _>) = env.fold (fun αs _ v -> Set.union αs (fv v)) Set.empty
 
@@ -365,25 +393,28 @@ let KUngeneralized k = { forall = Set.empty; kind = k }
 //
 
 type prefix with
-    // TODO: rewrite split, extend and update in a less complicated way and put a compilation flag for switching between the two
-    member Q.split αs =
+    // TODO: rewrite split, extend and update in a less complicated way and maybe put a compilation flag for switching between the two
+
+    member this.split =
         let rec R Q αs =
             match Q with
             | Q_Nil -> Q_Nil, Q_Nil
-            | Q_Cons (Q, (α, t)) ->
+            | Q_Cons (Q, (α, ϕ)) ->
                 if Set.contains α αs then
-                    let Q1, Q2 = R Q (Set.remove α αs + t.fv)
+                    let Q1, Q2 = R Q (Set.remove α αs + ϕ.fv)
                     in
-                        Q_Cons (Q1, (α, t)), Q2
+                        Q1 + (α, ϕ), Q2
                 else
                     let Q1, Q2 = R Q αs
                     in
-                        Q1, Q_Cons (Q2, (α, t))
-        let Q1, Q2 as r = R Q αs
-        #if DEBUG_HML
-        L.debug Normal "[split] %O ; { %s }\n        = %O\n          %O" Q (flatten_stringables ", " αs) Q1 Q2
-        #endif
-        r
+                        Q1, Q2 + (α, ϕ)
+        in
+            fun αs ->
+                let Q1, Q2 as r = R this αs
+                #if DEBUG_HML
+                L.debug Normal "[split] %O ; { %s }\n        = %O\n          %O" this (flatten_stringables ", " αs) Q1 Q2
+                #endif
+                r
 
     member Q.extend (α, ϕ : fxty) =
         let Q', θ' as r =
@@ -402,13 +433,6 @@ type prefix with
         in
             R Q
 
-    member this.slice_by p =
-        let rec R (q : prefix) = function
-            | Q_Nil         -> None
-            | Q_Cons (Q, i) -> if p i then Some (Q, i, q) else R (q.insert i) Q
-        in
-            R Q_Nil this
-
     member this.lookup α =
         match this.search α with
         | Some x -> x
@@ -416,60 +440,57 @@ type prefix with
 
     member this.search α = Seq.tryFind (fst >> (=) α) this |> Option.map snd
 
+    member this.slice_by p =
+        let rec R (q : prefix) = function
+            | Q_Nil         -> None
+            | Q_Cons (Q, i) -> if p i then Some (Q, i, q) else R (q.insert i) Q
+        in
+            R Q_Nil this
 
-let (|Q_Slice|_|) α (Q : prefix) = Q.slice_by (fst >> (=) α) 
+let (|Q_Slice|_|) α (Q : prefix) = Q.slice_by (fst >> (=) α)
 
 
 type prefix with
     // TODO: rewrite these update methods without the overcomplicated slicing thing
 
-//    member inline private Q.update f (α, ty : ^t) =
-//        match Q.split (^t : (member fv : _) ty) with
-//        | Q0, Q_Slice α (Q1, _, Q2) -> f (α, ty, Q0, Q1, Q2)
-//        | _                         -> unexpected "item %O : %O is not in prefix: %O" __SOURCE_FILE__ __LINE__ α ty Q
-//
-//    static member private update_prefix__reusable_part (α, t : ty, Q0 : prefix, Q1, Q2) =
-//        let θ = !> (new tsubst (α, t))
-//        in
-//            Q0 + Q1 + subst_prefix θ Q2, θ
-//
-//    member this.update_prefix_with_bound (α, ϕ) =
-//        let Q, θ as r =
-//            this.update <| fun (α, ϕ : fxty, Q0, Q1, Q2) ->
-//                match ϕ.nf with
-//                | FxU_Unquantified t' -> prefix.update_prefix__reusable_part (α, t', Q0, Q1, Q2)
-//                | ϕ                   -> Q0 + Q1 + (α, ϕ) + Q2, tksubst.empty       // HACK: here normalized flex type is used, oppsedly to what HML paper says
-//            <| (α, ϕ)
-//        #if DEBUG_HML
-//        L.debug Normal "[up-Q] %O ; %s\n       = %O\n         %O" this (prefix.pretty_item (α, ϕ)) Q θ
-//        #endif
-//        r
-//
-//    member this.update_prefix_with_subst (α, t : ty) =
-//        let Q, θ as r = this.update prefix.update_prefix__reusable_part (α, t)
-//        #if DEBUG_HML
-//        L.debug Normal "[up-S] %O ; %s\n       = %O\n         %O" this (subst<_>.pretty_item ("(", ")", α, t)) Q θ
-//        #endif
-//        r
-
+    #if ENABLE_HML_OPTS
     member Q.update_with_subst (α, t : ty) =
-        let Q', θ as r =
-            match Q.split t.fv with
-            | Q0, Q_Slice α (Q1, (_, ϕ), Q2) ->
-                let θ = !> (new tsubst (α, t))
-                in
-                    Q0 + Q1 + (α, ϕ) + subst_prefix θ Q2, θ     // HACK: occhio che ho reintrodotto nel prefisso la α
-                
-            | _ -> unexpected "item %O : %O is not in prefix: %O" __SOURCE_FILE__ __LINE__ α t Q
+        let θ = !> (new tsubst (α, t))
+        let Q' = prefix.B { for β, _ as i in Q do if α <> β then yield i } |> subst_prefix θ
         #if DEBUG_HML
-        L.debug Normal "[up-Q] %O ; %s\n       = %O\n         %O" Q (prefix.pretty_item (α, ϕ)) Q' θ
+        L.debug Normal "[up-S] %O ; %s\n       = %O\n         %O" Q (subst<_>.pretty_item ("(", ")", α, t)) Q' θ
+        #endif
+        Q', θ
+
+    member Q.update_with_bound (α, ϕ2 : fxty) =
+        let Q', θ as r =
+            match ϕ2.nf with
+            | FxU_Unquantified t -> Q.update_with_subst (α, t)
+            | _                  -> prefix.B { for β, ϕ in Q do if α = β then yield α, ϕ2 else yield β, ϕ }, tksubst.empty
+        #if DEBUG_HML
+        L.debug Normal "[up-Q] %O ; %s\n       = %O\n         %O" Q (prefix.pretty_item (α, ϕ2)) Q' θ
         #endif
         r
 
-    member Q0.update_with_bound (α, ϕ2 : fxty) =
+    #else
+    member Q.update_with_subst (α, t : ty) =
         let Q', θ as r =
-            match Q0.split ϕ2.fv with
-            | Q0, Q_Slice α (Q1, (_, ϕ2), Q2) ->
+            match Q.split t.fv with
+            | Q0, Q_Slice α (Q1, _, Q2) ->
+                let θ = !> (new tsubst (α, t))
+                in
+                    Q0 + Q1 + subst_prefix θ Q2, θ
+                
+            | _ -> unexpected "item %O : %O is not in prefix: %O" __SOURCE_FILE__ __LINE__ α t Q
+        #if DEBUG_HML
+        L.debug Normal "[up-S] %O ; %s\n       = %O\n         %O" Q (subst<_>.pretty_item ("(", ")", α, t)) Q' θ
+        #endif
+        r
+
+    member Q.update_with_bound (α, ϕ2 : fxty) =
+        let Q', θ as r =
+            match Q.split ϕ2.fv with
+            | Q0, Q_Slice α (Q1, _, Q2) ->
                 match ϕ2.nf with
                 | FxU_Unquantified t ->
                     let θ = !> (new tsubst (α, t))
@@ -478,12 +499,12 @@ type prefix with
 
                 | _ -> Q0 + Q1 + (α, ϕ2) + Q2, tksubst.empty
                 
-            | _ -> unexpected "item %O : %O is not in prefix: %O" __SOURCE_FILE__ __LINE__ α ϕ2 Q0
+            | _ -> unexpected "item %O : %O is not in prefix: %O" __SOURCE_FILE__ __LINE__ α ϕ2 Q
         #if DEBUG_HML
-        L.debug Normal "[up-S] %O ; %s\n       = %O\n         %O" Q (subst<_>.pretty_item ("(", ")", α, ϕ2)) Q' θ
+        L.debug Normal "[up-Q] %O ; %s\n       = %O\n         %O" Q (prefix.pretty_item (α, ϕ2)) Q' θ
         #endif
         r
-
+    #endif
 
 [< CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix) >]
 module prefix =
