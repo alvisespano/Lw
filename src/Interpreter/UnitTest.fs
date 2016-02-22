@@ -1,7 +1,7 @@
 ﻿(*
  * Lw
  * Test.fs: test modules
- * (C) 2000-2014 Alvise Spano' @ Universita' Ca' Foscari di Venezia
+ * (C) Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
  
 module Lw.Interpreter.UnitTest
@@ -10,9 +10,9 @@ open System
 open FSharp.Common
 open FSharp.Common.Prelude
 open FSharp.Common.Log
-open Lw.Core.Globals
 open Lw.Core
 open Lw.Core.Parsing
+open Lw.Core.Globals
 open Lw.Core.Absyn
 open Lw.Core.Typing.Defs
 open Lw.Core.Typing.Inference
@@ -20,98 +20,131 @@ open Lw.Core.Typing.Meta
 open Lw.Core.Typing.Report
 
 type [< NoComparison; NoEquality >] test_result =
-    | Ok of fxty * kind
+    | Ok of string option
     | Wrong
 
-let ctx0 = context.top_level
-let envs0 = Intrinsic.envs.envs0
-let st0 = { Typing.StateMonad.state.empty with Γ = envs0.Γ; γ = envs0.γ }
+// TODO: reuse this for interactive as well
+type typechecker () =
+    let mutable st = { Typing.StateMonad.state.empty with Γ = Intrinsic.envs.envs0.Γ; γ = Intrinsic.envs.envs0.γ }
 
-let unM f x = f ctx0 x st0 |> fst
+    member private __.unM f x =
+        let ctx0 = context.top_level
+        let r, st1 = f ctx0 x st
+        st <- st1
+        r
+                
+    member this.W_expr e = this.unM W_expr e    
+    member this.W_decl d = this.unM W_decl d    
+    member this.Wk_and_eval_ty_expr_fx τ = this.unM Wk_and_eval_ty_expr_fx τ
 
-let parse_ty s =
-    let τ =
-        try parse_ty_expr s
-        with :? Parsing.syntax_error as e -> unexpected "syntax error while parsing type expr: %s\n%O" __SOURCE_FILE__ __LINE__ s e
-    in
-        unM Wk_and_eval_ty_expr_fx τ
+    member this.parse_and_Wk_and_eval_ty_expr s =
+        let τ =
+            try parse_ty_expr s
+            with :? Parsing.syntax_error as e -> unexpected "syntax error while parsing type expression: %s\n%O" __SOURCE_FILE__ __LINE__ s e
+        in
+            this.Wk_and_eval_ty_expr_fx τ
+
+
+[< RequireQualifiedAccess >]
+type [< NoEquality; NoComparison >] parsed =
+    | Expr of expr
+    | Decl of decl
+with
+    override this.ToString () = this.pretty
+    member this.pretty =
+        match this with
+        | Expr e -> sprintf "expr[%s]" e.pretty
+        | Decl d -> sprintf "decl[%s]" d.pretty
+
+let parse_expr_or_decl s =
+    try parsed.Expr (parse_expr s)
+    with :? Parsing.syntax_error ->
+        try parsed.Decl (parse_decl s)
+        with :? Parsing.syntax_error as e -> unexpected "syntax error while parsing expression or declaration: %s\n%O" __SOURCE_FILE__ __LINE__ s e
         
-let ok s =
-    let t, k = parse_ty s
-    L.test Min "parsed: %s  =  %O" s t
-    Ok (t, k)
 
 let test_ok msg =
-    L.test Low "ok %s" msg
+    L.test Low "%s" msg
     0
 
 let test_failed msg =
-    L.test High "%s" msg
+    L.fatal_error "%s" msg
     1
 
-let inference s =
-    let e = parse_expr s
-    let t = unM W_expr e
-    L.test Normal "%O : %O" e t
-    t
-
 let is_test_ok (t : fxty) (et, ek) = et = t && ek = t.kind
-    
 
-let test1 (input, res) =
-    match res with
-    | Ok (t, k) as res ->
-        try
-            let tr = inference input
-            if is_test_ok tr (t, k) then test_ok ""
-            else test_failed <| sprintf "test was expected to have type: %O" t
-        with e ->
-            test_failed <| sprintf "test should be accepted with type %O. An exception was caught: %s" res (pretty_exn_and_inners e)
+let decl_dummy_ty = Fx_F_Ty T_Unit
 
-    | Wrong ->
-        try
-           let _ = inference input
-           unexpected "a type error was expected from testing expression: %s" __SOURCE_FILE__ __LINE__ input
-        with :? type_error as e ->
-            L.test High "%s" (pretty_exn_and_inners e)
-            test_ok "(the input was justly rejected)"
+let test1 (tc : typechecker) (input, res) =
+    let typecheck1 s =
+        match parse_expr_or_decl s with
+        | parsed.Expr e as p ->
+            let t = tc.W_expr e
+            L.test Low "%O : %O" e t
+            t
 
+        | parsed.Decl d ->
+            tc.W_decl d
+            decl_dummy_ty
+    in
+        match res with
+        | Ok so ->
+            try
+                let t, k =
+                    match so with
+                    | Some s -> tc.parse_and_Wk_and_eval_ty_expr s
+                    | None   -> let t = decl_dummy_ty in t, t.kind
+                let tr = typecheck1 input
+                if is_test_ok tr (t, k) then test_ok "ok"
+                else test_failed <| sprintf "test was expected to have type: %O" t
+            with e ->
+                let r = test_failed <| sprintf "test should be accepted with type %O. An exception was caught:" res
+                ignore <| Interactive.handle_exn e
+                r
+
+        | Wrong ->
+            try
+               let _ = typecheck1 input
+               test_failed <| sprintf "a type error was expected from testing expression: %s" input
+            with :? type_error 
+               | :? Parsing.syntax_error as e ->
+                L.test Min "%s" (pretty_exn_and_inners e)
+                let r = test_ok <| sprintf "input \"%s\" was justly rejected" input
+                L.test Min "raised exception was: %s" (pretty_exn_and_inners e)
+                r
 
 let test ts =
-    let xs = Seq.map test1 ts
-    L.test Normal "tested: %d\nfailed: %d" (Seq.length ts) (Seq.sum xs)
+    let tc = new typechecker ()
+    let xs, span = cputime (List.map (test1 tc)) ts
+    let sum = List.sum xs
+    L.test High "tested: %d\nfailed: %d\ncpu time: %s" (List.length ts) sum span.pretty
+    sum
 
 
+module Tests =
 
-
-
-
-module HM =
+    let ok s = Ok (Some s)
+    let wrong = Wrong
     
-    let tests =
+    let HM =
       [
         "fun x -> x",                               ok "forall 'a. 'a -> 'a"
         "fun f x -> f x",                           ok "forall 'a 'b. ('a -> 'b) -> 'a -> 'b"
-        "inc true",                                 Wrong
+        "inc true",                                 wrong
         "let i = fun x -> x in i i",                ok "forall 'a. 'a -> 'a"
-        "fun i -> i i",                             Wrong // infinite type
-        "fun i -> (i 1, i true)",                   Wrong // polymorphic use of parameter
+        "fun i -> i i",                             wrong // infinite type
+        "fun i -> (i 1, i true)",                   wrong // polymorphic use of parameter
 //        "single id",                                ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
 //        "choose (fun x y -> x) (fun x y -> y)",     ok "forall 'a. 'a -> 'a -> 'a"
 //        "choose id",                                ok "forall ('a :> forall 'b. 'b -> 'b). 'a -> 'a"
       ]
     
-let all_tests =
-    List.concat [
-        HM.tests
-    ]
+    let all = List.concat [ HM ]
 
-let test_all () =
-    test all_tests
     
 let main () =
-    test_all ()
-    0
+    test Tests.all
+
 
 
 

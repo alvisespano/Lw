@@ -1,7 +1,7 @@
 ﻿(*
  * Lw
  * Typing/Defs.fs: type system definition
- * (C) 2000-2014 Alvise Spano' @ Universita' Ca' Foscari di Venezia
+ * (C) Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
  
 module Lw.Core.Typing.Defs
@@ -503,8 +503,9 @@ type [< NoComparison; NoEquality >] subst<'t> (env : Env.t<var, 't>) =
     member __.is_empty = env.is_empty
     member __.search = env.search
     member __.dom = env.dom
-    member __.restrict αs = new subst<'t> (env.filter (fun α _ -> Set.contains α αs))
-    member __.remove αs = new subst<'t> (Seq.fold (fun env α -> env.remove α) env αs)
+    member __.filter f = new subst<'t> (env.filter f)
+    member this.restrict αs = this.filter (fun α _ -> Set.contains α αs)
+    member this.remove αs = this.filter (fun α _ -> not <| Set.contains α αs)
     member __.map f = new subst<'t> (env.map f)
     member __.search_by f = env.search_by f
 
@@ -523,8 +524,6 @@ type [< NoComparison; NoEquality >] subst<'t> (env : Env.t<var, 't>) =
     //      s1 @@ s2    = [ (u, apply s1 t) | (u,t) <- s2 ] ++ s1
     // HACK: this does not restrict domain of appended substitution, thus the assert in method append might get triggered
     member θ1.compose apply_subst (θ2 : subst<'t>) = (θ2.map (fun _ -> apply_subst θ1)).append θ1 // (θ2.restrict (θ2.dom - θ1.dom))
-    // when θ1 and θ2 are swapped, the composition seems to make more sense, but it is undoubtly wrong according to every specification in literature and on the web.
-    // inference algorithm however seems to behave in the very same way
 
 type ksubst = subst<kind>
 type tsubst = subst<ty>

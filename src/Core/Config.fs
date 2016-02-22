@@ -1,7 +1,7 @@
 ﻿(*
  * Lw
  * Config.fs: static configuration
- * (C) 2000-2014 Alvise Spano' @ Universita' Ca' Foscari di Venezia
+ * (C) Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
  
 module Lw.Core.Config
@@ -12,18 +12,23 @@ open FSharp.Common.Prelude
 
 (* -- Compilation Switches --
  *
- * Activate them in the project panel as compilation symbols.
- * Mind that logger special methods such as .mgu and .resolve are independent from these.
+ * Can be activated in the project panel as compilation symbols.
  *
- * DEBUG_TYVAR_NAMES        // print var number and make it clear whether it is named or anonymous
- * DEBUG_HML                // turn on log for functions involved into HML type inference
+ * DEBUG_VAR_NAMES          // print var number and make it clear whether it is named or anonymous
+ * DEBUG_FRESH_VARS         // log when fresh vars are created
  * DEBUG_CONSTRAINTS
  * DEBUG_PERF
  * DEBUG_RESOLVE
+ * DEBUG_INFERENCE          // print debug information at the end of each rule while inferring types
  * DEBUG_BEFORE_INFERENCE   // print debug information for each expression also BEFORE typing (useful for comparing what happens at each inference step)
+ * DEBUG_HML                // turn on log for functions involved into HML type inference
+ * DEBUG_UNI                // turn on log in unification functions
+ * DEBUG_UNI_DEEP           // log even recursive calls of unification functions
  *
  * DISABLE_TYVAR_NORM       // turn off variable normalization
- * ENABLE_HML_FIXES         // enable little fixes done by me
+ * DISABLE_HML_FIXES        // disable little fixes done by me
+ * ENABLE_HML_OPTS          // introduce a number of (hopefully not bugged) optimizations for HML inference
+ * ENFORCE_NF_IN_UNI        // force types involved into unification to 
  *)
 
 module Typing =
@@ -105,7 +110,7 @@ module Printing =
     let wildcard_reserved_fmt : StringFormat<int -> string> = "_$%d"
     let tuple_index_label_fmt : StringFormat<int -> string> = "#%d"
     let already_existing_named_var_fmt : StringFormat<string -> int -> string> = "%s%d" // this is needed for disambiguating name for a named var that already existed and whose name conflicted with automatically-named vars
-    #if DEBUG_TYVAR_NAMES
+    #if DEBUG_VAR_NAMES
     let anonymous_var_fmt : StringFormat<string -> int -> string> = "%s$%d"
     let named_var_fmt : StringFormat<string -> int -> string> = "[%s]$%d"
     #endif
@@ -159,7 +164,7 @@ module Log =
     let verbose_pretty_location = false
     let not_implemented_color = ConsoleColor.DarkRed
     let uni_color = ConsoleColor.Blue
-    let test_color = ConsoleColor.Yellow
+    let test_color = ConsoleColor.Green
     let resolve_color = ConsoleColor.Magenta
     let error_color = cfg.fatal_error_color
 

@@ -66,7 +66,7 @@
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
-    <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT;UNIT_TEST</DefineConstants>
+    <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT;UNIT_TEST;DEBUG_PERF</DefineConstants>
     <WarningLevel>5</WarningLevel>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <DocumentationFile />
@@ -120,6 +120,7 @@
     <Compile Include="Args.fs" />
     <Compile Include="Eval.fs" />
     <Compile Include="Intrinsic.fs" />
+    <Compile Include="Interactive.fs" />
     <Compile Include="UnitTest.fs" />
     <Compile Include="Main.fs" />
     <None Include="test\misc.lw" />

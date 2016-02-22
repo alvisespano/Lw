@@ -1,4 +1,14 @@
-﻿20-21/2/2016:
+﻿22/2/2016:
+* REFACT: compilation symbols enabling debug in unification and inference have been polished
+* FIX: subsume fixed
+* NEW: lots of work and rework on UnitTest module
+* REFACT: cputime-based log extension methods moved to Main
+* REFACT: interactive console code is now in a separate Interactive module
+* NEW: new compilation switch for enforcing normal form in unification
+* REFACT: many minor refactors involving exception handling, log and stuff
+
+
+21/2/2016:
 * FIX: finally I found the reason why HML did not work! More tests must be done but it's likely the right direction: generalization (performed by calling split) did not take into account
        the free variables in Γ; now split call sites have been fixed
 * FIX: ty.search_var did not work and caused active pattern T_ForallsK and all other patterns relying on it to throw an unexpected exception. Now fixed

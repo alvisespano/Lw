@@ -1,7 +1,7 @@
 ﻿(*
  * Lw
  * Absyn.fs: Abstract Syntax
- * (C) 2000-2014 Alvise Spano' @ Universita' Ca' Foscari di Venezia
+ * (C) Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
  
 module Lw.Core.Absyn
@@ -172,14 +172,24 @@ module private var =
 
 type var with
     static member fresh =
-        let r = Va (fresh_int (), None)
-        L.hint Low "new fresh var: %O" r
-        r
+      #if DEBUG_TYVARS
+      let r =
+      #endif
+        Va (fresh_int (), None)
+      #if DEBUG_TYVARS
+      L.hint Low "new fresh var: %O" r
+      r
+      #endif
 
     static member fresh_named s =
-        let r = Va (fresh_int (), Some s)
-        L.hint Low "new fresh named var: %O" r
-        r
+      #if DEBUG_TYVARS
+      let r =
+      #endif
+        Va (fresh_int (), Some s)
+      #if DEBUG_TYVARS
+      L.hint Low "new fresh named var: %O" r
+      r
+      #endif
 
     member this.refresh =
         match this with
@@ -230,7 +240,7 @@ type var with
     member this.pretty_unnormalized = 
         match this with
         | Va (n, Some s) ->
-            #if DEBUG_TYVAR_NAMES
+            #if DEBUG_VAR_NAMES
             sprintf "%s_%d" s n
             #else
             s
@@ -238,7 +248,7 @@ type var with
 
         | Va (n, None) ->
             let s = var.letterize n
-            #if DEBUG_TYVAR_NAMES
+            #if DEBUG_VAR_NAMES
             sprintf "%s?%d" s n
             #else
             s
@@ -273,7 +283,7 @@ type var with
         name
 
     member this.pretty_with_quantification name =
-        #if DEBUG_TYVAR_NAMES
+        #if DEBUG_VAR_NAMES
         let fmt = 
             match this with
             | Va (_, Some _) -> Config.Printing.named_var_fmt

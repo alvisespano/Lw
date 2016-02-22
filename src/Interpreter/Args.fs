@@ -1,7 +1,7 @@
 ﻿(*
  * Lw
  * Args.fs: command line argument parsing
- * (C) 2000-2014 Alvise Spano' @ Universita' Ca' Foscari di Venezia
+ * (C) Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
  
 module Lw.Interpreter.Args

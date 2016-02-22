@@ -5,27 +5,20 @@
 
 namespace Test 
 
-let app f x = f x
-
 let id x = x
+
+let app f x = f x
 
 let i = app id id
 
 let x = app id 3
 
-
-(* funzionano!!!
-let const x y = x
-let app f x = f x
-*)
-
-(*
-let comb (id : forall 'a. 'a -> 'a) = id id
-
 let revapp x f = f x
+
+let comb (id : forall 'a. 'a -> 'a) = id id
 
 let poly (f : forall 'a. 'a -> 'a) = f 1, f true
 
 let a = poly id
-*)
+
 

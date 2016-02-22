@@ -1,7 +1,7 @@
 ﻿(*
  * Lw
  * Typing/Report.Error.fs: type error Report.Error.ng
- * (C) 2000-2014 Alvise Spano' @ Universita' Ca' Foscari di Venezia
+ * (C) Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
  
 module Lw.Core.Typing.Report

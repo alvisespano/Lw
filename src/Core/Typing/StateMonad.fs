@@ -208,7 +208,6 @@ type type_inference_builder (loc) =
     member M.Yield (ϕ : fxty) =
         M {
             let! ϕ' = M.updated ϕ
-//            L.debug High "[yield] %O ~> %O" ϕ ϕ'
             return ϕ'
         }
 
@@ -225,22 +224,26 @@ type type_inference_builder (loc) =
     member M.Yield ((Q : prefix, t : ty)) =
         M {
             let! t = M.updated t
+            #if DEBUG_HML
             let! θ = M.get_θ
             let! Γ = M.get_Γ
             let p set = sprintf "{ %s }" <| flatten_stringables ", " set
-//            L.debug High "[yield-Q] S.dom = %O\n          Q.dom = %O\n          fv_gamma = %O" (p θ.dom) (p Q.dom) (p <| fv_Γ Γ)
-//            let Q = prefix.B { for α, _ as i in Q do if not <| Set.contains α (fv_Γ Γ) then yield i }
-//            let Q1, Q = Q.split (fv_Γ Γ)
-            L.debug High "[yield-Q] S.dom = %O\n          Q.dom = %O\n          fv_gamma = %O\n          t.fv = %O" (p θ.dom) (p Q.dom) (p <| fv_Γ Γ) (p t.fv)
-
+            L.debug High "[yield-Q] S.dom = %O\n          Q.dom = %O\n          fv_gamma = %O\n          t = %O" (p θ.dom) (p Q.dom) (p <| fv_Γ Γ) t
             assert Q.dom.IsSubsetOf t.fv                    // generalizable vars must be present in t
             assert (Set.intersect Q.dom θ.dom).IsEmpty      // prefix and subst must involve different variables
             assert (Set.intersect Q.dom (fv_Γ Γ)).IsEmpty   // no variable free in Γ must be generalized
+            #endif
             return Fx_ForallsQ (Q, Fx_F_Ty t)
         }
 
     // banged versions
     member M.YieldFrom f = M { let! (r : fxty) = f in yield r }
+
+    member M.restrict_to_fv_in_Γ =
+        M {
+            let! Γ = M.get_Γ
+            do! M.lift_θ (fun θ -> let αs = fv_Γ Γ in { t = θ.t.restrict αs; k = θ.k.restrict αs })
+        }
 
     member M.fork_Γ f =
         M {

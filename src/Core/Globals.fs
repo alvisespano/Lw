@@ -1,7 +1,7 @@
 ﻿(*
  * Lw
  * Globals.fs: global stuff
- * (C) 2000-2014 Alvise Spano' @ Universita' Ca' Foscari di Venezia
+ * (C) Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
  
  
@@ -39,21 +39,6 @@ type logger () =
     member this.nerror n fmt =
         this.custom_error Config.Log.error_color (sprintf Config.Log.error_header_fmt n) fmt
 
-    member this.cputime name f x =
-        let r, span = cputime f x
-        #if DEBUG_PERF
-        this.perf Normal "[%s] CPU time = %s" name span.pretty
-        #endif
-        r
-
-    member this.best_cputime name1 name2 f1 f2 =
-        let r1, t1 = cputime f1 ()
-        let r2, t2 = cputime f2 ()
-        let name1, t1, r1, name2, t2, r2 = if t1 < t2 then name1, t1, r1, name2, t2, r2 else name2, t2, r2, name1, t1, r1
-        #if DEBUG_PERF
-        this.perf Normal "[%s] faster than [%s] by CPU time = %s" name1 name2 ((t2 - t1).pretty)
-        #endif
-        r1
 
 let L = new logger ()
 let null_L = new null_logger (Config.Log.cfg)

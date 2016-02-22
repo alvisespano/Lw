@@ -1,7 +1,7 @@
 ﻿(*
  * Lw
  * Typing/Meta.fs: kind inference, type evaluation etc.
- * (C) 2000-2014 Alvise Spano' @ Universita' Ca' Foscari di Venezia
+ * (C) Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
  
 module Lw.Core.Typing.Meta

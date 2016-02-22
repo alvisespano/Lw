@@ -13,7 +13,7 @@ open System.Runtime.InteropServices;
 [<assembly: AssemblyConfiguration("")>]
 [<assembly: AssemblyCompany("Universita' Ca' Foscari di Venezia")>]
 [<assembly: AssemblyProduct("Lw")>]
-[<assembly: AssemblyCopyright("© 2014-2015 Alvise Spano'")>]
+[<assembly: AssemblyCopyright("© 2014-2016 Alvise Spano'")>]
 [<assembly: AssemblyTrademark("")>]
 [<assembly: AssemblyCulture("")>]
  

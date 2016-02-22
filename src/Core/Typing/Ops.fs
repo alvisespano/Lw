@@ -1,7 +1,7 @@
 ﻿(*
  * Lw
  * Typing/Ops.fs: typing utilities
- * (C) 2000-2014 Alvise Spano' @ Universita' Ca' Foscari di Venezia
+ * (C) Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
  
 module Lw.Core.Typing.Ops
@@ -288,20 +288,12 @@ type fxty with
         let r =
             match this with
             | Fx_F_Ty t        -> Fx_F_Ty t.nf
-            | Fx_Bottom _ as ϕ -> ϕ
-
-            #if ENABLE_HML_FIXES
-            | Fx_Forall ((α, Fx_Bottom k), Fx_F_Ty (T_Var (β, _))) when α = β -> Fx_F_Ty (T_Bottom k)   // HACK: this special case has been added by me: nf(forall ('a :> _|_). 'a) = forall 'a. 'a; original HML spec would reduce to _|_ instead
-            #endif
- 
+            | Fx_Bottom _ as ϕ -> ϕ 
             | Fx_Forall ((α, ϕ1), ϕ2) ->
                 if not <| Set.contains α ϕ2.fv then ϕ2.nf
                 else
                     match ϕ2.nf with
-                    | Fx_F_Ty (T_Var (β, _) as t) when α = β ->
-                        match ϕ1.nf with                        
-                        | ϕ           -> ϕ
-
+                    | Fx_F_Ty (T_Var (β, _)) when α = β -> ϕ1.nf
                     | _ -> 
                         match ϕ1.nf with
                         | FxU_Unquantified t -> (subst_fxty (!> (new tsubst (α, t))) ϕ2).nf                        

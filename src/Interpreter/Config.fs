@@ -1,7 +1,7 @@
 ﻿(*
  * Lw
  * Config.fs: static configuration
- * (C) 2000-2014 Alvise Spano' @ Universita' Ca' Foscari di Venezia
+ * (C) Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
  
 module Lw.Interpreter.Config
@@ -34,9 +34,17 @@ module Exit =
 module Log =
     open FSharp.Common.Log
 
-    let set_thresholds_for_interactive () =
-        let l = Lw.Core.Config.Log.cfg
-        l.debug_threshold <- Normal
-        l.msg_threshold <- Low
-        l.warn_threshold <- Min
-        l.hint_threshold <- Min
+    module Presets =
+        let set_thresholds_for_interactive () =
+            let l = Lw.Core.Config.Log.cfg
+            l.debug_threshold <- Normal
+            l.msg_threshold <- Low
+            l.warn_threshold <- Min
+            l.hint_threshold <- Min
+
+        let set_thresholds_for_unit_test () =
+            let l = Lw.Core.Config.Log.cfg
+            l.debug_threshold <- Unmaskerable
+            l.msg_threshold <- Low
+            l.warn_threshold <- Min
+            l.hint_threshold <- Min

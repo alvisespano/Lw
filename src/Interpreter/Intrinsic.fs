@@ -1,7 +1,7 @@
 ﻿(*
  * Lw
  * Intrinsic.fs: intrinsic stuff
- * (C) 2000-2014 Alvise Spano' @ Universita' Ca' Foscari di Venezia
+ * (C) Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
  
 module Lw.Interpreter.Intrinsic

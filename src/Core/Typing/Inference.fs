@@ -55,103 +55,39 @@ let W_lit = function
     | Unit        -> T_Unit
 
 
-// pure implementation of HML - basic rules only
-
-// TODO: remove this when it's safe to
-#if PURE_HML
-module private Pure =
-    let S = subst_ty
-
-    let ( ** ) = compose_tksubst
-
-//    let ret (Q, t : ty) = FxU_ForallsQ (Q, t)
-    let ret (Q, t : ty) = Fx_ForallsQ (Q, Fx_F_Ty t)
-
-    type gamma = Env.t<id, fxty>
-
-    let fv_Γ (Γ : gamma) = Γ.fold (fun r _ ϕ -> r + ϕ.fv) Set.empty
-
-    let subst_Γ θ (Γ : gamma) = Γ.map (fun _ -> subst_fxty θ)
-
-    let rec private infer (Q : prefix) (Γ : gamma) (e0 : expr) =
-        match e0.value with
-        | Var x -> Q, tksubst.empty, Γ.lookup x
-
-        | Lambda ((x, None), e) ->
-            let α, tα = ty.fresh_star_var_and_ty
-            let Q1, θ1, ϕ1 = infer (Q + (α, Fx_Bottom K_Star)) (Γ.bind x (Fx_F_Ty tα)) e
-            let tx = S θ1 tα
-            if not tx.is_monomorphic then Report.Error.inferred_lambda_parameter_is_not_monomorphic e0.loc x tx
-            let Q2, Q3 = Q1.split (Q.dom + fv_Γ (subst_Γ θ1 Γ))
-            let β, tβ = ty.fresh_star_var_and_ty
-            let Q3', θ3' = Q3.extend (β, ϕ1)
-            in
-                Q2, θ1, ret (Q3', T_Arrow (S θ1 tα, S θ3' tβ))
-
-        | App (e1, e2) ->
-            let Q1, θ1, ϕ1 = infer Q Γ e1
-            let Q2, θ2, ϕ2 = infer Q1 Γ e2
-            let α1, tα1 = ty.fresh_star_var_and_ty
-            let α2, tα2 = ty.fresh_star_var_and_ty
-            let β, tβ = ty.fresh_star_var_and_ty
-            let Q2', θ2' = List.fold (fun (Q : prefix, θ) (α, ϕ) -> let Q', θ' = Q.extend (α, ϕ) in Q', θ' ** θ) (Q2, θ2) [α1, subst_fxty θ2 ϕ1; α2, ϕ2; β, Fx_Bottom K_Star]
-            let Q3, θ3 = mgu { uni_context.γ = Env.empty; loc = e1.loc } Q2' (S θ2' tα1) (T_Arrow (S θ2' tα2, tβ))
-            let Q4, Q5 = Q3.split (Q.dom + fv_Γ (subst_Γ θ3 Γ))
-            in
-                Q4, θ3 ** θ2 ** θ1, ret (Q5, S θ3 tβ)
-
-        | e -> not_implemented "infer: %O" __SOURCE_FILE__ __LINE__ e
-
-    let W_expr Q jenv e =
-        let Γ = Env.t.B {
-                for k, v in jenv do
-                    match k with
-                    | Jk_Var x -> yield x, v.scheme.fxty
-                    | _ -> ()
-            }
-        in
-            infer Q gamma.empty e
-#endif
-
-
 // some wrappers
 
 let rec W_expr (ctx : context) (e0 : expr) =
     let M = new translatable_type_inference_builder<_> (e0)
     M {
         let e = e0.value // uexpr must be bound before translation, or printing will not work
-        #if DEBUG_BEFORE_INFERENCE
-        let! Q = M.get_Q
-        let! θ = M.get_θ
-        let! cs = M.get_constraints
-        let rule =
-            match e with
-            | Var _     -> "VAR"
-            | Lambda _  -> "ABS"
-            | App _     -> "APP"
-            | Let _     -> "LET"
-            | _         -> "e"
         L.tabulate 2
-        L.debug Min "(%-3s) %O\n[C]   %O\n[Q]   %O" rule e cs Q
-        #endif
-        #if PURE_HML
-        let! Γ = M.get_Γ
-        let Q', θ', ϕ = Pure.W_expr Q Γ e0
-        do! M.set_Q Q'
-        do! M.set_θ θ'
-        #else
-        let! (ϕ : fxty) = W_expr' ctx e0
-        let! Q' = M.get_Q
-        let! θ' = M.get_θ
-        #endif
-        do! resolve_constraints ctx e0
-        let! cs' = M.get_constraints
-        // TODOL: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)
-        L.debug Low "(%-3s) %O\n[:T]  %O\n[nf]  %O\n[F-t] %O\n[e*]  %O\n[C]   %O\n[Q]   %O\n[S]   %O\n[C']  %O\n[Q']  %O\n[S']  %O" rule e ϕ ϕ.nf ϕ.ftype e0 cs Q θ cs' Q' θ'
-        #if DEBUG_BEFORE_INFERENCE
-        L.undo_tabulate
-        #endif
-        return ϕ
+        try
+            let rule =
+                match e with
+                | Var _     -> "VAR"
+                | Lambda _  -> "ABS"
+                | App _     -> "APP"
+                | Let _     -> "LET"
+                | _         -> "e"
+            let! Q = M.get_Q
+            let! θ = M.get_θ
+            let! cs = M.get_constraints
+            #if DEBUG_BEFORE_INFERENCE
+            L.debug Min "(%-3s) %O\n[C]   %O\n[Q]   %O" rule e cs Q
+            #endif
+            let! (ϕ : fxty) = W_expr' ctx e0
+            do! resolve_constraints ctx e0
+            #if DEBUG_INFERENCE
+            let! Q' = M.get_Q
+            let! θ' = M.get_θ
+            let! cs' = M.get_constraints
+            // TODOL: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)
+            L.debug Low "(%-3s) %O\n[:T]  %O\n[nf]  %O\n[F-t] %O\n[e*]  %O\n[C]   %O\n[Q]   %O\n[S]   %O\n[C']  %O\n[Q']  %O\n[S']  %O" rule e ϕ ϕ.nf ϕ.ftype e0 cs Q θ cs' Q' θ'
+            #endif
+            return ϕ
+        finally
+            L.undo_tabulate
     } 
 
 and W_decl ctx d =
@@ -166,6 +102,7 @@ and W_decl ctx d =
             do! M.fork_scoped_vars <| M {
                 do! W_decl' ctx d   
             }
+            do! M.restrict_to_fv_in_Γ
         else
             // when it's an inner binding
             do! W_decl' ctx d
@@ -279,10 +216,15 @@ and W_expr' ctx (e0 : expr) =
             // check that the inferred type of parameter is a monotype when no annotation was provided
             if τo.IsNone && not tx.is_monomorphic then Report.Error.inferred_lambda_parameter_is_not_monomorphic e0.loc x tx
             let! Γ = M.get_Γ
-            let! Q3 = M.split_prefix (Q0.dom + fv_Γ Γ)
             let β, tβ = ty.fresh_star_var_and_ty
+            #if ENABLE_HML_OPTS
+            do! M.extend (β, ϕ1)
+            let! Q3' = M.split_prefix (Q0.dom + fv_Γ Γ)      // HACK: this code should have the same behaviour as the original shown in HML paper
+            #else
+            let! Q3 = M.split_prefix (Q0.dom + fv_Γ Γ)
             let Q3', θ3' = Q3.extend (β, ϕ1)
             do! M.update_θ θ3'
+            #endif
             yield Q3', T_Arrow (tx, tβ)
 
         | App (e1, e2) -> 
@@ -455,22 +397,18 @@ and W_expr' ctx (e0 : expr) =
 
 and W_decl' (ctx : context) (d0 : decl) =
     let M = new translatable_type_inference_builder<_> (d0)
-
-    let desugar = desugar M (W_decl ctx) d0
-    
+    let desugar = desugar M (W_decl ctx) d0    
     let unify_and_resolve (ctx : context) (e : node<_, _>) t1 t2 =
         M {
             do! M.unify e.loc t1 t2
             do! resolve_constraints ctx e
         }
     let jk decl_qual x t = if decl_qual.over then Jk_Inst (x, t.GetHashCode ()) else Jk_Var x
-
     let gen_bind prefixes ({ id = x; qual = dq; expr = e0; to_bind = ϕ } as gb) =
         let loc = e0.loc
         let Lo x = Lo loc x
         M {
             // check shadowing and interaction with previous bindings
-            let! γ = M.get_γ
             let! jb = M.search_binding_by_name_Γ x
             if dq.over then
                 match jb with                
@@ -508,6 +446,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                 let jm = if dq.over then Jm_Overloadable else Jm_Normal
                 in
                     M.bind_generalized_Γ jk jm gb.to_bind
+            let! Γ = M.get_Γ in assert gb.to_bind.fv.IsSubsetOf (fv_Γ Γ)    // all unquantified vars must be free in Γ
             Report.prompt ctx (prefixes @ dq.as_tokens) x gb.to_bind (Some (Config.Printing.ftype_instance_of_fxty_sep, gb.inferred))
 
             // translation
