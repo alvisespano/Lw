@@ -16,15 +16,11 @@ open Lw.Core.Globals
 open Printf
 open System
 
-type numeric_error (header, msg, n : int, loc) =
-    inherit located_error (header, msg, loc)
-    member val code = n
-
 type type_error (msg, n, loc) =
-    inherit numeric_error ("type error", msg, n, loc)
+    inherit static_numeric_error ("type error", msg, n, loc)
 
 type kind_error (msg, n, loc) =
-    inherit numeric_error ("kind error", msg, n, loc)
+    inherit static_numeric_error ("kind error", msg, n, loc)
 
 let flatten_and_trim_strings sep ss = flatten_strings sep (seq { for s : string in ss do let s = s.Trim () in if not <| String.IsNullOrWhiteSpace s then yield s })
 
@@ -32,7 +28,7 @@ let inline prompt ctx prefixes x (σ : ^s) o =
     let top_level = (^a : (member top_level_decl : bool) ctx)
     let log = if top_level then L.msg High else L.msg Normal
     let prefixes = List.distinct <| if top_level then prefixes else Config.Printing.Prompt.nested_decl_prefix :: prefixes
-    let header = sprintf "%s %s" (flatten_and_trim_strings Config.Printing.Prompt.prefix_sep (prefixes @ [x])) (^s : (static member binding_separator : string) ())
+    let header = sprintf "%s %s" (flatten_and_trim_strings Config.Printing.Prompt.header_sep (prefixes @ [x])) (^s : (static member binding_separator : string) ())
     use N = var.reset_normalization
     let σ = (^s : (member pretty : string) σ)
     let reduction = 
@@ -198,15 +194,17 @@ module Hint =
         else L.nhint n pri ("%O: " %+%% fmt) loc
 
     let unsolvable_constraint loc x t cx ct αs = 
-        H 1 loc Min "constraint `%s : %O` is unsolvable because type variables %s do not appear in %O : %O. This prevents automatic resolution to determine instances, therefore \
+        H 1 loc High "constraint `%s : %O` is unsolvable because type variables %s do not appear in %O : %O. This prevents automatic resolution to determine instances, therefore \
         manual resolution will be needed for evaluating a ground value"
             cx ct (flatten_stringables ", " αs) x t
 
     // TODO: is this hint message really not necessary anymore?
     let manually_resolved_symbol_refers_to_mupliple_constraints loc x t cs =
-        H 2 loc Normal "symbol `%O : %O` specified in manual resolution refers to multiple constraints sharing the same name. \
+        H 2 loc Low "symbol `%O : %O` specified in manual resolution refers to multiple constraints sharing the same name. \
         Unification with user-specified type %O will apply in unpredicible order, possibly preventing the desired resolution to take place. \
         In case of undesired results, consider reordering manually resolved symbols or redesigning code in such a way that multiple occurrences are no more an issue.\n\
         Current constraints are:\n%O"
             x t t (mappen_strings (fun (x, t) -> sprintf "   %O : %O" x t) "\n" cs)
 
+    let datacons_contains_env_fv loc c x tx =
+        H 3 loc Normal "datatype %s defines a data constructor %s whose type %O has type variables that cannot be generalized" c x tx

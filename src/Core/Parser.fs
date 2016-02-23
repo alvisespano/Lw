@@ -2564,7 +2564,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 369 "Parser.fsy"
-                                                                           Te_PolyVar (wildcard_reserved_id ()) 
+                                                                           Te_PolyVar (fresh_reserved_id ()) 
                    )
 # 369 "Parser.fsy"
                  : 'ty_expr_app_atom_));
@@ -3439,7 +3439,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 521 "Parser.fsy"
-                                                                         UnApp (Config.Typing.negate_symbol, _2) 
+                                                                         UnApp (Config.Typing.Names.int_negate, _2) 
                    )
 # 521 "Parser.fsy"
                  : 'expr_tuple_atom_));

@@ -141,3 +141,10 @@ LONG-TERM
 
 
 
+WEIRD & FUTURE IDEAS
+--------------------
+
+(---)   [Regular expressions on identifiers for a new form of polymorphism] This is a weird idea, but might be revolutionary: try to design a form of polymorphism over identifier names,
+            like for example "*_of_int" stands for all the functions matching this id-pattern; in order to restrict the set of functions, the user might help with
+            the 'like' keyword, e.g.: "*_error like type_error" meaning that only functions named "*_error" having the same or a compatible type with "type_error" must be taken.
+

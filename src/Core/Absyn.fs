@@ -21,8 +21,7 @@ open Lw.Core.Globals
 //
 
 let parse_float s = Double.Parse (s, Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture)
-let fresh_reserved_id () = sprintf Config.Printing.fresh_reserved_id_fmt (fresh_int ())
-let wildcard_reserved_id () = sprintf Config.Printing.wildcard_reserved_fmt (fresh_int ())
+let fresh_reserved_id () = Config.reserved_id <| sprintf Config.Printing.fresh_reserved_id (fresh_int ())
 let tuple_index_label = sprintf Config.Printing.tuple_index_label_fmt
 
 type id = string
@@ -36,16 +35,6 @@ let (|SymString|_|) =
 let (|Sym|_|) (|Id|_|) = function
     | Id (SymString _, r) -> Some r
     | _ -> None
-
-type location =
-    inherit Parsing.location
-    new (filename : string, line : int, col : int, ?end_line : int, ?end_col : int, ?line_bias : int, ?col_bias : int) =
-        { inherit Parsing.location (filename, line, col, ?end_line = end_line, ?end_col = end_col, ?line_bias = line_bias, ?col_bias = col_bias) }
-
-    new (p1, ?p2, ?line_bias, ?col_bias) =
-        { inherit Parsing.location (p1, ?p2 = p2, ?line_bias = line_bias, ?col_bias = col_bias) }
-
-    new () = { inherit Parsing.location () }
 
 type [< NoEquality; NoComparison >] node<'a, 't> (value : 'a, ?loc : location) =
     let mutable _typed : 't option = None
@@ -108,15 +97,6 @@ let Foralls forall = function
     | [], t -> t
     | αs, t -> List.foldBack (fun α t -> forall (α, t)) αs t
 
-//let rec (|Foralls0|) (|Forall|_|) = function
-//    | Forall (α, Foralls0 (|Forall|_|) (αs, t)) -> α :: αs, t
-//    | Forall (α, t)                             -> [α], t
-//    | t                                         -> [], t
-//
-//let (|Foralls|_|) (|Foralls0|) = function
-//    | Foralls0 (αs, _) when Seq.isEmpty αs -> None
-//    | Foralls0 (αs, t) -> Some (αs, t)
-
 let rec (|Foralls|_|) (|Forall|_|) = function
     | Forall (α, Foralls (|Forall|_|) (αs, t)) -> Some (α :: αs, t)
     | Forall (α, t)                            -> Some ([α], t)
@@ -126,7 +106,7 @@ let (|Foralls0|) (|Foralls|_|) = function
     | Foralls (αs, t) -> αs, t
     | t               -> [], t
 
-let make_foralls (forall : ('a * 'b) -> _) ((|Forall|_|) : _ -> ('a * 'b) option) =
+let make_foralls (forall : ('a * 'b) -> _) ((|Forall|_|) : _ -> ('a * 'b) option) =     // type annotations introduce useful constraints between the first and the second arguments
     let (|Foralls|_|) = (|Foralls|_|) (|Forall|_|)
     in
         Foralls forall, (|Foralls0|) (|Foralls|_|), (|Foralls|_|)
@@ -307,9 +287,9 @@ with
     interface annotable with
         member __.annot_sep = Config.Printing.kind_annotation_sep
 
-let K_Arrow (k1, k2) = K_Cons ("->", [k1; k2])
+let K_Arrow (k1, k2) = K_Cons (Config.Typing.Names.Kind.arrow, [k1; k2])
 let (|K_Arrow|_|) = function
-    | K_Cons ("->", [k1; k2]) -> Some (k1, k2)
+    | K_Cons (s, [k1; k2]) when s = Config.Typing.Names.Kind.arrow -> Some (k1, k2)
     | _ -> None
 
 let K_Arrows = Arrows K_Arrow
@@ -320,19 +300,19 @@ let (|K_Id|_|) = function
     | K_Cons (x, []) -> Some x
     | _ -> None
 
-let K_Star = K_Id "*"
+let K_Star = K_Id Config.Typing.Names.Kind.star
 let (|K_Star|_|) = function
-    | K_Id "*" -> Some ()
+    | K_Id s when s = Config.Typing.Names.Kind.star -> Some ()
     | _ -> None
 
-let K_Row = K_Cons (Config.Typing.KindCons.row, [])
+let K_Row = K_Cons (Config.Typing.Names.Kind.row, [])
 let (|K_Row|_|) = function
-    | K_Cons (name, []) when name = Config.Typing.KindCons.row -> Some ()
+    | K_Cons (name, []) when name = Config.Typing.Names.Kind.row -> Some ()
     | _ -> None
 
-let K_HTuple ks = K_Cons (Config.Typing.KindCons.htuple, ks)
+let K_HTuple ks = K_Cons (Config.Typing.Names.Kind.htuple, ks)
 let (|K_HTuple|_|) = function
-    | K_Cons (name, ks) when name = Config.Typing.KindCons.htuple -> Some ks
+    | K_Cons (name, ks) when name = Config.Typing.Names.Kind.htuple -> Some ks
     | _ -> None
 
 type kind with
@@ -399,10 +379,10 @@ let pretty_cases cases = mappen_strings pretty_case "\n  | " cases
 //
 
 let internal make_rows rowed ((|Rowed|_|) : id -> _ -> _) =
-    let Record = rowed Config.Typing.TyCons.Rows.record
-    let (|Record|_|) = (|Rowed|_|) Config.Typing.TyCons.Rows.record
-    let Variant = rowed Config.Typing.TyCons.Rows.variant
-    let (|Variant|_|) = (|Rowed|_|) Config.Typing.TyCons.Rows.variant
+    let Record = rowed Config.Typing.Names.Type.Row.record
+    let (|Record|_|) = (|Rowed|_|) Config.Typing.Names.Type.Row.record
+    let Variant = rowed Config.Typing.Names.Type.Row.variant
+    let (|Variant|_|) = (|Rowed|_|) Config.Typing.Names.Type.Row.variant
     let Tuple = Row_Tuple Record
     let (|Tuple|_|) = (|Row_Tuple|_|) (|Record|_|)
     in
@@ -477,21 +457,18 @@ and ty_case = case<ty_upatt, ty_uexpr, kind>
 and typed_param = ty_expr id_param
 
 let private Te_Primitive name = Te_Id name
-let Te_Unit = Te_Primitive "unit"
+let Te_Unit = Te_Primitive Config.Typing.Names.Type.unit
 
 // special patterns for type expressions
 
 let Te_Apps τs = (Apps (fun (τ1, τ2) -> Lo τ1.loc <| Te_App (τ1, τ2)) τs).value
 let (|Te_Apps|_|) = (|Apps|_|) (function Te_App (ULo τ1, ULo τ2) -> Some (τ1, τ2) | _ -> None)
 
-//let Te_Foralls (αs, τ) = (Foralls (fun (α, τ) -> Lo τ.loc <| Te_Forall (α, τ)) (αs, τ)).value
-//let (|Te_Foralls|_|) = (|Foralls|_|) (function Te_Forall (α, ULo τ) -> Some (α, τ) | _ -> None)
-
 let Te_Foralls, (|Te_Foralls0|), (|Te_Foralls|_|) = make_foralls (fun (α, τ) -> Lo τ.loc <| Te_Forall (α, τ)) (function ULo (Te_Forall (α, (ULo _ as τ))) -> Some (α, τ) | _ -> None)
 
-let Te_Arrow_Cons = Te_Id "->"
+let Te_Arrow_Cons = Te_Id Config.Typing.Names.Type.arrow
 let (|Te_Arrow_Cons|_|) = function
-    | Te_Id "->" -> Some ()
+    | Te_Id s when s = Config.Typing.Names.Type.arrow -> Some ()
     | _ -> None
 
 let Te_Arrow (t1 : ty_expr, t2 : ty_expr) = Te_Apps [Lo t1.loc Te_Arrow_Cons; t1; t2]
@@ -510,9 +487,9 @@ let Te_Record, Te_Variant, Te_Tuple, (|Te_Record|_|), (|Te_Variant|_|), (|Te_Tup
 
 // special patterns for type patterns
 
-let Tp_Arrow_Cons = Tp_Cons "->"
+let Tp_Arrow_Cons = Tp_Cons Config.Typing.Names.Type.arrow
 let (|Tp_Arrow_Cons|_|) = function
-    | Tp_Cons "->" -> Some ()
+    | Tp_Cons s when s = Config.Typing.Names.Type.arrow -> Some ()
     | _ -> None
 
 let Tp_Apps ps = (Apps (fun (τ1, τ2) -> Lo τ1.loc <| Tp_App (τ1, τ2)) ps).value
@@ -878,7 +855,7 @@ let lambda_fun (|P_Annot|_|) (|P_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Cust
                     | P_Annot (ULo (P_Var x), t) -> Lo loc <| lambda ((x, Some t), e)
                     | P_Tuple ([_] | [])         -> unexpected "empty or unary tuple pattern" __SOURCE_FILE__ __LINE__
                     | P_Var x                    -> Lo loc <| lambda ((x, None), e)
-                    | P_Wildcard                 -> Lo loc <| lambda ((wildcard_reserved_id (), None), e)
+                    | P_Wildcard                 -> Lo loc <| lambda ((fresh_reserved_id (), None), e)
                     | P_Custom p e e'            -> Lo loc e'
                     | _                          -> lambda_function [p, None, e]
                 in
@@ -896,7 +873,7 @@ let LambdaFun =
         | P_Wildcard -> Some ()
         | _ -> None
     let (|P_Custom|_|) (p : node<_, _>) (e : node<_, _>) = function
-        | P_Lit Unit -> Some (Lambda ((wildcard_reserved_id (), Some (Lo p.loc Te_Unit)), e))
+        | P_Lit Unit -> Some (Lambda ((fresh_reserved_id (), Some (Lo p.loc Te_Unit)), e))
         | _ -> None
     in
         lambda_fun (|P_Annot|_|) (|P_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) Lambda LambdaFunction
@@ -929,7 +906,7 @@ let lambda_cases lambdafun p_var var matchh tuple p_tuple =
         let L0 x = Lo p0.loc x
         for ps, _, _ in cases' do
             if List.length ps <> len0 then
-                raise (Parsing.syntax_error (sprintf "number of function parameters expected to be %d across all cases" len0, p0.loc))
+                raise (syntax_error (sprintf "number of function parameters expected to be %d across all cases" len0, p0.loc))
         let ids = List.init len0 (fun _ -> fresh_reserved_id ())
         let pars f = List.mapi (fun i (p : node<_, _>) -> Lo p.loc <| f ids.[i]) ps0
         let cases = List.map (fun (ps, weo, e) -> L0 <| p_tuple ps, weo, e) cases
@@ -956,12 +933,15 @@ let UnApp (op, e : expr) = App (Lo e.loc <| Id op, e)
 let BinApp (e1 : expr, op, e2 : expr) = App (Lo e1.loc <| App (Lo e2.loc <| Id op, e1), e2)
 
 let EApps es = (Apps (fun (e1, e2) -> Lo e1.loc <| App (e1, e2)) es).value
-let List_Nil = Var Config.Typing.list_nil
-let List_Cons (e1, e2) = EApps [ULo (Var Config.Typing.list_cons); e1; e2]
+
+module N = Config.Typing.Names
+
+let List_Nil = Var N.Data.list_nil
+let List_Cons (e1, e2) = EApps [ULo (Var N.Data.list_cons); e1; e2]
 let List_Seq (es : expr list) = List.foldBack (fun e z -> List_Cons (e, Lo e.loc z)) es List_Nil
 
-let P_List_Nil = P_Cons Config.Typing.list_nil
-let P_List_Cons (p1, p2) = P_Apps [ULo (P_Cons Config.Typing.list_cons); p1; p2]
+let P_List_Nil = P_Cons N.Data.list_nil
+let P_List_Cons (p1, p2) = P_Apps [ULo (P_Cons N.Data.list_cons); p1; p2]
 let P_List_Seq (ps : patt list) = List.foldBack (fun p z -> P_List_Cons (p, Lo p.loc z)) ps P_List_Nil
 
 

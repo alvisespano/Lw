@@ -428,7 +428,7 @@ type prefix with
     member this.lookup α =
         match this.search α with
         | Some x -> x
-        | None   -> unexpected "type variable %O does not occur in prefix %O" __SOURCE_FILE__ __LINE__ α this
+        | None   -> unexpected "type variable %O does not occur in prefix: %O" __SOURCE_FILE__ __LINE__ α this
 
     member this.search α = Seq.tryFind (fst >> (=) α) this |> Option.map snd
 

@@ -10,36 +10,40 @@ open System
 open System.Text.RegularExpressions
 open FSharp.Common.Prelude
 open FSharp.Common.Log
-open FSharp.Common.Parsing.LexYacc
 open FSharp.Common
 open Lw.Core.Absyn
 open Lw.Core.Globals
 open Lw.Core.Typing
 open Lw.Core.Typing.Defs
 open Lw.Core.Typing.Ops
+open Lw.Core.Typing.StateMonad
+open Lw.Core
 
-module C = Lw.Core.Config
+module A = Lw.Core.Absyn
+module N = Lw.Core.Config.Typing.Names
+module T = N.Type
+module K = N.Kind
+module D = N.Data
 
 module Builtin =
     
     module Types =
 
-        let private Arity arrow atom n s = s, Arrows arrow (List.init (n + 1) (fun _ -> atom))
-        let private Stars = Arity K_Arrow K_Star
-        let private Arrows ts s = s, K_Arrows ts
+        let Arity arrow atom n s = s, Arrows arrow (List.init (n + 1) (fun _ -> atom))
+        let Stars = Arity K_Arrow K_Star
+        let Arrows ts s = s, K_Arrows ts
 
         let γ0 = 
             [
-                Stars 0 "int"
-                Stars 0 "float"
-                Stars 0 "char"
-                Stars 0 "unit"
-                Stars 0 "bool"
-                Stars 0 "string"
-
-                Stars 2 "->"
-                Arrows [K_Row; K_Star] C.Typing.TyCons.Rows.record
-                Arrows [K_Row; K_Star] C.Typing.TyCons.Rows.variant
+                Stars 0 T.unit
+                Stars 0 T.int
+                Stars 0 T.bool
+                Stars 0 T.float
+                Stars 0 T.char
+                Stars 0 T.string
+                Stars 2 T.arrow
+                Arrows [K_Row; K_Star] T.Row.record
+                Arrows [K_Row; K_Star] T.Row.variant
             ]
 
     module Values =
@@ -57,7 +61,7 @@ module Builtin =
         let private un1 a = un2 a a
 
         let private bin3 (t1, _, (|P1|_|)) (t2, _, (|P2|_|)) (t3, C3, _) f name =
-            Arrows T_Arrow [t1; t2; t3],
+            T_Arrows [t1; t2; t3],
             redux ((Id name).pretty, (fun v1 ->
                 redux (sprintf "%O %O" (Id name) v1, (fun v2 ->
                     match v1, v2 with
@@ -83,12 +87,14 @@ module Builtin =
 
         let private bin_ααb f name =
             let α = ty.fresh_star_var
-            Arrows T_Arrow [α; α; T_Bool],
+            T_Arrows [α; α; T_Bool],
             redux (name, (fun v1 -> redux (sprintf "%O %O" (Id name) v1, (fun v2 -> V_Const (Bool (f v1 v2))))))
 
         let ΓΔ0 =
             [
-                "+",    bin_iii (+)
+                // TODOL: many of these operators will have to become overloaded one day
+                // arithmetic
+                "+",    bin_iii (+)     
                 "+.",   bin_fff (+)
                 "-",    bin_iii (-)
                 "-.",   bin_fff (-)
@@ -97,7 +103,10 @@ module Builtin =
                 "/",    bin_iii (/)
                 "/.",   bin_fff (/)
                 "%",    bin_iii (%)
+                N.int_negate,   un_ii (~-)
+                N.float_negate, un_ff (~-)  // TODOL: this and other float operators are never used because the parser only supports integer versions at the moment
 
+                // logic
                 "<",    bin_iib (<)
                 "<.",   bin_ffb (<)
                 ">",    bin_iib (>)
@@ -107,31 +116,77 @@ module Builtin =
                 ">=",   bin_iib (>=)
                 ">=.",  bin_ffb (>=)
                 "=",    bin_ααb (=)
-
-                "^",    bin_sss (+)
                 "not",  un_bb (not)
-                "%",    bin_iii (%)
                 "&&",   bin_bbb (&&)
                 "||",   bin_bbb (||)
 
-                C.Typing.negate_symbol,   un_ii (~-)
+                // strings
+                "^",    bin_sss (+)
             ]
 
-let private Γ0, Δ0 =
-    List.fold (fun (Γ : jenv, Δ : Eval.env) (x, f) ->
-                    let (t : ty), v = f x
-                    in
-                        Γ.bind (Jk_Var x) { mode = Jm_Normal; scheme = { constraints = constraints.empty
-                                                                         fxty        = Fx_F_Ty (T_Foralls (List.ofSeq t.fv, t))} },
-                        Δ.bind x v)
-        (Env.empty, Env.empty) Builtin.Values.ΓΔ0
+    module Decls =
 
-let private γ0, δ0 =
-    List.fold (fun (γ : kjenv, δ : tenv) (x, k) ->
+//        let d s =
+//            match (Parsing.parse_decl s).value with
+//            | D_Datatype dbs -> dbs
+//            | _              -> unexpected "declaration is expected to be a datatype" __SOURCE_FILE__ __LINE__
+
+        let t = Parsing.parse_ty_expr
+
+        let datatypes =
+           List.map (fun x -> ULo (D_Datatype x))
+             [
+                // native datatypes here
+                { id = T.list; kind = K_Arrows [K_Star; K_Star] // list datatype cannot be parsed and must be defined as a data structure, because constructor names are reserved ids which cannot be lexed
+                  datacons =
+                    [
+                        { id = D.list_nil; signature = t "list 'a"  }
+                        { id = D.list_cons; signature = t "'a -> list 'a -> list 'a"  }
+                    ]
+                }
+            ]
+          @ List.map Parsing.parse_decl [
+                // parsable datatypes here
+                sprintf "datatype %s :: * -> * = %s : option 'a | %s : 'a -> option 'a" T.option D.option_none D.option_some
+            ]
+
+        let all = datatypes
+
+
+// make up environments
+//
+
+// pupulate Γ and Δ with types and values of builtin functions
+let private Γ01, Δ01 =
+    Builtin.Values.ΓΔ0
+        |> List.fold (fun (Γ : jenv, Δ : Eval.env) (x, f) ->
+                        let (t : ty), v = f x
+                        in
+                            Γ.bind (Jk_Var x) { mode = Jm_Normal; scheme = { constraints = constraints.empty
+                                                                             fxty        = Fx_F_Ty (T_Foralls (List.ofSeq t.fv, t))} },
+                            Δ.bind x v)
+            (Env.empty, Env.empty) 
+
+// populate γ and δ with kinds and type constructors of builtin types
+let private γ01, δ01 =
+    Builtin.Types.γ0
+        |> List.fold (fun (γ : kjenv, δ : tenv) (x, k) ->
                     let t = T_Cons (x, k)
                     in
                         γ.bind x (k.generalize γ Set.empty),
-                        δ.bind x t) (Env.empty, Env.empty) Builtin.Types.γ0
+                        δ.bind x t)
+            (Env.empty, Env.empty)
+
+// add declarations
+let private Γ0, γ0, δ0 =
+    Builtin.Decls.all
+        |> List.fold (fun (Γ : jenv, γ : kjenv, δ) d ->
+                let (), st = Inference.W_decl context.top_level d { state.empty with Γ = Γ; γ = γ; δ = δ }
+                in
+                    st.Γ, st.γ, st.δ)
+            (Γ01, γ01, δ01)
+
+let private Δ0 = Δ01    // no more values to add to value environment
 
 type [< NoEquality; NoComparison >] envs = {
     Γ : jenv

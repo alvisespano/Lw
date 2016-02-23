@@ -366,7 +366,7 @@ ty_expr_tuple_atom_:
 ty_expr_app_atom_:
   | id                                              { Te_Id $1 }
   | TICK_ID                                         { Te_PolyVar $1 }
-  | UNDERSCORE                                      { Te_PolyVar (wildcard_reserved_id ()) }
+  | UNDERSCORE                                      { Te_PolyVar (fresh_reserved_id ()) }
   | BOTTOM                                          { Te_Bottom }
   | BRA ty_expr KET                                 { $2.value }
   | CURBRA ty_expr_record CURKET                    { Te_Record ($2, None) }
@@ -518,7 +518,7 @@ expr_tuple_atom_:
   | expr_tuple_atom BACKSLASH id                            { Restrict ($1, $3) }  
   | INJECT expr_tuple_atom                                  { Inject $2 }
   | expr_tuple_atom EJECT                                   { Eject $1 }
-  | MINUS expr_tuple_atom %prec UMINUS				        { UnApp (Config.Typing.negate_symbol, $2) }
+  | MINUS expr_tuple_atom %prec UMINUS				        { UnApp (Config.Typing.Names.int_negate, $2) }
   | expr_tuple_atom INFIX expr_tuple_atom					{ BinApp ($1, $2, $3) }
   | expr_tuple_atom PLUS expr_tuple_atom					{ BinApp ($1, "+", $3) }
   | expr_tuple_atom MINUS expr_tuple_atom					{ BinApp ($1, "-", $3) }
@@ -644,7 +644,7 @@ patt_app_atom:
 
 patt_:
     patt_arrow_atom                             { $1.value }
-/*  | patt_arrow_atom ARROW patt_arrow_atom     { P_Apps [ULo (P_Cons "->"); $1; $3] }*/
+/*  | patt_arrow_atom ARROW patt_arrow_atom     { P_Apps [ULo (P_Cons Config.Typing.Names.Type.arrow); $1; $3] }*/
   | patt PIPE patt                              { P_Or ($1, $3) }
   | patt AMP patt                               { P_And ($1, $3) }
 

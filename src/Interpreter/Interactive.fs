@@ -20,19 +20,19 @@ open FSharp.Common
 
 module A = Lw.Core.Absyn
 
-let handle_exn : exn -> _  =
+let handle_exn (e : exn) =
     let r code =
 //        #if DEBUG
 //        Diagnostics.Debugger.Break ()
 //        #endif
         code
-    function
-    | :? Typing.Report.numeric_error as e   -> L.nerror e.code "%s" e.Message; Config.Exit.error
-    | :? Parsing.located_error as e         -> L.fatal_error "%s" e.Message; Config.Exit.error
-    | :? NotImplementedException as e       -> L.not_implemented "%s" e.Message; r Config.Exit.not_implemented
+    match e with
+    | :? static_numeric_error as e  -> L.nerror e.code "%s" e.Message; Config.Exit.error
+    | :? located_error              -> L.fatal_error "%s" e.Message; Config.Exit.error
+    | :? NotImplementedException    -> L.not_implemented "%s" e.Message; r Config.Exit.not_implemented
     | Failure s                         
-    | Unexpected s as e                     -> L.unexpected_error "%s\n%O" s e.StackTrace; r Config.Exit.unexpected_error
-    | e                                     -> L.unexpected_error "uncaught exception: %s\n%O" (pretty_exn_and_inners e) e.StackTrace; r Config.Exit.unexpected_error
+    | Unexpected s                  -> L.unexpected_error "%s\n%O" s e.StackTrace; r Config.Exit.unexpected_error
+    | e                             -> L.unexpected_error "uncaught exception: %s\n%O" (pretty_exn_and_inners e) e.StackTrace; r Config.Exit.unexpected_error
 
 
 let print_env_diffs (Γ1 : jenv) Γ2 (Δ1 : Eval.env) Δ2 =

@@ -154,7 +154,7 @@ type basic_builder (loc : location) =
             return kσ
         }
         
-    member M.gen_bind_γ x k =
+    member M.gen_and_bind_γ x k =
         M {
             let! { γ = γ; θ = θ } = M.get_state
             let! αs = M.get_scoped_vars_as_set
@@ -336,8 +336,11 @@ type type_inference_builder (loc) =
         }
 
     // HACK: generalization need to deal with scoped vars
-    member M.bind_generalized_Γ jk jm ϕ =
+    member M.bind_generalized_Γ jk jm (ϕ : fxty) =
         M {
+            // there must be no unquantified variables that are not free in Γ
+            let! Γ = M.get_Γ
+            assert (ϕ.fv - (fv_Γ Γ)).IsEmpty
             let! cs = M.get_constraints
             return! M.bind_Γ jk { mode = jm; scheme = {  constraints = cs; fxty = ϕ } }
         }

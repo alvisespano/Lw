@@ -156,7 +156,7 @@ with
     
     override this.ToString () = this.pretty
 
-    member this.pretty_as_translated_id = sprintf Config.Printing.cid_fmt this.name this.num
+    member this.pretty_as_translated_id = sprintf Config.Printing.constraint_id_fmt this.name this.num
 
     member this.pretty =
         let sep = if this.strict then Config.Printing.type_annotation_sep else ":>"
@@ -394,20 +394,22 @@ let private T_Primitive name = T_Cons (name, K_Star)
 let private (|T_Primitive|_|) name = function
     | T_Cons (s, K_Star) when name = s -> Some ()
     | _                                -> None
-    
-let (|T_Bool|_|) = (|T_Primitive|_|) "bool"
-let (|T_Unit|_|) = (|T_Primitive|_|) "unit"
-let (|T_Int|_|) = (|T_Primitive|_|) "int"
-let (|T_Float|_|) = (|T_Primitive|_|) "float"
-let (|T_String|_|) = (|T_Primitive|_|) "string"
-let (|T_Char|_|) = (|T_Primitive|_|) "char"
 
-let T_Bool = T_Primitive "bool"
-let T_Unit = T_Primitive "unit"
-let T_Int = T_Primitive "int"
-let T_Float = T_Primitive "float"
-let T_String = T_Primitive "string"
-let T_Char = T_Primitive "char"
+module N = Config.Typing.Names
+    
+let (|T_Bool|_|) = (|T_Primitive|_|) N.Type.bool
+let (|T_Unit|_|) = (|T_Primitive|_|) N.Type.unit
+let (|T_Int|_|) = (|T_Primitive|_|) N.Type.int
+let (|T_Float|_|) = (|T_Primitive|_|) N.Type.float
+let (|T_String|_|) = (|T_Primitive|_|) N.Type.string
+let (|T_Char|_|) = (|T_Primitive|_|) N.Type.char
+
+let T_Bool = T_Primitive N.Type.bool
+let T_Unit = T_Primitive N.Type.unit
+let T_Int = T_Primitive N.Type.int
+let T_Float = T_Primitive N.Type.float
+let T_String = T_Primitive N.Type.string
+let T_Char = T_Primitive N.Type.char
 
 let T_Star_Var α = T_Var (α, K_Star)
 let (|T_Star_Var|_|) = function
@@ -429,9 +431,9 @@ let (|T_ConsApps|_|) = function
     | T_Apps (T_Cons (x, k) :: ts) -> Some ((x, k), ts)
     | _ -> None
 
-let T_Arrow_Cons = T_Cons ("->", K_Arrows [K_Star; K_Star; K_Star])
+let T_Arrow_Cons = T_Cons (N.Type.arrow, K_Arrows [K_Star; K_Star; K_Star])
 let (|T_Arrow_Cons|_|) = function
-    | T_Cons ("->", K_Arrows [K_Star; K_Star; K_Star]) -> Some ()
+    | T_Cons (s, K_Arrows [K_Star; K_Star; K_Star]) when s = N.Type.arrow -> Some ()
     | _ -> None
 
 let T_Arrow (t1, t2) = T_Apps [T_Arrow_Cons; t1; t2]
@@ -449,16 +451,16 @@ let (|K_Row_Ext|_|) = function
     | K_Arrows [K_Star; K_Row; K_Row] -> Some ()
     | _ -> None
 
-let T_Row_Empty = T_Cons (string Config.Typing.TyCons.row_special_char, K_Row)
-let T_Row_Ext (l, t, ρ) = T_Apps [T_Cons (sprintf "%c%s" Config.Typing.TyCons.row_special_char l, K_Row_Ext); t; ρ]
+let T_Row_Empty = T_Cons (string N.Type.Row.special_char, K_Row)
+let T_Row_Ext (l, t, ρ) = T_Apps [T_Cons (sprintf "%c%s" N.Type.Row.special_char l, K_Row_Ext); t; ρ]
 
 let (|T_Row_Empty|T_Row_Ext|T_Row_Var|T_NoRow|) = function
     | T_Var (ρ, K_Row)              -> T_Row_Var ρ
-    | T_Cons (s, K_Row) when s.Length = 1 && s.[0] = Config.Typing.TyCons.row_special_char ->
+    | T_Cons (s, K_Row) when s.Length = 1 && s.[0] = N.Type.Row.special_char ->
         T_Row_Empty
 
-    | T_Apps [T_Cons (s, K_Row_Ext); t; ρ] when s.Length > 1 && s.[0] = Config.Typing.TyCons.row_special_char ->
-        T_Row_Ext (s.TrimStart [|Config.Typing.TyCons.row_special_char|], t, ρ)
+    | T_Apps [T_Cons (s, K_Row_Ext); t; ρ] when s.Length > 1 && s.[0] = N.Type.Row.special_char ->
+        T_Row_Ext (s.TrimStart [|N.Type.Row.special_char|], t, ρ)
     | t                                                           -> T_NoRow t
 
 let T_Row (r, ρo) = List.foldBack (fun (l, t) ρ -> T_Row_Ext (l, t, ρ)) r (match ρo with Some ρ -> T_Row_Var ρ | None -> T_Row_Empty)
@@ -616,6 +618,15 @@ type ty with
     static member fresh_var_and_ty k = let α = var.fresh in α, T_Var (α, k)
     static member fresh_star_var = ty.fresh_var K_Star
     static member fresh_star_var_and_ty = ty.fresh_var_and_ty K_Star
+
+    member this.kinded_fv =
+        match this with
+        | T_Var (α, k)              -> Set.singleton (α, k) 
+        | T_Closure (_, _, _, k)   
+        | T_Cons (_, k)             -> Set.empty
+        | T_HTuple ts               -> List.fold (fun r (t : ty) -> Set.union r t.kinded_fv) Set.empty ts
+        | T_App (t1, t2)            -> Set.union t1.kinded_fv t2.kinded_fv
+        | T_Forall (α, t)           -> Set.filter (fst >> (=) α >> not) t.kinded_fv
 
     member this.fv =
         match this with

@@ -166,6 +166,7 @@ and W_expr' ctx (e0 : expr) =
                     yield ϕ
 
             | Jb_Data σ ->
+                // TODOH: is instantiation correct? the whole type must be refreshed
                 let! { fxty = ϕ } = M.instantiate_and_inherit_constraints σ
                 M.translated <- Reserved_Cons x
                 yield ϕ
@@ -578,31 +579,54 @@ and W_decl' (ctx : context) (d0 : decl) =
             let d = Lo d0.loc <| Td_Rec bs
             do! Wk_and_eval_ty_rec_bindings ctx d bs
 
+        // TODO: support the alternate datatype declaration syntax, for example:
+        //          datatype list 'a = Nil | Cons of 'a * 'a list
+        //       and even mixed syntaxes, such as:
+        //          datatype list 'a = Nil | Cons : 'a -> 'a list -> 'a list
+        //       finally support also let-datatype and further let-data declarations, e.g.:
+        //          datatype list : * -> *
+        //          data Nil : list 'a
+        //          data Cons : 'a -> list 'a -> list 'a
         | D_Datatype { id = c; kind = kc; datacons = bs } ->
+//            let split (|Arrows|_|) = function
+//                | Arrows (Mapped List.rev (kcod :: ks)) -> List.rev ks, kcod
+//                | kcod                                  -> [], kcod
+//            let kdom, kcod = split (|K_Arrows|_|) kc
             // type constructor must have star as codomain
-            let split (|Arrows|_|) = function
-                | Arrows ks -> let ks = List.rev ks in List.tail ks, List.head ks
-                | k         -> [], k
-            let kdom, kcod = split (|K_Arrows|_|) kc
-            do! M.kunify d0.loc K_Star kcod
-            let! kσ = M.gen_bind_γ c kc
+//            do! M.kunify d0.loc K_Star kcod
+            let! kσ = M.gen_and_bind_γ c kc
             Report.prompt ctx Config.Printing.Prompt.datatype_decl_prefixes c kσ None
-            // rebind kc to the unified kind, by reinstantiating it rather than keeping the user-declared one
+            // rebind kc to the unified kind, by reinstantiating it rather than keeping the user-declared one: might be useful if declared kind has variables
             let kc = kσ.instantiate
             for { id = x; signature = τx } in bs do
-                let! tx, kx = Wk_and_eval_ty_expr_F ctx τx
-                do! M.kunify τx.loc K_Star kx
-                // each curried argument of the each data constructor must have kind star
-                match tx with
-                | T_Arrows ts -> for t in ts do do! M.kunify τx.loc K_Star t.kind
-                | _           -> return ()
-                // each data constructor's codomain must be the type constructor being defined
-                let pt = T_Apps [ yield T_Cons (c, kc); for _ in kdom -> ty.fresh_star_var ]
-                let _, tcod = split (|T_Arrows|_|) tx
-                let! uctx = M.get_uni_context τx.loc
-                if not (tcod.is_instance_of uctx pt) then return Report.Error.data_constructor_codomain_invalid τx.loc x c tcod
+                let! tx, kx = Wk_and_eval_ty_expr_F ctx τx                
+                do! M.kunify τx.loc K_Star kx                   // the whole inferred kind must be star, which is even better that the co-domain                
+//                let txdom, txcod = split (|T_Arrows|_|) tx
+//                for t in txdom do                           
+//                    do! M.kunify τx.loc K_Star t.kind           // each curried argument of the domain of each data constructor must have kind star                
+//                let tcod = T_Apps [ yield T_Cons (c, kc); for _ in kdom do yield ty.fresh_star_var ]
+
+                let txcod = match tx with // UNDONE
+
+                do! M.unify τx.loc txcod tcod                   // each data constructor's codomain must be the type constructor being defined
+                // auto generalized if unquantified 
+                let! Γ = M.get_Γ
+                let tx =
+                    
+                    if tx.is_unquantified then                       
+                        let αs = tx.fv - fv_Γ Γ
+                        if αs <> tx.fv then Report.Hint.datacons_contains_env_fv τx.loc c x tx
+                        T_Foralls (Set.toList αs, tx)
+                    else  tx
                 let! σ = M.bind_generalized_Γ (Jk_Data x) Jm_Normal (Fx_F_Ty tx)
                 Report.prompt ctx Config.Printing.Prompt.data_decl_prefixes x σ None
+
+                // old code: its quite weird
+//                let pt = T_Apps [ yield T_Cons (c, kc); for _ in kdom do yield ty.fresh_star_var ]
+//                let! uctx = M.get_uni_context τx.loc
+//                if not (tcod.is_instance_of uctx pt) then return Report.Error.data_constructor_codomain_invalid τx.loc x c tcod
+
+
 
         | D_Kind _ ->
             return not_implemented "%O" __SOURCE_FILE__ __LINE__ d0

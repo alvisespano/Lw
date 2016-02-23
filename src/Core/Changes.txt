@@ -1,4 +1,14 @@
-﻿22/2/2016:
+﻿
+23/2/2016:
+* REFACT: reserved identifiers tools polished, as well as list special constructor names
+* REFACT: wildcard_reserved_id does not exist anymore: fresh_reserved_id is used instead
+* UP: list support completed
+* UP: credits text in Args module revamped, as well as management of assembly attributes
+* UP: the whole Intrinsic module has been revamped to support datatype definitions and other declarations
+* UP: datatype declaration typechecking is under revamping
+
+
+22/2/2016:
 * REFACT: compilation symbols enabling debug in unification and inference have been polished
 * FIX: subsume fixed
 * NEW: lots of work and rework on UnitTest module

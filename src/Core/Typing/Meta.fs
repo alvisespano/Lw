@@ -382,7 +382,7 @@ and Wk_ty_bindings (ctx : context) d bs =
                     }
                 }) bs
         for x, k in l do
-            let! kσ = M.gen_bind_γ x k
+            let! kσ = M.gen_and_bind_γ x k
             prompt_inferred_kind ctx Config.Printing.Prompt.type_decl_prefixes x kσ
     }   
 
@@ -401,7 +401,7 @@ and Wk_ty_rec_bindings<'e> (ctx : context) (d : node<'e, kind>) bs =
                         }) bs
             }
         for x, kx in bs do
-            let! kσ = M.gen_bind_γ x kx
+            let! kσ = M.gen_and_bind_γ x kx
             // TODO: all type definitions should be implicitly recursive
             prompt_inferred_kind ctx Config.Printing.Prompt.rec_type_decl_prefixes x kσ
     }

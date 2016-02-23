@@ -59,10 +59,10 @@ with
         | V_Record env        -> sprintf "{ %s }" (env.pretty "=" "; ")
 
 module Report =
-    type runtime_error (message, loc) =
-        inherit located_error ("runtime error", message, loc)
+    type eval_error (msg, loc) =
+        inherit runtime_error ("eval error", msg, loc)
 
-    let E loc fmt = throw_formatted (fun msg -> new runtime_error (msg, loc)) fmt
+    let E loc fmt = throw_formatted (fun msg -> new eval_error (msg, loc)) fmt
 
     let incomplete_cases loc v = E loc "match cases are incomplete for value: %O" v
     let unexpected_value loc name expected source_file line v = unexpected "%s at %O does not evaluate to a %s value: %O" source_file line name loc expected v

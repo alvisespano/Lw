@@ -31,24 +31,43 @@ open FSharp.Common.Prelude
  * ENFORCE_NF_IN_UNI        // force types involved into unification to 
  *)
 
+let reserved_id_fmt : StringFormat<string -> string> = "$%s"
+let reserved_id s = sprintf reserved_id_fmt s
+
 module Typing =
-    let negate_symbol = "neg"
 
-    let list_nil = "Nil"
-    let list_cons = "Cons"
+    module Names =
+        let int_negate = "neg"
+        let float_negate = "fneg"
 
-    module TyCons =
-        let row_special_char = '|'
+        module Data =
+            let list_nil = reserved_id "Nil"
+            let list_cons = reserved_id "Cons"
+            let option_none = "None"
+            let option_some = "Some"
 
-        module Rows =
-            let record = "Record"
-            let variant = "Variant"
+        module Type =
+            let arrow = "->"
+            let unit = "unit"
+            let int = "int"
+            let bool = "bool"
+            let float = "float"
+            let string = "string"
+            let char = "char"
+            let option = "option"
+            let list = "list"
 
-    module KindCons =    
-        let row = "Row"
-        let htuple = "HTuple"
+            // TODO: should reserved ids be used for these type constructors or should they have a publicly usable name?
+            module Row =
+                let special_char = '|'
+                let record = "Record"
+                let variant = "Variant"
 
-    let skolemized_tyvar_fmt : StringFormat<string -> string> = "|%O|"
+        module Kind =  
+            let star = "*" 
+            let arrow = "->" 
+            let row = "Row"
+            let htuple = "HTuple"
 
 
 module Printing =
@@ -105,9 +124,8 @@ module Printing =
     let freevar_constraint_fmt = freevar_fmt
     let polycons_fmt : StringFormat<string -> string> = "`%s"
     let jk_inst_fmt : StringFormat<string -> int -> string> = "%s$%X"
-    let cid_fmt : StringFormat<string -> int -> string> = "%s#%X"
-    let fresh_reserved_id_fmt : StringFormat<int -> string> = "$%d"
-    let wildcard_reserved_fmt : StringFormat<int -> string> = "_$%d"
+    let constraint_id_fmt : StringFormat<string -> int -> string> = "%s#%X"
+    let fresh_reserved_id : StringFormat<int -> string> = "?%d"
     let tuple_index_label_fmt : StringFormat<int -> string> = "#%d"
     let already_existing_named_var_fmt : StringFormat<string -> int -> string> = "%s%d" // this is needed for disambiguating name for a named var that already existed and whose name conflicted with automatically-named vars
     #if DEBUG_VAR_NAMES
@@ -117,9 +135,10 @@ module Printing =
     let empty_prefix = "()"
     let ftype_instance_of_fxty_sep = "<:"
     let type_evaluation_sep = "="
+    let skolemized_tyvar_fmt : StringFormat<string -> string> = "|%s|"
 
     module Prompt =
-        let prefix_sep = " "
+        let header_sep = " "            // used as separator for let, rec, val etc. qualifiers
         let nested_decl_prefix = "let"
         let rec_prefix = "rec"
         let type_prefix = "type"

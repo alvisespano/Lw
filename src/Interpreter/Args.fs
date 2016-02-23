@@ -19,23 +19,33 @@ let mutable filename = ""
 
 let credits () =
     let now = DateTime.Now
+    let core_asm = Assembly.GetAssembly (typeof<Lw.Core.Globals.logger>) // get Lw.Core assembly by getting any of the type defined in it
     let asm = Assembly.GetExecutingAssembly ()
     let name = asm.GetName ()
     let ver = name.Version
     let title = get_assembly_attribute<AssemblyTitleAttribute> asm
+    let core_title = get_assembly_attribute<AssemblyTitleAttribute> core_asm
     let description = get_assembly_attribute<AssemblyDescriptionAttribute> asm
     let product = get_assembly_attribute<AssemblyProductAttribute> asm
     let copyright = get_assembly_attribute<AssemblyCopyrightAttribute> asm
     let company = get_assembly_attribute<AssemblyCompanyAttribute> asm
+    let productize = function
+        | []  -> ""
+        | [s] -> sprintf "%s is" s
+        | ss ->
+            let last = List.last ss
+            let firsts = List.take (List.length ss - 1) ss
+            in
+                sprintf "%s and %s are" (flatten_strings ", " firsts) last
     in
         sprintf "%s v%d.%d.%d build %d [%04d-%02d-%02d]\n\
                 \n\
                 %s\n\
                 \n\
-                %s and %s are %s, %s.\n"
+                %s %s, %s.\n"
             title ver.Major ver.Minor ver.Build ver.Revision now.Year now.Month now.Day
             description
-            title product copyright company
+            (productize [product; core_title; title ]) copyright company
 
 let usage () =
     sprintf "\n\nusage: %s <SOURCE FILENAME>\n\n%s"
