@@ -29,21 +29,20 @@ module Builtin =
     
     module Types =
 
-        let Arity arrow atom n s = s, Arrows arrow (List.init (n + 1) (fun _ -> atom))
-        let Stars = Arity K_Arrow K_Star
-        let Arrows ts s = s, K_Arrows ts
+        let arrows l s = s, K_Arrows l
+        let stars n = arrows [for _ in 1..n do yield K_Star]
 
         let γ0 = 
             [
-                Stars 0 T.unit
-                Stars 0 T.int
-                Stars 0 T.bool
-                Stars 0 T.float
-                Stars 0 T.char
-                Stars 0 T.string
-                Stars 2 T.arrow
-                Arrows [K_Row; K_Star] T.Row.record
-                Arrows [K_Row; K_Star] T.Row.variant
+                stars 1 T.unit
+                stars 1 T.int
+                stars 1 T.bool
+                stars 1 T.float
+                stars 1 T.char
+                stars 1 T.string
+                stars 3 T.arrow
+                arrows [K_Row; K_Star] T.Row.record
+                arrows [K_Row; K_Star] T.Row.variant
             ]
 
     module Values =
@@ -156,37 +155,6 @@ module Builtin =
 // make up environments
 //
 
-// pupulate Γ and Δ with types and values of builtin functions
-let private Γ01, Δ01 =
-    Builtin.Values.ΓΔ0
-        |> List.fold (fun (Γ : jenv, Δ : Eval.env) (x, f) ->
-                        let (t : ty), v = f x
-                        in
-                            Γ.bind (Jk_Var x) { mode = Jm_Normal; scheme = { constraints = constraints.empty
-                                                                             fxty        = Fx_F_Ty (T_Foralls (List.ofSeq t.fv, t))} },
-                            Δ.bind x v)
-            (Env.empty, Env.empty) 
-
-// populate γ and δ with kinds and type constructors of builtin types
-let private γ01, δ01 =
-    Builtin.Types.γ0
-        |> List.fold (fun (γ : kjenv, δ : tenv) (x, k) ->
-                    let t = T_Cons (x, k)
-                    in
-                        γ.bind x (k.generalize γ Set.empty),
-                        δ.bind x t)
-            (Env.empty, Env.empty)
-
-// add declarations
-let private Γ0, γ0, δ0 =
-    Builtin.Decls.all
-        |> List.fold (fun (Γ : jenv, γ : kjenv, δ) d ->
-                let (), st = Inference.W_decl context.top_level d { state.empty with Γ = Γ; γ = γ; δ = δ }
-                in
-                    st.Γ, st.γ, st.δ)
-            (Γ01, γ01, δ01)
-
-let private Δ0 = Δ01    // no more values to add to value environment
 
 type [< NoEquality; NoComparison >] envs = {
     Γ : jenv
@@ -195,7 +163,46 @@ type [< NoEquality; NoComparison >] envs = {
     δ : tenv
 }
 with
-    static member envs0 = { Γ = Γ0; Δ = Δ0; γ = γ0; δ = δ0 }
+    static member create_envs () =
+        L.msg Low "populating intrinsics..."
+        // pupulate Γ and Δ with types and values of builtin functions
+        let Γ01, Δ01 =
+            Builtin.Values.ΓΔ0
+                |> List.fold (fun (Γ : jenv, Δ : Eval.env) (x, f) ->
+                                let (t : ty), v = f x
+                                in
+                                    Γ.bind (Jk_Var x) { mode = Jm_Normal; scheme = { constraints = constraints.empty
+                                                                                     fxty        = Fx_F_Ty (T_Foralls (List.ofSeq t.fv, t))} },
+                                    Δ.bind x v)
+                    (Env.empty, Env.empty) 
+
+        // populate γ and δ with kinds and type constructors of builtin types
+        let γ01, δ01 =
+            Builtin.Types.γ0
+                |> List.fold (fun (γ : kjenv, δ : tenv) (x, k) ->
+                            let t = T_Cons (x, k)
+                            in
+                                γ.bind x (k.generalize γ Set.empty),
+                                δ.bind x t)
+                    (Env.empty, Env.empty)
+
+        // add declarations
+        let Γ0, γ0, δ0 =
+            Builtin.Decls.all
+                |> List.fold (fun (Γ : jenv, γ : kjenv, δ) d ->
+                        let (), st = Inference.W_decl context.top_level d { state.empty with Γ = Γ; γ = γ; δ = δ }
+                        in
+                            st.Γ, st.γ, st.δ)
+                    (Γ01, γ01, δ01)
+
+        let Δ0 = Δ01    // no more values to add to value environment
+        L.msg Min "intrinsics created"
+        { Γ = Γ0; Δ = Δ0; γ = γ0; δ = δ0 }
+
+let lazy_envs0 = lazy envs.create_envs ()
+
+type envs with
+    static member envs0 = lazy_envs0.Value
 
 type StateMonad.state with
     static member state0 = { StateMonad.state.empty with Γ = envs.envs0.Γ; γ = envs.envs0.γ }

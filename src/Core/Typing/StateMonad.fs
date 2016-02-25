@@ -344,6 +344,15 @@ type type_inference_builder (loc) =
             let! cs = M.get_constraints
             return! M.bind_Γ jk { mode = jm; scheme = {  constraints = cs; fxty = ϕ } }
         }
+
+    member M.auto_geneneralize (tx : ty) =
+        M {
+            let! Γ = M.get_Γ
+            if tx.is_unquantified then
+                let αs = tx.fv - fv_Γ Γ
+                return T_Foralls (Set.toList αs, tx)
+            else return tx
+        }
         
     member M.add_prefix α t =
         M {

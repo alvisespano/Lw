@@ -46,6 +46,7 @@ type [< NoEquality; NoComparison >] node<'a, 't> (value : 'a, ?loc : location) =
     member this.typed
         with get () = match _typed with Some x -> x | None -> unexpected "node %O has not been typed" __SOURCE_FILE__ __LINE__ this
         and set t = _typed <- Some t
+    static member op_Implicit (this : node<'a, 't>) = this.value
 
 let Lo loc (x : 'a) = new node<_, _> (x, loc)
 let ULo x = new node<_, _> (x)
@@ -67,31 +68,110 @@ let (|Row_Tuple|_|) (|Tup|_|) = function
     | Tup ((x1, _) :: _ as bs, None) when x1 = tuple_index_label 1 -> Some (List.map snd bs)
     | _ -> None
 
-let Arrows arrow =
-    let rec R = function
-        | []      -> unexpected "empty arrow atom list" __SOURCE_FILE__ __LINE__
-        | [x]     -> x
-        | x :: xs -> arrow (x, R xs)
+/// This function produces active patterns and constructors for manipulating multiple occurrences of the given single-shot active pattern and constructor.
+/// For example, it can produce the 'Arrows' constructor and the respective pattern, given the single-shot 'Arrow' constructor and pattern.
+/// In details, this function returns the triple cs', (|Ps0'|), (|Ps'|_|) where:
+///     cs' is the multiple-occurence constructor;
+///     (|Ps0'|) is the non-optional version of the multiple-occurence pattern, defined in such a way that it never fails and returns something even when there are no occurrences (or a single occurrence, depending on the semantics);
+///     (|Ps'|_|) is the optional version of the multiple-occurence pattern.
+/// Arguments are grouped into 2 groups:
+///    the first is a triple where cs is the multiple-occurrence constructor parametric on the single constructor c1,
+///                                 Ps is the optional version of the multiple-occurrence pattern parametric on the single pattern P1,
+///                                 Ps0 is the non-optional version od the multiple-occurrence pattern parametric on the optional one, which is being created using Ps;
+///    the second group consists of the last 2 curried arguments where
+///                                         c1 is the actual single-shot constructor,
+///                                         P1 is the actual single-shot pattern.
+/// Consider using this function in curried form, i.e. defining and passing what's needed by the first triple only;
+/// further code will eventually need to pass the second tuple with actual single-shot constructor and pattern.
+let make_patterns (cs, (|Ps|_|), (|Ps0|)) (c1 : 'a -> 'b) ((|P1|_|) : 'b -> 'a option) = 
+    let (|Ps|_|) x = (|Ps|_|) (|P1|_|) x
     in
-        R
+        cs c1, (|Ps0|) (|Ps|_|), (|Ps|_|)
 
-let rec (|Arrows|_|) (|Arrow|_|) = function
-    | Arrow (x1, Arrows (|Arrow|_|) l) -> Some (x1 :: l)
-    | Arrow (x1, x2)                   -> Some [x1; x2]
-    | _                                -> None
 
-let Apps app =
-    let rec R = function
-        | []        -> unexpected "empty app atom list" __SOURCE_FILE__ __LINE__
-        | [x]       -> x
-        | x :: xs   -> app (R xs, x)
+// arrows active pattern creator
+//
+
+let make_arrow_by_apps arrow_cons apps (|Arrow_Cons|_|) (|Apps|_|) = 
+    let Arrow (t1, t2) = apps [arrow_cons; t1; t2]
+    let (|Arrow|_|) = function
+        | Apps [Arrow_Cons; τ1; τ2] -> Some (τ1, τ2)
+        | _ -> None
     in
-        fun xs -> R (List.rev xs)
+        Arrow, (|Arrow|_|)
 
-let rec (|Apps|_|) (|App|_|) = function
-    | App (Apps (|App|_|) l, x2) -> Some (l @ [x2])
-    | App (x1, x2)               -> Some [x1; x2]
-    | _                          -> None
+//let Arrows arrow =
+//    let rec R = function
+//        | []      -> unexpected "empty arrow atom list" __SOURCE_FILE__ __LINE__
+//        | [x]     -> x
+//        | x :: xs -> arrow (x, R xs)
+//    in
+//        R
+//
+//let rec (|Arrows|_|) (|Arrow|_|) = function
+//    | Arrow (x1, Arrows (|Arrow|_|) l) -> Some (x1 :: l)
+//    | Arrow (x1, x2)                   -> Some [x1; x2]
+//    | _                                -> None
+//
+//let (|Arrows1|) (|Arrows|_|) = function
+//    | Arrows xs -> xs
+//    | x         -> [x]
+
+let make_arrows_by f (|F|) =
+    let rec Arrows arrow = function
+        | []        -> unexpected "empty list of Arrows items" __SOURCE_FILE__ __LINE__
+        | [F x]     -> x
+        | x :: xs   -> arrow (x, f (Arrows arrow xs))
+    let rec (|Arrows|_|) (|Arrow|_|) = function
+        | Arrow (x1, F (Arrows (|Arrow|_|) l)) -> Some (x1 :: l)
+        | Arrow (x1, x2)                       -> Some [x1; x2]
+        | _                                    -> None
+    let (|Arrows1|) (|Arrows|_|) = function
+        | Arrows xs -> xs
+        | x         -> [f x]
+    in
+        make_patterns (Arrows, (|Arrows|_|), (|Arrows1|))
+
+
+
+// apps active pattern creator
+//
+
+//let (|Apps1|) (|Apps|_|) = function
+//    | Apps xs -> xs
+//    | x       -> [x]
+//
+///// Etherogeneous Apps factory given the projection pattern/function F
+//let rec FApps F (app : ('e * 'e) -> 'u) (l : 'e list) : 'u =
+//    match l with
+//    | [] | [_] as l -> unexpected "empty or singleton list for Apps: %O" __SOURCE_FILE__ __LINE__  l
+//    | l             -> let xs, x = List.takeButLast l in app (F (FApps F app xs), x)
+//let rec (|FApps|_|) (|F|) (|App|_|) = function
+//    | App (F (FApps (|F|) (|App|_|) l), x2) -> Some (l @ [x2])
+//    | App (x1, x2)                          -> Some [x1; x2]
+//    | _  -> None
+
+let make_apps_by f (|F|) =
+    let rec Apps app = function
+        | []    -> unexpected "empty or singleton list of Apps items" __SOURCE_FILE__ __LINE__
+        | [F x] -> x
+        | l     -> let xs, x = List.takeButLast l in app (f (Apps app xs), x)
+    let rec (|Apps|_|) (|App|_|) = function
+        | App (F (Apps (|App|_|) l), x2) -> Some (l @ [x2])
+        | App (x1, x2)                   -> Some [x1; x2]
+        | _  -> None
+    let (|Apps1|) (|Apps|_|) = function
+        | Apps xs -> xs
+        | x       -> [f x]
+    in
+        make_patterns (Apps, (|Apps|_|), (|Apps1|))
+
+/// Homogeneous version using identity as projection
+let make_arrows x = make_arrows_by identity identity x
+let make_apps x = make_apps_by identity identity x
+
+// foralls active pattern creator
+//
 
 let Foralls forall = function
     | [], t -> t
@@ -106,10 +186,7 @@ let (|Foralls0|) (|Foralls|_|) = function
     | Foralls (αs, t) -> αs, t
     | t               -> [], t
 
-let make_foralls (forall : ('a * 'b) -> _) ((|Forall|_|) : _ -> ('a * 'b) option) =     // type annotations introduce useful constraints between the first and the second arguments
-    let (|Foralls|_|) = (|Foralls|_|) (|Forall|_|)
-    in
-        Foralls forall, (|Foralls0|) (|Foralls|_|), (|Foralls|_|)
+let make_foralls x = make_patterns (Foralls, (|Foralls|_|), (|Foralls0|)) x
 
 
 type annotable =
@@ -287,18 +364,30 @@ with
     interface annotable with
         member __.annot_sep = Config.Printing.kind_annotation_sep
 
-let K_Arrow (k1, k2) = K_Cons (Config.Typing.Names.Kind.arrow, [k1; k2])
-let (|K_Arrow|_|) = function
-    | K_Cons (s, [k1; k2]) when s = Config.Typing.Names.Kind.arrow -> Some (k1, k2)
-    | _ -> None
-
-let K_Arrows = Arrows K_Arrow
-let (|K_Arrows|_|) = (|Arrows|_|) (function K_Arrow (k1, k2) -> Some (k1, k2) | _ -> None)
-
 let K_Id x = K_Cons (x, [])
 let (|K_Id|_|) = function
     | K_Cons (x, []) -> Some x
     | _ -> None
+
+#if DEFINE_K_APP
+let K_App (k1, k2) =
+    match k1 with
+    | K_Cons (x, ks) -> K_Cons (x, ks @ [k2])
+    | k0 -> unexpected "leftmost term '%O' of kind application '%O %O' is not an identifier" __SOURCE_FILE__ __LINE__ k0 k1 k2
+let (|K_App|_|) = function
+    | K_Cons (x, Mapped List.rev (klast :: Mapped List.rev ks)) -> Some (K_App (K_Cons (x, ks), klast))
+    | _ -> None
+
+let K_Apps, (|K_Apps0|), (|K_Apps|_|) = make_apps K_App (|K_App|_|)
+let K_Arrow, (|K_Arrow|_|) = let A = Config.Typing.Names.Kind.arrow in make_arrow_by_apps (K_Id A) K_Apps (function K_Id x when x = A -> Some () | _ -> None) (|K_Apps|_|)
+#else
+let K_Arrow (k1, k2) = K_Cons (Config.Typing.Names.Kind.arrow, [k1; k2])
+let (|K_Arrow|_|) = function
+    | K_Cons (s, [k1; k2]) when s = Config.Typing.Names.Kind.arrow -> Some (k1, k2)
+    | _ -> None
+#endif
+
+let K_Arrows, (|K_Arrows1|), (|K_Arrows|_|) = make_arrows K_Arrow (|K_Arrow|_|)
 
 let K_Star = K_Id Config.Typing.Names.Kind.star
 let (|K_Star|_|) = function
@@ -378,7 +467,7 @@ let pretty_cases cases = mappen_strings pretty_case "\n  | " cases
 // rows
 //
 
-let internal make_rows rowed ((|Rowed|_|) : id -> _ -> _) =
+let make_rows rowed ((|Rowed|_|) : id -> _ -> _) =
     let Record = rowed Config.Typing.Names.Type.Row.record
     let (|Record|_|) = (|Rowed|_|) Config.Typing.Names.Type.Row.record
     let Variant = rowed Config.Typing.Names.Type.Row.variant
@@ -459,24 +548,34 @@ and typed_param = ty_expr id_param
 let private Te_Primitive name = Te_Id name
 let Te_Unit = Te_Primitive Config.Typing.Names.Type.unit
 
-// special patterns for type expressions
+// special patterns for type expressions and type patterns
 
-let Te_Apps τs = (Apps (fun (τ1, τ2) -> Lo τ1.loc <| Te_App (τ1, τ2)) τs).value
-let (|Te_Apps|_|) = (|Apps|_|) (function Te_App (ULo τ1, ULo τ2) -> Some (τ1, τ2) | _ -> None)
+//module Old =
+////     old version without the new make_* functions
+//    let Te_Apps τs = (Apps (fun (τ1, τ2) -> Lo τ1.loc <| Te_App (τ1, τ2)) τs).value
+//    let (|Te_Apps|_|) = (|Apps|_|) (function Te_App (ULo τ1, ULo τ2) -> Some (τ1, τ2) | _ -> None)
+//    let Te_Arrow (t1 : ty_expr, t2 : ty_expr) = Te_Apps [Lo t1.loc (Te_Id Config.Typing.Names.Type.arrow); t1; t2]
+//    let (|Te_Arrow|_|) = function
+//        | Te_Apps [Te_Id s; τ1; τ2] when s = Config.Typing.Names.Type.arrow -> Some (τ1, τ2)
+//        | _ -> None
+//    let Te_Arrows' τs = (Arrows (fun (e1 : ty_expr, e2) -> Lo e1.loc <| Te_Arrow (e1, e2)) τs).value
 
-let Te_Foralls, (|Te_Foralls0|), (|Te_Foralls|_|) = make_foralls (fun (α, τ) -> Lo τ.loc <| Te_Forall (α, τ)) (function ULo (Te_Forall (α, (ULo _ as τ))) -> Some (α, τ) | _ -> None)
 
-let Te_Arrow_Cons = Te_Id Config.Typing.Names.Type.arrow
-let (|Te_Arrow_Cons|_|) = function
-    | Te_Id s when s = Config.Typing.Names.Type.arrow -> Some ()
-    | _ -> None
+/// This magic function transforms a pattern factory into the same factory supporting nodes.
+let nodify make app (|App|_|) =
+    let f (loc, x) = Lo loc x
+    let (|F|) (n : node<_, _>) = n.loc, n.value
+    let app (x1 : node<_, _>, x2 : node<_, _>) = x1.loc + x2.loc, app (x1, x2)
+    let (|App|_|) (_, u) = match u with App (τ1, τ2) -> Some (τ1, τ2) | _ -> None
+    let Apps, (|Apps1|), (|Apps|_|) = make f (|F|) app (|App|_|)
+    let l f x = f (new location (), x)
+    in
+        Apps >> snd, l (|Apps1|), l (|Apps|_|) 
 
-let Te_Arrow (t1 : ty_expr, t2 : ty_expr) = Te_Apps [Lo t1.loc Te_Arrow_Cons; t1; t2]
-let (|Te_Arrow|_|) = function
-    | Te_Apps [Te_Arrow_Cons; t1; t2] -> Some (t1, t2)
-    | _ -> None
-
-let Te_Arrows τs = (Arrows (fun (e1 : ty_expr, e2) -> Lo e1.loc <| Te_Arrow (e1, e2)) τs).value
+let Te_Apps, (|Te_Apps1|), (|Te_Apps|_|) = nodify make_apps_by Te_App (function Te_App (τ1, τ2) -> Some (τ1, τ2) | _ -> None)
+let Te_Arrow, (|Te_Arrow|_|) = let A = Config.Typing.Names.Type.arrow in make_arrow_by_apps (ULo (Te_Id A)) Te_Apps (function ULo (Te_Id x) when x = A -> Some () | _ -> None) (|Te_Apps|_|)
+let Te_Arrows, (|Te_Arrows1|), (|Te_Arrows|_|) = nodify make_arrows_by Te_Arrow (|Te_Arrow|_|)
+let Te_Foralls, (|Te_Foralls0|), (|Te_Foralls|_|) = make_foralls (fun (α, τ) -> Lo τ.loc <| Te_Forall (α, τ)) (function ULo (Te_Forall (α, τ)) -> Some (α, τ) | _ -> None)
 
 let private Te_Rowed name r = Te_App (ULo <| Te_Id name, ULo <| Te_Row r)
 let private (|Te_Rowed|_|) name = function
@@ -485,20 +584,25 @@ let private (|Te_Rowed|_|) name = function
 
 let Te_Record, Te_Variant, Te_Tuple, (|Te_Record|_|), (|Te_Variant|_|), (|Te_Tuple|_|) = make_rows Te_Rowed (|Te_Rowed|_|)
 
-// special patterns for type patterns
+// old version without the new make_* functions
+//let Tp_Arrow_Cons = Tp_Cons Config.Typing.Names.Type.arrow
+//let (|Tp_Arrow_Cons|_|) = function
+//    | Tp_Cons s when s = Config.Typing.Names.Type.arrow -> Some ()
+//    | _ -> None
+//
+//let Tp_Apps ps = (Apps (fun (τ1, τ2) -> Lo τ1.loc <| Tp_App (τ1, τ2)) ps).value
+//let (|Tp_Apps|_|) = (|Apps|_|) (function Tp_App (ULo τ1, ULo τ2) -> Some (τ1, τ2) | _ -> None)
+//
+//let Tp_Arrow (t1 : ty_patt, t2) = Tp_Apps [Lo t1.loc Tp_Arrow_Cons; t1; t2]
+//let (|Tp_Arrow|_|) = function
+//    | Tp_Apps [Tp_Arrow_Cons; t1; t2] -> Some (t1, t2)
+//    | _ -> None
 
-let Tp_Arrow_Cons = Tp_Cons Config.Typing.Names.Type.arrow
-let (|Tp_Arrow_Cons|_|) = function
-    | Tp_Cons s when s = Config.Typing.Names.Type.arrow -> Some ()
-    | _ -> None
-
-let Tp_Apps ps = (Apps (fun (τ1, τ2) -> Lo τ1.loc <| Tp_App (τ1, τ2)) ps).value
-let (|Tp_Apps|_|) = (|Apps|_|) (function Tp_App (ULo τ1, ULo τ2) -> Some (τ1, τ2) | _ -> None)
-
-let Tp_Arrow (t1 : ty_patt, t2) = Tp_Apps [Lo t1.loc Tp_Arrow_Cons; t1; t2]
-let (|Tp_Arrow|_|) = function
-    | Tp_Apps [Tp_Arrow_Cons; t1; t2] -> Some (t1, t2)
-    | _ -> None
+let Tp_Apps, (|Tp_Apps1|), (|Tp_Apps|_|) = nodify make_apps_by Tp_App (function Tp_App (τ1, τ2) -> Some (τ1, τ2) | _ -> None)
+let Tp_Arrow, (|Tp_Arrow|_|) = let A = Config.Typing.Names.Type.arrow in make_arrow_by_apps (ULo (Tp_Cons A)) Tp_Apps (function ULo (Tp_Cons x) when x = A -> Some () | _ -> None) (|Tp_Apps|_|)
+let Tp_Arrows, (|Tp_Arrows1|), (|Tp_Arrows|_|) = nodify make_arrows_by Tp_Arrow (|Tp_Arrow|_|)
+// TODO: type patterns do not have the forall case yet
+//let Tp_Foralls, (|Tp_Foralls0|), (|Tp_Foralls|_|) = make_foralls (fun (α, τ) -> Lo τ.loc <| Tp_Forall (α, τ)) (function ULo (Tp_Forall (α, τ)) -> Some (α, τ) | _ -> None)
 
 let private Tp_Rowed name r = Tp_App (ULo <| Tp_Var name, ULo <| Tp_Row r)
 let private (|Tp_Rowed|_|) name = function
@@ -559,7 +663,7 @@ type ty_uexpr with
             | Te_HTuple es             -> sprintf "(%s)" (flatten_stringables ", " es)
 
             // arrow must be matched BEFORE app 
-            | Te_Arrow (Te_Arrow _ as t1, t2) -> sprintf "(%O) -> %Os" t1 t2
+            | Te_Arrow (ULo (Te_Arrow _ as t1), t2) -> sprintf "(%O) -> %Os" t1 t2
             | Te_Arrow (t1, t2)               -> sprintf "%O -> %O" t1 t2
 
             | Te_Bottom                -> Config.Printing.dynamic.bottom
@@ -626,11 +730,14 @@ type [< NoComparison; NoEquality >] upatt =
 
 and [< NoComparison; NoEquality >] patt = node<upatt, unit>
 
+//module Old =
+//    let P_Apps ps = (Apps (fun (p1, p2) -> Lo p1.loc <| P_App (p1, p2)) ps).value
+//    let (|P_Apps|_|) = (|Apps|_|) (function P_App (ULo p1, ULo p2) -> Some (p1, p2) | _ -> None)
+
+let P_Apps, (|P_Apps1|), (|P_Apps|_|) = nodify make_apps_by P_App (function P_App (τ1, τ2) -> Some (τ1, τ2) | _ -> None)
+
 let P_Tuple = Row_Tuple (fun (bs, _) -> P_Record bs)
 let (|P_Tuple|_|) = (|Row_Tuple|_|) (function P_Record bs -> Some (bs, None) | _ -> None)
-
-let P_Apps ps = (Apps (fun (p1, p2) -> Lo p1.loc <| P_App (p1, p2)) ps).value
-let (|P_Apps|_|) = (|Apps|_|) (function P_App (ULo p1, ULo p2) -> Some (p1, p2) | _ -> None)
 
 type upatt with
     override this.ToString () = this.pretty
@@ -833,9 +940,10 @@ with
             | Line_Decl d -> d.pretty
     
     
-// misc parsing sugars
+// misc sugars
 //
 
+// TODOL: polish these functions in such a way that they return always a uexpr and always arguments pick exprs
 let lambda_function lambda matchh id (cases : case<_, _, _> list) =
     let loc = let p, _, _ = cases.[0] in p.loc
     let L = Lo loc
@@ -932,12 +1040,13 @@ let Te_Lets x = lets Te_Let x
 let UnApp (op, e : expr) = App (Lo e.loc <| Id op, e)
 let BinApp (e1 : expr, op, e2 : expr) = App (Lo e1.loc <| App (Lo e2.loc <| Id op, e1), e2)
 
-let EApps es = (Apps (fun (e1, e2) -> Lo e1.loc <| App (e1, e2)) es).value
+//let EApps es = (Apps (fun (e1, e2) -> Lo e1.loc <| App (e1, e2)) es).value
+let Apps, (|Apps1|), (|Apps|_|) = nodify make_apps_by App (function App (τ1, τ2) -> Some (τ1, τ2) | _ -> None)
 
 module N = Config.Typing.Names
 
 let List_Nil = Var N.Data.list_nil
-let List_Cons (e1, e2) = EApps [ULo (Var N.Data.list_cons); e1; e2]
+let List_Cons (e1, e2) = Apps [ULo (Var N.Data.list_cons); e1; e2]
 let List_Seq (es : expr list) = List.foldBack (fun e z -> List_Cons (e, Lo e.loc z)) es List_Nil
 
 let P_List_Nil = P_Cons N.Data.list_nil

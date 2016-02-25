@@ -114,7 +114,7 @@ module Error =
         E 18 loc "sides of or-pattern must match different variables: %s are in common" (flatten_stringables ", " xs)
 
     let data_constructor_codomain_invalid loc x c t =
-        E 19 loc "data constructor %s does not construct datatype %O because its codomain is type %O" x c t
+        E 19 loc "data constructor %s does not construct datatype %O because its codomain has type %O" x c t
 
     let data_constructor_bound_to_wrong_symbol loc what x t =
         E 20 loc "data constructor %s in pattern is already bound to %s : %O" x what t

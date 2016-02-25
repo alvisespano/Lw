@@ -181,21 +181,6 @@ let subst_tenv θ (env : tenv) = env.map (fun _ -> subst_ty θ)
 // active patterns for dealing with quantification, instantiation etc. 
 //
 
-let T_Bottom k =
-    let α, tα = ty.fresh_var_and_ty k
-    in
-        T_Forall (α, tα)
-
-let T_ForallK ((α, _), t) = T_Forall (α, t)
-let (|T_ForallK|_|) t =
-    match t with
-    | T_Forall (α, t) ->
-        let k = (t.search_var α).Value
-        in Some ((α, k), t)
-    | _ -> None
-
-let T_ForallsK, (|T_ForallsK0|), (|T_ForallsK|_|) = make_foralls T_ForallK (|T_ForallK|_|)
-
 type ty with
     member t.is_unquantified =
         match t with
@@ -385,8 +370,6 @@ let KUngeneralized k = { forall = Set.empty; kind = k }
 //
 
 type prefix with
-    // TODO: rewrite split, extend and update in a less complicated way and maybe put a compilation flag for switching between the two
-
     member this.split =
         let rec R Q αs =
             match Q with
@@ -443,8 +426,6 @@ let (|Q_Slice|_|) α (Q : prefix) = Q.slice_by (fst >> (=) α)
 
 
 type prefix with
-    // TODO: rewrite these update methods without the overcomplicated slicing thing
-
     #if ENABLE_HML_OPTS
     member Q.update_with_subst (α, t : ty) =
         let θ = !> (new tsubst (α, t))

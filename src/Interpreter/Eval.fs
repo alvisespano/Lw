@@ -165,8 +165,8 @@ and eval_patt ctx Δ p v =
     | P_Or (p1, p2), v                                      -> match R p1 v with None -> R p2 v | Some _ as r -> r
     | P_And (p1, p2), v                                     -> match R p1 v, R p2 v with Some Δ1, Some Δ2 -> Some (Δ1 + Δ2) | _ -> None  
     | P_Cons x, V_Cons (x', []) when x = x'                 -> Some Δ   // TODO: this case is probably unneeded because the case below includes this one as well
-    | P_Apps ((P_Cons x) :: ps), V_Cons (x', vs)
-        when x = x' && ps.Length = vs.Length                -> Some (List.fold2 (fun Δ p v -> either Δ (R (ULo p) v)) Δ ps vs)
+    | P_Apps (ULo (P_Cons x) :: ps), V_Cons (x', vs)
+        when x = x' && List.length ps = List.length vs                -> Some (List.fold2 (fun Δ p v -> either Δ (R (ULo p) v)) Δ (List.map (!>) ps) vs)
     | P_Lit lit, V_Const lit' when lit = lit'               -> Some Δ
     | P_Tuple ps, V_Tuple vs when ps.Length = vs.Length     -> Some (List.fold2 (fun Δ p v -> either Δ (R p v)) Δ ps vs)
     | P_Annot (p, _), v                                     -> R p v

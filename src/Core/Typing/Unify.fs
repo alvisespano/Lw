@@ -180,7 +180,7 @@ module internal Mgu =
         and mgu (ctx : uni_context) Q0 t1_ t2_ : prefix * tksubst =
             let loc = ctx.loc
             let rec R (Q0 : prefix) (t1 : ty) (t2 : ty) =
-              #if DEBUG_UNI_DEEP
+              #if DEBUG_UNI && DEBUG_UNI_DEEP
               L.uni Low "[mgu] %O == %O\n      Q = %O" t1 t2 Q0
               let Q, θ as r =
               #endif
@@ -245,7 +245,7 @@ module internal Mgu =
                         Q2, θ2 ** θ1
 
                 | t1, t2 -> raise (Mismatch (t1, t2))
-              #if DEBUG_UNI_DEEP
+              #if DEBUG_UNI && DEBUG_UNI_DEEP
               L.uni Low "[mgu=] %O == %O\n       %O\n       Q' = %O" t1 t2 θ Q
               r
               #endif

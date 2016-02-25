@@ -17,15 +17,15 @@ open Microsoft.FSharp.Text
 // error exception hierarchy
 //
 
-type location =
-    inherit Parsing.location
-    new (filename : string, line : int, col : int, ?end_line : int, ?end_col : int, ?line_bias : int, ?col_bias : int) =
-        { inherit Parsing.location (filename, line, col, ?end_line = end_line, ?end_col = end_col, ?line_bias = line_bias, ?col_bias = col_bias) }
-
-    new (p1, ?p2, ?line_bias, ?col_bias) =
-        { inherit Parsing.location (p1, ?p2 = p2, ?line_bias = line_bias, ?col_bias = col_bias) }
-
-    new () = { inherit Parsing.location () }
+type location = Parsing.location
+//    inherit Parsing.location
+//    new (filename : string, line : int, col : int, ?end_line : int, ?end_col : int, ?line_bias : int, ?col_bias : int) =
+//        { inherit Parsing.location (filename, line, col, ?end_line = end_line, ?end_col = end_col, ?line_bias = line_bias, ?col_bias = col_bias) }
+//
+//    new (p1, ?p2, ?line_bias, ?col_bias) =
+//        { inherit Parsing.location (p1, ?p2 = p2, ?line_bias = line_bias, ?col_bias = col_bias) }
+//
+//    new () = { inherit Parsing.location () }
 
 
 type located_error (header, message, loc : location) =

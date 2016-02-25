@@ -24,6 +24,10 @@ let rec kmgu (ctx : uni_context) k1_ k2_ =
     let ( ** ) = compose_ksubst
     let loc = ctx.loc
     let rec R k1 k2 =
+      #if DEBUG_UNI && DEBUG_UNI_DEEP
+      L.uni Low "[kmgu] %O == %O" k1 k2
+      let θ as r =
+      #endif
         match k1, k2 with
         | k1, k2 when k1 = k2 ->
             ksubst.empty
@@ -38,8 +42,19 @@ let rec kmgu (ctx : uni_context) k1_ k2_ =
 
         | _ ->
             Report.Error.kind_mismatch loc k1_ k2_ k1 k2
+      #if DEBUG_UNI && DEBUG_UNI_DEEP
+      L.uni Low "[kmgu=] %O == %O\n        %O" k1 k2 θ
+      r
+      #endif
     in
-        R k1_ k2_
+        #if DEBUG_UNI && !DEBUG_UNI_DEEP
+        L.uni Low "[kmgu] %O == %O" k1_ k2_
+        #endif
+        let θ as r = R k1_ k2_
+        #if DEBUG_UNI && !DEBUG_UNI_DEEP
+        L.uni Low "[kmgu=] %O == %O\n        %O" k1_ k2_ θ
+        #endif                    
+        r
 
 type basic_builder with
     member M.kunify loc (k1 : kind) (k2 : kind) =
@@ -48,7 +63,6 @@ type basic_builder with
             let kθ = θ.k
             let! ctx = M.get_uni_context loc
             let kθ = kmgu ctx (subst_kind kθ k1) (subst_kind kθ k2)
-            L.uni Normal "[kU] %O == %O\n     %O" k1 k2 kθ
             do! M.update_θ (!> kθ)
         }
 

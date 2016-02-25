@@ -420,29 +420,32 @@ let (|T_NamedVar|_|) = function
     | T_Var (Va (_, Some _) as α, k) -> Some (α, k)
     | _ -> None
 
-let T_Apps = Apps T_App
-let (|T_Apps|_|) = (|Apps|_|) (function T_App (t1, t2) -> Some (t1, t2) | _ -> None)
+//let T_Apps = Apps T_App
+//let (|T_Apps|_|) = (|Apps|_|) (function T_App (t1, t2) -> Some (t1, t2) | _ -> None)
+//let T_Arrow_Cons = T_Cons (N.Type.arrow, K_Arrows [K_Star; K_Star; K_Star])
+//let (|T_Arrow_Cons|_|) = function
+//    | T_Cons (s, K_Arrows [K_Star; K_Star; K_Star]) when s = N.Type.arrow -> Some ()
+//    | _ -> None
+//
+//let T_Arrow (t1, t2) = T_Apps [T_Arrow_Cons; t1; t2]
+//let (|T_Arrow|_|) = function
+//    | T_Apps [T_Arrow_Cons; t1; t2] -> Some (t1, t2)
+//    | _ -> None
+//
+//let T_Arrows = Arrows T_Arrow
+//let (|T_Arrows|_|) = (|Arrows|_|) (|T_Arrow|_|)
 
+let T_Apps, (|T_Apps1|), (|T_Apps|_|) = make_apps (fun (τ1, τ2) -> T_App (τ1, τ2)) (function T_App (τ1, τ2) -> Some (τ1, τ2) | _ -> None)
+let T_Arrow, (|T_Arrow|_|) = make_arrow_by_apps (T_Cons (N.Type.arrow, K_Arrows [K_Star; K_Star; K_Star])) T_Apps (function T_Cons (x, _) when x = N.Type.arrow -> Some () | _ -> None) (|T_Apps|_|)
+let T_Arrows, (|T_Arrows1|), (|T_Arrows|_|) = make_arrows T_Arrow (|T_Arrow|_|)
 let T_Foralls, (|T_Foralls0|), (|T_Foralls|_|) = make_foralls T_Forall (function T_Forall (α, t) -> Some (α, t) | _ -> None)
 let Fx_Foralls, (|Fx_Foralls0|), (|Fx_Foralls|_|) = make_foralls Fx_Forall (function Fx_Forall (αt, t) -> Some (αt, t) | _ -> None)
 
 let T_ConsApps ((x, k), ts) = T_Apps (T_Cons (x, k) :: ts)
-let (|T_ConsApps|_|) = function
-    | T_Apps (T_Cons (x, k) :: ts) -> Some ((x, k), ts)
+let (|T_ConsApps1|_|) t =
+    match t with
+    | T_Apps1 (T_Cons (x, k) :: ts) -> Some ((x, k), ts)
     | _ -> None
-
-let T_Arrow_Cons = T_Cons (N.Type.arrow, K_Arrows [K_Star; K_Star; K_Star])
-let (|T_Arrow_Cons|_|) = function
-    | T_Cons (s, K_Arrows [K_Star; K_Star; K_Star]) when s = N.Type.arrow -> Some ()
-    | _ -> None
-
-let T_Arrow (t1, t2) = T_Apps [T_Arrow_Cons; t1; t2]
-let (|T_Arrow|_|) = function
-    | T_Apps [T_Arrow_Cons; t1; t2] -> Some (t1, t2)
-    | _ -> None
-
-let T_Arrows = Arrows T_Arrow
-let (|T_Arrows|_|) = (|Arrows|_|) (|T_Arrow|_|)
 
 let T_Row_Var ρ = T_Var (ρ, K_Row)
 
@@ -568,6 +571,38 @@ type kscheme with
 
 // augmentations for types
 //
+
+type ty with
+    static member fresh_var k = T_Var (var.fresh, k)
+    static member fresh_var_and_ty k = let α = var.fresh in α, T_Var (α, k)
+    static member fresh_star_var = ty.fresh_var K_Star
+    static member fresh_star_var_and_ty = ty.fresh_var_and_ty K_Star
+
+    member t.search_var α =
+        let rec R = function
+            | T_Var (β, k) when α = β -> Some k
+            | T_Forall (_, t) -> R t
+            | T_App (t1, t2)  -> l [t1; t2]
+            | T_HTuple ts     -> l ts
+            | _ -> None
+        and l = List.tryPick R
+        in
+            l [t]
+
+let T_Bottom k =
+    let α, tα = ty.fresh_var_and_ty k
+    in
+        T_Forall (α, tα)
+
+let T_ForallK ((α, _), t) = T_Forall (α, t)
+let (|T_ForallK|_|) t =
+    match t with
+    | T_Forall (α, t) ->
+        let k = (t.search_var α).Value
+        in Some ((α, k), t)
+    | _ -> None
+
+let T_ForallsK, (|T_ForallsK0|), (|T_ForallsK|_|) = make_foralls T_ForallK (|T_ForallK|_|)
     
 type var with
     static member add_quantified (Q : prefix) = var.add_quantified (Seq.map fst Q)
@@ -601,23 +636,29 @@ type ty with
             | T_Record row            -> sprintf "{ %s }" (pretty_row "; " Config.Printing.type_annotation_sep row)
             | T_Variant row           -> sprintf "< %s >" (pretty_row " | " Config.Printing.type_annotation_sep row)
             | T_Row row               -> sprintf "(| %s |)" (pretty_row " | " Config.Printing.type_annotation_sep row)
+
             | T_HTuple ([] | [_]) as t -> unexpected "empty or unary htuple: %O" __SOURCE_FILE__ __LINE__ t
             | T_HTuple ts              -> mappen_strings (fun t -> (match t with A _ -> sprintf "%s" | _ -> sprintf "(%s)") (R t))  ", " ts
+
             | T_Sym_Cons (x, __)      -> sprintf "(%s)" x
             | T_Cons (x, _)           -> x
+
             | T_Arrow (LArrow _ as t1, t2) -> sprintf "(%s) -> %s" (R t1) (R t2)
             | T_Arrow (t1, t2)             -> sprintf "%s -> %s" (R t1) (R t2)
+
             | T_App (App s)          -> s
             | T_Closure (x, _, τ, _) -> sprintf "<[%O]>" (Te_Lambda ((x, None), τ))
-            | T_Foralls0 (αs, t)     -> use A = var.add_quantified αs in sprintf "%s %s. %O" Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_prefix_sep αs) t
+
+            | T_ForallsK (αks, t) ->
+                use A = var.add_quantified (List.map fst αks)
+                let ts = List.map T_Var αks
+                in
+                    sprintf "%s %s. %O" Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_prefix_sep ts) t
+
+            | T_Forall _ as t -> unexpected_case __SOURCE_FILE__ __LINE__ t
         and R = wrap_pretty_with_kind R'
         in
             R this
-
-    static member fresh_var k = T_Var (var.fresh, k)
-    static member fresh_var_and_ty k = let α = var.fresh in α, T_Var (α, k)
-    static member fresh_star_var = ty.fresh_var K_Star
-    static member fresh_star_var_and_ty = ty.fresh_var_and_ty K_Star
 
     member this.kinded_fv =
         match this with
@@ -656,20 +697,11 @@ type ty with
         | T_HTuple ts       -> l ts
         | T_Closure _       -> None
 
-    member t.search_var α =
-        let rec R = function
-            | T_Var (β, k) when α = β -> Some k
-            | T_Forall (_, t) -> R t
-            | T_App (t1, t2)  -> l [t1; t2]
-            | T_HTuple ts     -> l ts
-            | _ -> None
-        and l = List.tryPick R
-        in
-            l [t]
-
-//        match t.search (function T_Var (β, _) -> L.hint High "%O = %O = %b" α β (α = β); α = β | _ -> false) with
-//        | Some (T_Var (_, k)) -> Some k
-//        | _ -> None
+    member t.return_ty =
+        match t with
+        | T_Forall (_, t) -> t.return_ty
+        | T_Arrows ts     -> List.last ts
+        | _               -> t
 
 
 type fxty with

@@ -1,4 +1,18 @@
 ﻿
+25/12/2016:
+* REFACT: enormous and complicated redesign and abstraction of pattern and constructor factories in Absyn
+* FIX: T_Forall is now pretty printed with kind annotations on quantified vars when kind is not star
+* REFACT: Intrinsic.envs0 are now computed lazyly
+* FIX: datatype declarations fixed: need more testing of course, but seems to work
+
+
+24/12/2016:
+* REFACT: Globals.location type removed: it didn't make sense, as the superclass Parsing.location is enough
+* NEW: location can now be merged with another location and subtend an area
+* NEW: make_patterns generalizes the creation of multiple-occurrence constructors and active patterns given the single-shot versions of the constructor and the pattern
+* UP: arrows and apps constructors and active patterns are now created by using make_patterns
+
+
 23/2/2016:
 * REFACT: reserved identifiers tools polished, as well as list special constructor names
 * REFACT: wildcard_reserved_id does not exist anymore: fresh_reserved_id is used instead
