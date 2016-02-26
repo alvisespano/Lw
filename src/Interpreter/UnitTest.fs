@@ -19,6 +19,12 @@ open Lw.Core.Typing.Meta
 open Lw.Core.Typing.Ops
 open Lw.Core.Typing.Report
 open Lw.Core.Typing.StateMonad
+open PPrint
+
+type logger with
+    member this.test pri fmt = this.custom Config.Log.test_color "TEST" Config.Log.cfg.test_threshold pri fmt
+    member this.test_ok fmt = this.custom Config.Log.test_ok_color "OK" Min Normal fmt
+    member this.test_failed fmt = this.custom_error Config.Log.test_failed_color "FAIL" fmt
 
 type [< NoComparison; NoEquality >] test_result =
     | Ok of string option
@@ -39,13 +45,17 @@ type typechecker () =
     member this.Wk_and_eval_ty_expr_fx τ = this.unM Wk_and_eval_ty_expr_fx τ
     member __.auto_generalize loc (t : ty) = t.auto_generalize loc st.Γ
 
-    member this.parse_and_Wk_and_eval_ty_expr s =
+    member this.parse_expected_ty_expr s =
         let τ =
             try parse_ty_expr s
             with :? syntax_error as e -> unexpected "syntax error while parsing type expression: %s\n%O" __SOURCE_FILE__ __LINE__ s e
+        let ϕ, k = this.Wk_and_eval_ty_expr_fx τ
+        let ϕ =
+            match ϕ with
+            | Fx_F_Ty t -> Fx_F_Ty <| this.auto_generalize (new location ()) t
+            | _         -> ϕ
         in
-            this.Wk_and_eval_ty_expr_fx τ
-
+            ϕ, k
 
 [< RequireQualifiedAccess >]
 type [< NoEquality; NoComparison >] parsed =
@@ -55,73 +65,99 @@ with
     override this.ToString () = this.pretty
     member this.pretty =
         match this with
-        | Expr e -> sprintf "expr[%s]" e.pretty
-        | Decl d -> sprintf "decl[%s]" d.pretty
+        | Expr e -> sprintf "(expr) %s" e.pretty
+        | Decl d -> sprintf "(decl) %s" d.pretty
 
 let parse_expr_or_decl s =  // TODO: support parsing of type expressions and kinds as well, so everything can be tested
     try parsed.Expr (parse_expr s)
     with :? syntax_error ->
         try parsed.Decl (parse_decl s)
         with :? syntax_error as e -> unexpected "syntax error while parsing expression or declaration: %s\n%O" __SOURCE_FILE__ __LINE__ s e
-        
 
-let test_ok msg =
-    L.test Low "[OK] %s" msg
+
+// PPrint extensions
+//
+      
+let colon2 = txt Config.Printing.kind_annotation_sep
+
+let any x = fmt "%O" x
+
+let was_expected (ϕok, kok) = txt "expected:" </> (align <| vsep [txt "type:" </> any ϕok; txt "kind:" </> any kok])
+
+let pp_static_error (input : string) (e : static_error) =
+    let term =
+        let x = e.location.start_col - e.location.col_bias
+        let y = e.location.end_col - e.location.col_bias
+        in
+            input.Substring (x, y - x)
+    in
+        txt e.header <.> ([txt "at:" </> any e.location; txt "term:" </> txt term; txt "message:" </> txt e.message_body] |> vsep |> align)
+
+// logging shorcuts
+//
+
+let render_left doc = render (Some (Console.BufferWidth - L.cfg.header_max_len - 1)) doc
+
+let test_ok doc =
+    L.test_ok "%s" (render_left doc)
     0
 
-let test_failed msg =
-    L.fatal_error "[FAIL] %s" msg
+let test_failed doc =
+    L.test_failed "%s" (render_left doc)
     1
 
-let is_test_ok (t : fxty) (et, ek) = et = t && ek = t.kind
+let testing doc =
+    L.test Low "%s" (render_left doc)
+
+
+// testers
+//
+
+let is_test_ok (ϕres : fxty) (ϕok, kok) =
+    let p x = use N = var.reset_normalization in sprintf "%O" x
+    let (===) a b = p a = p b
+    in
+        ϕok === ϕres && kok === ϕres.kind
 
 let decl_dummy_ty = Fx_F_Ty T_Unit
 
-let handle_exn e = ignore <| Interactive.handle_exn e
 
 let test1 (tc : typechecker) (input, res) =
     let typecheck1 s =
-        match parse_expr_or_decl s with
+        let p = parse_expr_or_decl s
+        testing (align (txt "input:" </> txt s <.> txt "parsed:" </> any p))
+        match p with
         | parsed.Expr e as p ->
             let ϕ = tc.W_expr e
-            L.test Low "%O : %O" e ϕ
-            ϕ
+            p, ϕ
 
-        | parsed.Decl d ->
+        | parsed.Decl d as p ->
             tc.W_decl d
-            decl_dummy_ty
+            p, decl_dummy_ty
     in
         match res with
         | Ok so ->
-            let t, k =
+            let ϕok, kok =
                 match so with
-                | Some s -> try tc.parse_and_Wk_and_eval_ty_expr s
-                            with e ->
-                                L.unexpected_error "expected type expression \"%O\" is invalid due to an exception:" s
-                                handle_exn e
-                                unexpected "%s" __SOURCE_FILE__ __LINE__ s (pretty_exn_and_inners e)
-                | None   -> let t = decl_dummy_ty in t, t.kind
+                | Some s -> try tc.parse_expected_ty_expr s
+                            with e -> unexpected "%s" __SOURCE_FILE__ __LINE__ (pretty_exn_and_inners e)   
+                | None   -> let ϕ = decl_dummy_ty in ϕ, ϕ.kind
             in
                 try
-                    let ϕ = typecheck1 input
-                    if is_test_ok ϕ (t, k) then test_ok "ok"
-                    else test_failed <| sprintf "test was expected to have type '%O' but got '%O'" t ϕ
+                    let p, ϕres = typecheck1 input
+                    if is_test_ok ϕres (ϕok, kok) then test_ok (txt "translated:" </> any p <.> txt "type:" </> any ϕres)
+                    else test_failed (any p <+> colon <+> any ϕres <.> was_expected (ϕok, kok))
                 with :? static_error as e ->
-                    let r = test_failed <| sprintf "test should be accepted with type %O but a %s occurred:" t e.header
-                    handle_exn e
-                    r
-
+                    test_failed (txt "raised:" </> pp_static_error input e <.> was_expected (ϕok, kok))
+                    
         | Wrong T ->
             assert T.IsSubclassOf typeof<static_error>
             try
-               let _ = typecheck1 input
-               test_failed <| sprintf "a %s was expected from testing input: %s" T.Name input
+               let p, _ = typecheck1 input
+               test_failed (any p <.> (txt "expected error:" <+> txt T.Name))
             with :? static_error as e ->
-                if e.GetType().IsSubclassOf T then
-                    L.test Min "%s" (pretty_exn_and_inners e)
-                    let r = test_ok <| sprintf "input \"%s\" was justly rejected" input
-                    L.test Min "static error was: %s" (pretty_exn_and_inners e)
-                    r
+                if (let t = e.GetType() in t = T || t.IsSubclassOf T) then
+                    test_ok (txt "input was justly rejected" <.> (txt "the error was:" </> pp_static_error input e))
                 else reraise ()
 
 let test ts =
@@ -134,7 +170,7 @@ let test ts =
 
 module Tests =
 
-    let ok s = Ok (Some s)
+    let type_ok s = Ok (Some s)
     let any = Ok None
     let wrong< 'exn when 'exn :> static_error > = Wrong typeof<'exn>
     let wrong_type = wrong<type_error>
@@ -142,21 +178,24 @@ module Tests =
     
     let intrinsics =
       [
-        "[]",                                       ok "list 'a"
-        "[1; 2]",                                   ok "list int"
-        "true :: false :: true",                    ok "list bool"
+        "[]",                                       type_ok "list 'a"
+        "[1; 2]",                                   type_ok "list int"
+        "true 1",                                   type_ok "int"
+        "true :: false :: true",                    wrong_type
+        "'a' :: 'b' :: 'c' :: []",                  type_ok "list char"
+        "'a' :: 'b' :: ['c']",                      type_ok "list char"
         "[true; 2]",                                wrong_type
-        "(Some 0 :: None) :: [Some 2]",             ok "list (list (option int))"   // TODO: support pipelining operators "|>" and "<|" in expressions AS WELL AS in type expressions
-        "[None]",                                   ok "list (option 'a)"
+        "(Some 0 :: [None]) :: [Some 2]",             type_ok "list (list (option int))"   // TODO: support pipelining operators "|>" and "<|" in expressions AS WELL AS in type expressions
+        "[None]",                                   type_ok "list (option 'a)"
       ]
 
     let HM =
       [
-        "fun x -> x",                               ok "forall 'a. 'a -> 'a"
-        "fun f x -> f x",                           ok "forall 'a 'b. ('a -> 'b) -> 'a -> 'b"
+        "fun x -> x",                               type_ok "forall 'a. 'a -> 'a"
+        "fun f x -> f x",                           type_ok "forall 'a 'b. ('a -> 'b) -> 'a -> 'b"
         "fun a, b -> a",                            wrong_syntax
         "inc true",                                 wrong_type
-        "let i = fun x -> x in i i",                ok "forall 'a. 'a -> 'a"
+        "let i = fun x -> x in i i",                type_ok "forall 'a. 'a -> 'a"
         "fun i -> i i",                             wrong_type // infinite type
         "fun i -> (i 1, i true)",                   wrong_type // polymorphic use of parameter
 //        "single id",                                ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"

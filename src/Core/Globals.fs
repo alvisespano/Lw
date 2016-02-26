@@ -18,15 +18,6 @@ open Microsoft.FSharp.Text
 //
 
 type location = Parsing.location
-//    inherit Parsing.location
-//    new (filename : string, line : int, col : int, ?end_line : int, ?end_col : int, ?line_bias : int, ?col_bias : int) =
-//        { inherit Parsing.location (filename, line, col, ?end_line = end_line, ?end_col = end_col, ?line_bias = line_bias, ?col_bias = col_bias) }
-//
-//    new (p1, ?p2, ?line_bias, ?col_bias) =
-//        { inherit Parsing.location (p1, ?p2 = p2, ?line_bias = line_bias, ?col_bias = col_bias) }
-//
-//    new () = { inherit Parsing.location () }
-
 
 type located_error (header, message, loc : location) =
     inherit Exception (message)
@@ -80,7 +71,6 @@ type logger () =
     member this.not_implemented fmt = this.custom_error Config.Log.not_implemented_color "NOT IMPLEMENTED" fmt
     member this.uni pri fmt = this.custom_debug Config.Log.uni_color "UNI" pri fmt
     member this.resolve pri fmt = this.custom_debug Config.Log.resolve_color "RESOLVE" pri fmt
-    member this.test pri fmt = this.custom Config.Log.test_color "TEST" Config.Log.cfg.test_threshold pri fmt
 
     member this.nhint n pri fmt =
         this.cfg.hint_header <- Some (sprintf Config.Log.hint_header_fmt n)

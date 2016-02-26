@@ -114,9 +114,9 @@ let rec subst_kind (kθ : ksubst) =
 let subst_var (tθ : tsubst) α =
     match tθ.search α with
     #if DEBUG
-    | Some (T_Var (β, _) as t) -> L.warn Min "substituting var: %s" (subst<_>.pretty_item (α, t)); β
-    | None                     -> α
-    | t                        -> unexpected "substituting var to non-var type: %s" __SOURCE_FILE__ __LINE__ (subst<_>.pretty_item (α, t))
+    | Some (T_Var (β, _)) -> β
+    | None                -> α
+    | t                   -> unexpected "substituting var to non-var type: %s" __SOURCE_FILE__ __LINE__ (subst<_>.pretty_item (α, t))
     #else
     | Some (T_Var (β, _)) -> β
     | _                   -> α

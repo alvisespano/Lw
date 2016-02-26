@@ -78,6 +78,7 @@ let rec W_expr (ctx : context) (e0 : expr) =
             #endif
             let! (ϕ : fxty) = W_expr' ctx e0
             do! resolve_constraints ctx e0
+            // TODOH: insert automatic generalization here, besides automatic resolution
             #if DEBUG_INFERENCE
             let! Q' = M.get_Q
             let! θ' = M.get_θ
@@ -404,6 +405,7 @@ and W_decl' (ctx : context) (d0 : decl) =
             do! resolve_constraints ctx e
         }
     let jk decl_qual x t = if decl_qual.over then Jk_Inst (x, t.GetHashCode ()) else Jk_Var x
+
     let gen_bind prefixes ({ id = x; qual = dq; expr = e0; to_bind = ϕ } as gb) =
         let loc = e0.loc
         let Lo x = Lo loc x
@@ -477,7 +479,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                             let! ϕe = W_expr ctx e
                             let te = ϕe.ftype
                             return! M.fork_Γ <| M {
-                                // TODOL: support codomain annotations after parameters like in "let f x y : int = ..."
+                                // TODOL: support return type annotations after parameters like in "let f x y : int = ..."
                                 let (|B_Unannot|B_Annot|B_Patt|) = function
                                     | ULo (P_Var x)                    -> B_Unannot x
                                     | ULo (P_Annot (ULo (P_Var x), τ)) -> B_Annot (x, τ)
@@ -604,8 +606,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                 let! σ = M.bind_generalized_Γ (Jk_Data x) Jm_Normal (Fx_F_Ty tx)
                 Report.prompt ctx Config.Printing.Prompt.data_decl_prefixes x σ None
 
-
-
+        // TODOL: implement kind aliases
         | D_Kind _ ->
             return not_implemented "%O" __SOURCE_FILE__ __LINE__ d0
     }  

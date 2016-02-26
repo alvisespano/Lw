@@ -856,6 +856,30 @@ let (|Id|_|) = function
 let Tuple = Row_Tuple Record
 let (|Tuple|_|) = (|Row_Tuple|_|) (function Record (bs, o) -> Some (bs, o) | _ -> None)
 
+let UnApp (op, e : expr) = App (Lo e.loc <| Id op, e)
+let BinApp (e1 : expr, op, e2 : expr) = App (Lo e1.loc <| App (Lo e2.loc <| Id op, e1), e2)
+
+//let EApps es = (Apps (fun (e1, e2) -> Lo e1.loc <| App (e1, e2)) es).value
+let Apps, (|Apps1|), (|Apps|_|) = nodify make_apps_by App (function App (τ1, τ2) -> Some (τ1, τ2) | _ -> None)
+
+module N = Config.Typing.Names
+
+let List_Nil = Var N.Data.list_nil
+let List_Cons (e1, e2) = Apps [ULo (Var N.Data.list_cons); e1; e2]
+let List_Seq (es : expr list) = List.foldBack (fun e z -> List_Cons (e, Lo e.loc z)) es List_Nil
+
+let (|List_Cons|_|) = function
+    | Apps [ULo (Var s); e1; e2] when s = N.Data.list_cons -> Some (e1, e2)
+    | _ -> None
+let (|List_Nil|_|) = function
+    | Var s when s = N.Data.list_nil -> Some ()
+    | _ -> None
+
+let P_List_Nil = P_Cons N.Data.list_nil
+let P_List_Cons (p1, p2) = P_Apps [ULo (P_Cons N.Data.list_cons); p1; p2]
+let P_List_Seq (ps : patt list) = List.foldBack (fun p z -> P_List_Cons (p, Lo p.loc z)) ps P_List_Nil
+
+
 type uexpr with
     override this.ToString () = this.pretty
 
@@ -870,8 +894,13 @@ type uexpr with
             in
                 (|Application|) (|L|_|) (|R|_|)
         let (|Sym|_|) = (|Sym|_|) (function Var x | FreeVar x -> Some (x, x) | _ -> None)
+        let rec (|List|_|) = function
+            | List_Nil -> Some []
+            | List_Cons (e1, ULo (List e2)) -> Some (e1 :: e2)
+            | _ -> None
         match this with
             | Lit l                 -> l.pretty
+            | List es               -> sprintf "[%s]" (flatten_stringables "; " es)
             | Sym x                 -> sprintf "(%s)" x
             | Var x                 -> sprintf "%s" x
             | Reserved_Cons x       -> x
@@ -940,7 +969,7 @@ with
             | Line_Decl d -> d.pretty
     
     
-// misc sugars
+// additional sugars
 //
 
 // TODOL: polish these functions in such a way that they return always a uexpr and always arguments pick exprs
@@ -1037,21 +1066,6 @@ let lets lett (ds, e) = List.foldBack (fun d e -> Lo e.loc <| lett (d, e)) ds e
 let Lets x = lets Let x
 let Te_Lets x = lets Te_Let x
 
-let UnApp (op, e : expr) = App (Lo e.loc <| Id op, e)
-let BinApp (e1 : expr, op, e2 : expr) = App (Lo e1.loc <| App (Lo e2.loc <| Id op, e1), e2)
-
-//let EApps es = (Apps (fun (e1, e2) -> Lo e1.loc <| App (e1, e2)) es).value
-let Apps, (|Apps1|), (|Apps|_|) = nodify make_apps_by App (function App (τ1, τ2) -> Some (τ1, τ2) | _ -> None)
-
-module N = Config.Typing.Names
-
-let List_Nil = Var N.Data.list_nil
-let List_Cons (e1, e2) = Apps [ULo (Var N.Data.list_cons); e1; e2]
-let List_Seq (es : expr list) = List.foldBack (fun e z -> List_Cons (e, Lo e.loc z)) es List_Nil
-
-let P_List_Nil = P_Cons N.Data.list_nil
-let P_List_Cons (p1, p2) = P_Apps [ULo (P_Cons N.Data.list_cons); p1; p2]
-let P_List_Seq (ps : patt list) = List.foldBack (fun p z -> P_List_Cons (p, Lo p.loc z)) ps P_List_Nil
 
 
 

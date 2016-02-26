@@ -1,4 +1,9 @@
 ﻿
+26/2/2016:
+* FIX: location column numbers and biases are probably wrong: fixed now but not sure it's really done
+* UP: UnitTest messages rewritten using PPrint library of document formatting combinators
+
+
 25/12/2016:
 * REFACT: enormous and complicated redesign and abstraction of pattern and constructor factories in Absyn
 * FIX: T_Forall is now pretty printed with kind annotations on quantified vars when kind is not star
