@@ -12,8 +12,6 @@ open System
 open System.Collections.Generic
 open System.Diagnostics
 open FSharp.Common
-open FSharp.Common.Prelude
-open FSharp.Common.Log
 open Lw.Core
 open Lw.Core.Globals
 open Lw.Core.Absyn
@@ -603,6 +601,10 @@ let (|T_ForallK|_|) t =
     | _ -> None
 
 let T_ForallsK, (|T_ForallsK0|), (|T_ForallsK|_|) = make_foralls T_ForallK (|T_ForallK|_|)
+
+
+// pretty printer for types, flex types and schemes
+//
     
 type var with
     static member add_quantified (Q : prefix) = var.add_quantified (Seq.map fst Q)
@@ -611,8 +613,9 @@ let inline wrap_pretty_with_kind R' t =
     let R t =
         let k = (^t : (member kind : kind) t)
         in
-            if k = K_Star then R' t
-            else sprintf "(%s :: %O)" (R' t) k
+            match k with
+            | K_Arrows1 ks when List.forall ((=) K_Star) ks -> R' t
+            | _                                             -> sprintf "(%s :: %O)" (R' t) k
     in
         R t
 
@@ -660,14 +663,14 @@ type ty with
         in
             R this
 
-    member this.kinded_fv =
+    member this.kinded_ftv =
         match this with
         | T_Var (α, k)              -> Set.singleton (α, k) 
         | T_Closure (_, _, _, k)   
         | T_Cons (_, k)             -> Set.empty
-        | T_HTuple ts               -> List.fold (fun r (t : ty) -> Set.union r t.kinded_fv) Set.empty ts
-        | T_App (t1, t2)            -> Set.union t1.kinded_fv t2.kinded_fv
-        | T_Forall (α, t)           -> Set.filter (fst >> (=) α >> not) t.kinded_fv
+        | T_HTuple ts               -> List.fold (fun r (t : ty) -> Set.union r t.kinded_ftv) Set.empty ts
+        | T_App (t1, t2)            -> Set.union t1.kinded_ftv t2.kinded_ftv
+        | T_Forall (α, t)           -> Set.filter (fst >> (=) α >> not) t.kinded_ftv
 
     member this.fv =
         match this with

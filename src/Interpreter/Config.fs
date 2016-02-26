@@ -8,8 +8,8 @@ module Lw.Interpreter.Config
 
 open System
 open Printf
-open FSharp.Common.Prelude
 open Lw.Core.Absyn
+open FSharp.Common
 
 [<Measure>] type s
 

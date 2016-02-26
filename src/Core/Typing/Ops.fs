@@ -6,7 +6,6 @@
  
 module Lw.Core.Typing.Ops
 
-open FSharp.Common.Prelude
 open FSharp.Common.Log
 open FSharp.Common
 open Lw.Core
@@ -339,6 +338,13 @@ type scheme with
 let internal fv_env fv (env : Env.t<_, _>) = env.fold (fun αs _ v -> Set.union αs (fv v)) Set.empty
 
 let fv_Γ (Γ : jenv) = fv_env (fun { scheme = σ } -> σ.fv) Γ
+
+type ty with
+    member t.auto_generalize loc Γ =
+        let αs = t.fv - fv_Γ Γ
+        if t.is_unquantified then T_Foralls (Set.toList αs, t)
+        elif not αs.IsEmpty then Report.Error.unquantified_variables_in_type loc t
+        else t
 
 
 // operations over kinds

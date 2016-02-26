@@ -4,7 +4,7 @@ module Lw.Core.Lexer
 
 open System
 open Microsoft.FSharp.Text.Lexing
-open FSharp.Common.Prelude
+
 open FSharp.Common.Parsing.LexYacc
 open Lw.Core.Absyn
 open Lw.Core.Parser

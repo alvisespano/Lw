@@ -6,7 +6,7 @@ open Microsoft.FSharp.Text.Parsing.ParseHelpers
 # 1 "Parser.fsy"
 
 
-open FSharp.Common.Prelude
+open FSharp.Common
 open FSharp.Common.Parsing.LexYacc
 open Lw.Core
 open Lw.Core.Absyn

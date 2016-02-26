@@ -6,7 +6,7 @@
  
 module Lw.Core.Typing.Unify
 
-open FSharp.Common.Prelude
+
 open FSharp.Common.Log
 open FSharp.Common
 open Lw.Core.Absyn
@@ -302,7 +302,7 @@ type type_inference_builder with
 
 type ty with
     member t1.try_instance_of ctx (t2 : ty) =
-        let Q = prefix.B { for α, k in t1.kinded_fv + t2.kinded_fv do yield α, Fx_Bottom k }
+        let Q = prefix.B { for α, k in t1.kinded_ftv + t2.kinded_ftv do yield α, Fx_Bottom k }
         let _, θ = mgu ctx Q t1 t2
         in
             if t2.fv.IsSubsetOf θ.dom then Some θ   // TODO: in https://web.cecs.pdx.edu/~mpj/thih/TypingHaskellInHaskell.html they define a "match" function similar to one-way-only MGU, useful here!

@@ -8,7 +8,7 @@ module Lw.Interpreter.Intrinsic
 
 open System
 open System.Text.RegularExpressions
-open FSharp.Common.Prelude
+
 open FSharp.Common.Log
 open FSharp.Common
 open Lw.Core.Absyn

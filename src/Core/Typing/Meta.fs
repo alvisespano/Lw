@@ -6,7 +6,7 @@
  
 module Lw.Core.Typing.Meta
 
-open FSharp.Common.Prelude
+
 open FSharp.Common.Log
 open FSharp.Common
 open Lw.Core

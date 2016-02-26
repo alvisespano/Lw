@@ -10,7 +10,7 @@ module Lw.Core.Globals
 open System
 open FSharp.Common
 open FSharp.Common.Log
-open FSharp.Common.Prelude
+
 open Microsoft.FSharp.Text
 
 

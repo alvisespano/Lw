@@ -8,7 +8,7 @@ module Lw.Core.Config
 
 open System
 open Printf
-open FSharp.Common.Prelude
+
 
 (* -- Compilation Switches --
  *

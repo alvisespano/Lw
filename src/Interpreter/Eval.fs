@@ -10,7 +10,7 @@ module Lw.Interpreter.Eval
 #nowarn "40"
 
 open System
-open FSharp.Common.Prelude
+
 open FSharp.Common.Parsing
 open FSharp.Common.Log
 open FSharp.Common

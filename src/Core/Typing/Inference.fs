@@ -11,7 +11,7 @@ module Lw.Core.Typing.Inference
 open System
 open System.Text.RegularExpressions
 open System.Diagnostics
-open FSharp.Common.Prelude
+
 open FSharp.Common.Log
 open FSharp.Common
 open Lw.Core

@@ -8,7 +8,6 @@ module Lw.Interpreter.UnitTest
 
 open System
 open FSharp.Common
-open FSharp.Common.Prelude
 open FSharp.Common.Log
 open Lw.Core
 open Lw.Core.Parsing
@@ -17,7 +16,9 @@ open Lw.Core.Absyn
 open Lw.Core.Typing.Defs
 open Lw.Core.Typing.Inference
 open Lw.Core.Typing.Meta
+open Lw.Core.Typing.Ops
 open Lw.Core.Typing.Report
+open Lw.Core.Typing.StateMonad
 
 type [< NoComparison; NoEquality >] test_result =
     | Ok of string option
@@ -25,7 +26,7 @@ type [< NoComparison; NoEquality >] test_result =
 
 // TODO: reuse this for interactive as well
 type typechecker () =
-    let mutable st = { Typing.StateMonad.state.empty with Γ = Intrinsic.envs.envs0.Γ; γ = Intrinsic.envs.envs0.γ }
+    let mutable st = { state.empty with Γ = Intrinsic.envs.envs0.Γ; γ = Intrinsic.envs.envs0.γ }
 
     member private __.unM f x =
         let ctx0 = context.top_level
@@ -36,6 +37,7 @@ type typechecker () =
     member this.W_expr e = this.unM W_expr e
     member this.W_decl d = this.unM W_decl d
     member this.Wk_and_eval_ty_expr_fx τ = this.unM Wk_and_eval_ty_expr_fx τ
+    member __.auto_generalize loc (t : ty) = t.auto_generalize loc st.Γ
 
     member this.parse_and_Wk_and_eval_ty_expr s =
         let τ =
@@ -56,7 +58,7 @@ with
         | Expr e -> sprintf "expr[%s]" e.pretty
         | Decl d -> sprintf "decl[%s]" d.pretty
 
-let parse_expr_or_decl s =
+let parse_expr_or_decl s =  // TODO: support parsing of type expressions and kinds as well, so everything can be tested
     try parsed.Expr (parse_expr s)
     with :? syntax_error ->
         try parsed.Decl (parse_decl s)
@@ -64,11 +66,11 @@ let parse_expr_or_decl s =
         
 
 let test_ok msg =
-    L.test Low "%s" msg
+    L.test Low "[OK] %s" msg
     0
 
 let test_failed msg =
-    L.fatal_error "%s" msg
+    L.fatal_error "[FAIL] %s" msg
     1
 
 let is_test_ok (t : fxty) (et, ek) = et = t && ek = t.kind
@@ -81,9 +83,9 @@ let test1 (tc : typechecker) (input, res) =
     let typecheck1 s =
         match parse_expr_or_decl s with
         | parsed.Expr e as p ->
-            let t = tc.W_expr e
-            L.test Low "%O : %O" e t
-            t
+            let ϕ = tc.W_expr e
+            L.test Low "%O : %O" e ϕ
+            ϕ
 
         | parsed.Decl d ->
             tc.W_decl d
@@ -101,9 +103,9 @@ let test1 (tc : typechecker) (input, res) =
                 | None   -> let t = decl_dummy_ty in t, t.kind
             in
                 try
-                    let tr = typecheck1 input
-                    if is_test_ok tr (t, k) then test_ok "ok"
-                    else test_failed <| sprintf "test was expected to have type: %O" t
+                    let ϕ = typecheck1 input
+                    if is_test_ok ϕ (t, k) then test_ok "ok"
+                    else test_failed <| sprintf "test was expected to have type '%O' but got '%O'" t ϕ
                 with :? static_error as e ->
                     let r = test_failed <| sprintf "test should be accepted with type %O but a %s occurred:" t e.header
                     handle_exn e
@@ -134,7 +136,7 @@ module Tests =
 
     let ok s = Ok (Some s)
     let any = Ok None
-    let wrong< 'exn when 'exn :> static_error > = Wrong typeof<'exn> //function :? 'exn as e -> Some (e :> static_error) | _ -> None)
+    let wrong< 'exn when 'exn :> static_error > = Wrong typeof<'exn>
     let wrong_type = wrong<type_error>
     let wrong_syntax = wrong<syntax_error>
     
@@ -144,6 +146,8 @@ module Tests =
         "[1; 2]",                                   ok "list int"
         "true :: false :: true",                    ok "list bool"
         "[true; 2]",                                wrong_type
+        "(Some 0 :: None) :: [Some 2]",             ok "list (list (option int))"   // TODO: support pipelining operators "|>" and "<|" in expressions AS WELL AS in type expressions
+        "[None]",                                   ok "list (option 'a)"
       ]
 
     let HM =

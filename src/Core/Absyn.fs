@@ -11,7 +11,7 @@ module Lw.Core.Absyn
 open System
 open System.Collections.Generic
 open FSharp.Common
-open FSharp.Common.Prelude
+
 open FSharp.Common.Log
 open FSharp.Common.Parsing
 open Lw.Core.Globals

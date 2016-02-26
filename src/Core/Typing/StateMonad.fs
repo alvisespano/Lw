@@ -6,7 +6,7 @@
  
 module Lw.Core.Typing.StateMonad
 
-open FSharp.Common.Prelude
+
 open FSharp.Common.Log
 open FSharp.Common
 open Lw.Core
@@ -345,13 +345,10 @@ type type_inference_builder (loc) =
             return! M.bind_Γ jk { mode = jm; scheme = {  constraints = cs; fxty = ϕ } }
         }
 
-    member M.auto_geneneralize (tx : ty) =
+    member M.auto_geneneralize (t : ty) =
         M {
             let! Γ = M.get_Γ
-            if tx.is_unquantified then
-                let αs = tx.fv - fv_Γ Γ
-                return T_Foralls (Set.toList αs, tx)
-            else return tx
+            return t.auto_generalize loc Γ
         }
         
     member M.add_prefix α t =

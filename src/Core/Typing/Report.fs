@@ -6,8 +6,8 @@
  
 module Lw.Core.Typing.Report
 
+open FSharp.Common
 open FSharp.Common.Parsing
-open FSharp.Common.Prelude
 open FSharp.Common.Log
 open Lw.Core
 open Lw.Core.Absyn
@@ -132,8 +132,8 @@ module Error =
     let skolemized_type_variable_escaped loc tsk =
         E 24 loc "skolem type variable %O escaped" tsk
 
-//    let annot_flex_type loc ϕ =
-//        E 25 loc "type expression is a flexible type where a standard (System-F) type is expected: %O" ϕ
+    let unquantified_variables_in_type loc t =
+        E 25 loc "type has unquantified type variables: %O" t
 
 
 [< RequireQualifiedAccess >]

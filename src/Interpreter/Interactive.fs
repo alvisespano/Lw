@@ -13,7 +13,7 @@ open Lw.Core
 open Lw.Core.Globals
 open Lw.Interpreter.Intrinsic
 open Lw.Core.Typing.Defs
-open FSharp.Common.Prelude
+
 open FSharp.Common.Log
 open FSharp.Common
 
