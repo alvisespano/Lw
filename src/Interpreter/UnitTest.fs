@@ -150,6 +150,7 @@ let is_test_ok (ϕres : fxty) (ϕok : fxty, kok : kind) =
             r.Replace (Config.Printing.dynamic.flex_forall, Config.Printing.dynamic.forall)     // replace flex type capitalized Forall with the lowercase one
     let (===) a b = p a = p b
     in
+        // TODO: when flex types are different output a warning or return a special result to the caller, e.g. a variant Equal|AlmostEqual|NotEqual
         (ϕok === ϕres || ϕok.ftype === ϕres.ftype) && kok === ϕres.kind
 
 let decl_dummy_ty = Fx_F_Ty T_Unit
@@ -167,7 +168,7 @@ let test1 (tchk : typechecker) (input, res) =
                 match d.value with
                 | D_Bind [{ patt = ULo (P_Var x) }] -> tchk.lookup_var_Γ x
                 | _ -> decl_dummy_ty
-        p, ϕ, ["translated", txt p.pretty_translated; "type", any ϕ]
+        p, ϕ, ["translated", txt p.pretty_translated; "flex type", any ϕ; "F-type", any ϕ.ftype]
     in
         match res with
         | Ok so ->
@@ -179,7 +180,7 @@ let test1 (tchk : typechecker) (input, res) =
             in
                 try
                     let _, ϕres, infs1 = typecheck1 input
-                    if is_test_ok ϕres (ϕok, kok) then test_ok "correct type" infs1
+                    if is_test_ok ϕres (ϕok, kok) then test_ok "type is ok" infs1
                     else test_failed "wrong type or kind" <| infs1 @ expected_infos (ϕok, kok)
                 with :? static_error as e ->
                     test_failed "static error thrown" <| static_error_infos input e @ expected_infos (ϕok, kok)
@@ -237,8 +238,9 @@ module Tests =
         "let i = fun x -> x in i i",                type_ok "forall 'a. 'a -> 'a"
         "fun i -> i i",                             wrong_type // infinite type
         "fun i -> (i 1, i true)",                   wrong_type // polymorphic use of parameter
+        "let id x = x",                             type_ok "forall 'a. 'a -> 'a"
         "let single x = [x]",                       type_ok "forall 'a. 'a -> list 'a"
-//        "single id",                                ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
+        "single id",                                type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
 //        "choose (fun x y -> x) (fun x y -> y)",     ok "forall 'a. 'a -> 'a -> 'a"
 //        "choose id",                                ok "forall ('a :> forall 'b. 'b -> 'b). 'a -> 'a"
       ]
