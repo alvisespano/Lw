@@ -82,7 +82,8 @@ let rec enclose ctx (x, e, Δ : env ref as cl) = V_Redux (Config.Interactive.pre
 and eval_expr (ctx : context) Δ (e0 : expr) =
     ctx.cancellation_token.ThrowIfCancellationRequested ()
     let E Δ e = eval_expr ctx Δ e
-    match e0.value with
+    let ue = match e0.translated with Translated u -> u
+    match ue with
     | Lit lit            -> V_Const lit
     | FreeVar x
     | Var x              -> Δ.lookup x

@@ -1,4 +1,12 @@
 ﻿
+27/2/2016:
+* UP: var normalization upgraded: it now supports a stack of normalization contexts, making the behaviour undoable and fitting with recursive uses; it also supports use of
+      normalization context in a pure way, passing it as argument to pretty_normalized
+* UP: UnitTest module text output reworked and polished
+* FIX: unit tests are currenlty all correct
+* UP: translated type defined for enforcing a strongly typed behaviour of the translation sub-system, which was not robust - now it is
+
+
 26/2/2016:
 * FIX: location column numbers and biases are probably wrong: fixed now but not sure it's really done
 * UP: UnitTest messages rewritten using PPrint library of document formatting combinators

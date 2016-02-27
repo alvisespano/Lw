@@ -1,7 +1,7 @@
 ﻿(*
  * Lw
  * Typing/Inference.fs: principal type inference algortihms
- * (C) 2000-2016 Alvise Spano' @ Universita' Ca' Foscari di Venezia
+ * (C) 2014-2016 Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
 
 module Lw.Core.Typing.Inference
@@ -25,13 +25,14 @@ open Lw.Core.Typing.Ops
 open Lw.Core.Typing.Meta
 
 
-let desugar (M : translatable_type_inference_builder<_>) f (e0 : node<_, _>) (e : node<_, _>) =
-    M {
-        L.debug Low "[DESUGAR] %O ~~> %O" e0 e
-        let! t = f e
-        M.translated <- e.value
-        return t
-    }
+type translatable_type_inference_builder<'e> with
+    member M.desugar f (e' : node<_, _>) =
+        M {
+            L.debug Low "[DESUGAR] %O ~~> %O" M.current_node e'
+            let! t = f e'
+            M.translate <- match e'.translated with Translated u -> u
+            return t
+        }
 
 type [< NoComparison; NoEquality >] gen_binding = {
     qual   : decl_qual
@@ -60,21 +61,21 @@ let W_lit = function
 let rec W_expr (ctx : context) (e0 : expr) =
     let M = new translatable_type_inference_builder<_> (e0)
     M {
-        let e = e0.value // uexpr must be bound before translation, or printing will not work
+//        let e = e0.value // uexpr must be bound before translation, or printing will not work
         L.tabulate 2
         try
             let rule =
-                match e with
-                | Var _     -> "VAR"
-                | Lambda _  -> "ABS"
-                | App _     -> "APP"
-                | Let _     -> "LET"
-                | _         -> "e"
+                match e0.value with
+                | Var _     -> "(VAR)"
+                | Lambda _  -> "(ABS)"
+                | App _     -> "(APP)"
+                | Let _     -> "(LET)"
+                | _         -> "[e]"
             let! Q = M.get_Q
             let! θ = M.get_θ
             let! cs = M.get_constraints
             #if DEBUG_BEFORE_INFERENCE
-            L.debug Min "(%-3s) %O\n[C]   %O\n[Q]   %O" rule e cs Q
+            L.debug Min "%-5s %O\n[C]   %O\n[Q]   %O" rule e0 cs Q
             #endif
             let! (ϕ : fxty) = W_expr' ctx e0
             do! resolve_constraints ctx e0
@@ -84,7 +85,7 @@ let rec W_expr (ctx : context) (e0 : expr) =
             let! θ' = M.get_θ
             let! cs' = M.get_constraints
             // TODOL: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)
-            L.debug Low "(%-3s) %O\n[:T]  %O\n[nf]  %O\n[F-t] %O\n[e*]  %O\n[C]   %O\n[Q]   %O\n[S]   %O\n[C']  %O\n[Q']  %O\n[S']  %O" rule e ϕ ϕ.nf ϕ.ftype e0 cs Q θ cs' Q' θ'
+            L.debug Low "(%-3s) %O\n[:T]  %O\n[nf]  %O\n[F-t] %O\n[e*]  %O\n[C]   %O\n[Q]   %O\n[S]   %O\n[C']  %O\n[Q']  %O\n[S']  %O" rule e0 ϕ ϕ.nf ϕ.ftype e0.translated cs Q θ cs' Q' θ'
             #endif
             return ϕ
         finally
@@ -123,7 +124,7 @@ and W_expr_F ctx e0 =
 and W_expr' ctx (e0 : expr) =
     let Lo x = Lo e0.loc x
     let M = new translatable_type_inference_builder< _> (e0)
-    let desugar = desugar M (W_expr ctx) e0
+    let desugar = M.desugar (W_expr ctx)
     M {
         match e0.value with
         | Lit lit ->
@@ -147,14 +148,14 @@ and W_expr' ctx (e0 : expr) =
             | Jb_Overload t ->
                 let c = constraintt.fresh_strict Cm_OpenWorldOverload x t
                 do! M.add_constraint c
-                M.translated <- E_CId c
+                M.translate <- E_CId c
                 yield t
 
             | Jb_OverVar ->
                 let α = ty.fresh_star_var
                 let c = constraintt.fresh_strict Cm_ClosedWorldOverload x α
                 do! M.add_constraint c
-                M.translated <- E_CId c
+                M.translate <- E_CId c
                 yield α
 
             | Jb_Var σ ->
@@ -163,12 +164,12 @@ and W_expr' ctx (e0 : expr) =
                 else
                     let e1 = Id x
                     let e2 = possibly_tuple Lo E_CId Tuple cs
-                    M.translated <- App (Lo e1, e2)
+                    M.translate <- App (Lo e1, e2)
                     yield ϕ
 
             | Jb_Data σ ->
                 let! { fxty = ϕ } = M.instantiate_and_inherit_constraints σ
-                M.translated <- Reserved_Cons x
+                M.translate <- Reserved_Cons x
                 yield ϕ
                 
             | Jb_Unbound ->
@@ -390,7 +391,7 @@ and W_expr' ctx (e0 : expr) =
                 for c in cs do
                     if c.name = x then
                         do! M.attempt_unify e.loc c.ty t
-            M.translated <- e.value
+            M.translate <- e.value
             yield te
 
     }
@@ -398,7 +399,7 @@ and W_expr' ctx (e0 : expr) =
 
 and W_decl' (ctx : context) (d0 : decl) =
     let M = new translatable_type_inference_builder<_> (d0)
-    let desugar = desugar M (W_decl ctx) d0    
+    let desugar = M.desugar (W_decl ctx) 
     let unify_and_resolve (ctx : context) (e : node<_, _>) t1 t2 =
         M {
             do! M.unify e.loc t1 t2
@@ -516,7 +517,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                             }
                         }) bs
                 let! bs' = M.List.map (fun gb -> M { let! () = M.set_constraints gb.constraints in return! gen_bind Config.Printing.Prompt.value_decl_prefixes gb }) l
-                M.translated <- D_Bind [for jk, e in bs' -> { qual = decl_qual.none; patt = Lo e.loc (P_Jk jk); expr = e }]
+                M.translate <- D_Bind [for jk, e in bs' -> { qual = decl_qual.none; patt = Lo e.loc (P_Jk jk); expr = e }]
             }
 
         | D_Rec bs ->
@@ -555,7 +556,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                                 let! cs = M.get_constraints // TODOH: every rec..and binding must have the same contraints, right?
                                 return! gen_bind Config.Printing.Prompt.rec_value_decl_prefixes { expr = b.expr; qual = b.qual; id = x; constraints = cs; inferred = ϕ; to_bind = ϕ }
                             }) l
-                M.translated <- D_Rec [for jk, e in bs' -> { qual = decl_qual.none; par = jk.pretty, None; expr = e }]
+                M.translate <- D_Rec [for jk, e in bs' -> { qual = decl_qual.none; par = jk.pretty, None; expr = e }]
             }
 
         | D_Open (q, e) ->

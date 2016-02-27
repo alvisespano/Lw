@@ -390,7 +390,10 @@ type type_inference_builder (loc) =
 
 type translatable_type_inference_builder<'e> (e : node<'e, unit>) =
     inherit type_inference_builder (e.loc)
-    member __.translated with set x = e.value <- x      // TODO: why not definined a translated property in node and default it to value, then this method assigns to it
+    member val current_node = e
+    member __.translate
+        //with get () = e.translated
+        with set x = e.translated <- Translated x
 
 
 // specialized monad for type evaluation

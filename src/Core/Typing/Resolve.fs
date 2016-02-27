@@ -89,7 +89,7 @@ let rec resolve_constraints (ctx : context) e0 =
                             let p = P_CId c
                             let e1 = E_Jk cand.jk
                             let e2 = e0.value
-                            M.translated <- Let (L0 (D_Bind [{ qual = decl_qual.none; patt = L0 p; expr = L0 e1 }]), L0 e2)
+                            M.translate <- Let (L0 (D_Bind [{ qual = decl_qual.none; patt = L0 p; expr = L0 e1 }]), L0 e2)
                             do! M.add_constraints cand.constraints
                             if cand.constraints.exists (fun c' -> x = c'.name && t = c'.ty) then
                                 return Report.Warn.cyclic_constraint loc c t

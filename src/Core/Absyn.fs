@@ -36,17 +36,30 @@ let (|Sym|_|) (|Id|_|) = function
     | Id (SymString _, r) -> Some r
     | _ -> None
 
+
+type 'a translated = Translated of 'a
+with
+    override this.ToString () = match this with Translated x -> x.ToString ()
+
 type [< NoEquality; NoComparison >] node<'a, 't> (value : 'a, ?loc : location) =
     let mutable _typed : 't option = None
+    let mutable _translated : 'a translated option = None
+
+    member this.translated
+        with get () = either (Translated this.value) _translated
+        and set x = _translated <- Some x
+    
+    member this.typed
+        with get () = match _typed with Some x -> x | None -> unexpected "node %O has not been typed" __SOURCE_FILE__ __LINE__ this
+        and set t = _typed <- Some t
+
     member val value = value with get, set
     member val loc = defaultArg loc (new location ())
     abstract pretty : string
     default this.pretty = sprintf "%O" this.value
     override this.ToString () = this.pretty
-    member this.typed
-        with get () = match _typed with Some x -> x | None -> unexpected "node %O has not been typed" __SOURCE_FILE__ __LINE__ this
-        and set t = _typed <- Some t
     static member op_Implicit (this : node<'a, 't>) = this.value
+
 
 let Lo loc (x : 'a) = new node<_, _> (x, loc)
 let ULo x = new node<_, _> (x)
@@ -220,11 +233,14 @@ with
     interface System.IComparable with
       member x.CompareTo y = CustomCompare.compare_by (fun (α : var) -> α.uid) x y
 
-// this module is needed and cannot be turn into static members within the var class because static members are unit closures and cannot be constants
+// this module is needed and cannot be turn into static members within the var class because static members are unit closures thus cannot be constants
 [< CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix) >]
-module private var =
-    let cnt = ref 0
-    let env : Env.t<int, string> option ref = ref None
+module var =
+    type normalization_context () =
+        member val cnt = 0 with get, set
+        member val env = Env.empty with get, set
+
+    let ctx_stack = new Stack<normalization_context> ()
     let forall : Set<var> ref = ref Set.empty
 
 type var with
@@ -262,14 +278,17 @@ type var with
         in
             div n
 
+    static member get_normalization_context = new var.normalization_context ()
+
     static member reset_normalization =
         #if !DISABLE_TYVAR_NORM
-        var.cnt := 0
-        var.env := Some Env.empty
+        var.ctx_stack.Push (var.get_normalization_context)
         #endif
         { new IDisposable with
             member __.Dispose () =
-                var.env := None
+                #if !DISABLE_TYVAR_NORM
+                ignore <| var.ctx_stack.Pop ()
+                #endif
         }
 
     static member add_quantified α =
@@ -278,19 +297,20 @@ type var with
             member __.Dispose () = var.forall := Set.remove α !var.forall
         }
 
-    static member add_quantified αs =
-        let ds = [ for α : var in αs do yield var.add_quantified α ]
+    static member add_quantifieds αs =
+        let ds = Seq.map var.add_quantified αs
         { new IDisposable with
             member __.Dispose () = for d in ds do d.Dispose ()
         }
 
-    // this method abstracts how normalization is turned on
     member __.is_quantification_enabled = not (!var.forall).IsEmpty
-    member __.is_normalization_enabled = (!var.env).IsSome
-
+    member private __.has_normalization_enabled = if var.ctx_stack.Count > 0 then Some (var.ctx_stack.Peek ()) else None
+    
     member this.pretty =
-        if this.is_normalization_enabled then this.pretty_normalized else this.pretty_unnormalized
-        |> this.pretty_with_quantification
+        this.pretty_with_quantification
+            <| match this.has_normalization_enabled with
+               | None     -> this.pretty_unnormalized
+               | Some ctx -> this.pretty_normalized ctx
 
     override this.ToString () = this.pretty
 
@@ -311,16 +331,16 @@ type var with
             s
             #endif
 
-    member this.pretty_normalized =
-        let env = (!var.env).Value
+    member this.pretty_normalized ctx =
+        let env = ctx.env
         let name =
             match env.search this.uid with
             | Some s -> s
             | None ->
                 let name_exists s = env.exists (fun _ s' -> s' = s)
                 let next_fresh_name () =
-                    let r = var.letterize !var.cnt
-                    var.cnt := !var.cnt + 1
+                    let r = var.letterize ctx.cnt
+                    ctx.cnt <- ctx.cnt + 1
                     r
                 match this with
                 | Va (_, None) ->
@@ -336,7 +356,7 @@ type var with
                         if name_exists s then R (sprintf Config.Printing.already_existing_named_var_fmt s suffix) (suffix + 1) else s
                     in
                         R s 0
-        var.env := Some (env.bind this.uid name)
+        ctx.env <- env.bind this.uid name
         name
 
     member this.pretty_with_quantification name =

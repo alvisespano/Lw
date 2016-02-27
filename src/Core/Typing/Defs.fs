@@ -66,6 +66,7 @@ with
         | T_Forall (α, t)           -> (α, t).GetHashCode ()
         | T_Closure (_, _, _, _)    -> unexpected "hashing type closure: %O" __SOURCE_FILE__ __LINE__ this
 
+    // TODO: why not using pretty printer for comparing types?
     interface IEquatable<ty> with
         member x.Equals y =
             x.kind = y.kind
@@ -556,7 +557,7 @@ type kscheme with
     member kσ.pretty =
         match kσ with
             | { forall = αs; kind = k } ->
-                use A = var.add_quantified αs
+                use A = var.add_quantifieds αs
                 let αspart = if αs.IsEmpty then "" else sprintf "%s %s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_prefix_sep αs)
                 in
                     sprintf "%s%O" αspart k
@@ -606,9 +607,6 @@ let T_ForallsK, (|T_ForallsK0|), (|T_ForallsK|_|) = make_foralls T_ForallK (|T_F
 // pretty printer for types, flex types and schemes
 //
     
-type var with
-    static member add_quantified (Q : prefix) = var.add_quantified (Seq.map fst Q)
-
 let inline wrap_pretty_with_kind R' t =
     let R t =
         let k = (^t : (member kind : kind) t)
@@ -653,7 +651,7 @@ type ty with
             | T_Closure (x, _, τ, _) -> sprintf "<[%O]>" (Te_Lambda ((x, None), τ))
 
             | T_ForallsK (αks, t) ->
-                use A = var.add_quantified (List.map fst αks)
+                use A = var.add_quantifieds (List.map fst αks)
                 let ts = List.map T_Var αks
                 in
                     sprintf "%s %s. %O" Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_prefix_sep ts) t
@@ -706,18 +704,19 @@ type ty with
         | T_Arrows ts     -> List.last ts
         | _               -> t
 
-
 type fxty with
     override this.ToString () = this.pretty    
     member this.pretty =
         let rec R' = function
-            | Fx_Bottom _           -> Config.Printing.dynamic.bottom
-            | Fx_F_Ty t             -> t.pretty
-            | Fx_Foralls0 (qs, t)   ->
+            | Fx_Bottom _   -> Config.Printing.dynamic.bottom
+            | Fx_F_Ty t     -> t.pretty
+            | Fx_Foralls (qs, t) ->
                 let Q = prefix.ofSeq qs
-                use N = var.add_quantified Q
+                use N = var.add_quantifieds (Seq.map fst Q)
                 in
                     sprintf "%s %O. %O" Config.Printing.dynamic.flex_forall Q t
+
+            | Fx_Forall _ as ϕ -> unexpected_case __SOURCE_FILE__ __LINE__ ϕ
                     
         and R = wrap_pretty_with_kind R'
         in
