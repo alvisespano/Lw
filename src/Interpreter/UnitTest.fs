@@ -43,7 +43,9 @@ type typechecker () =
     member this.W_expr e = this.unM W_expr e
     member this.W_decl d = this.unM W_decl d
     member this.Wk_and_eval_ty_expr_fx τ = this.unM Wk_and_eval_ty_expr_fx τ
+    
     member __.auto_generalize loc (t : ty) = t.auto_generalize loc st.Γ
+    member __.lookup_var_Γ x = (st.Γ.lookup (Jk_Var x)).scheme.fxty
 
     member this.parse_expected_ty_expr s =
         let τ =
@@ -88,7 +90,9 @@ let parse_expr_or_decl s =  // TODO: support parsing of type expressions and kin
       
 let colon2 = txt Config.Printing.kind_annotation_sep
 
-let any x = fmt "%O" x
+let any x = delay (fun () -> fmt "%O" x)
+
+//let fxty (ϕ : fxty) = fmt "" delay
 
 let pp_infos l =
     let l = Seq.map (fun (s : string, doc) -> sprintf "%s: " (s.TrimEnd [|':'; ' '|]), doc) l
@@ -117,6 +121,16 @@ type logger with
     member __.pp (L : PrintfFormat<_, _, _, _> -> _) doc =
         use N = var.reset_normalization
         L "%s" <| render None doc
+//        use N = var.reset_normalization
+//        let actions = {
+//            new Actions () with
+//            override __.User o =
+//                match o with
+//                | :? ty | :? fxty -> use N = var.reset_normalization in sprintf "%O" o
+//                | _               -> sprintf "%O" o
+//            override __.Write s = L "%s" s
+//        }
+//        outputWithActions actions None doc
 
 let test_ok msg infs = L.pp L.test_ok (pp_infos (["esist", txt msg] @ infs)); 0
 
@@ -129,29 +143,37 @@ let testing doc = L.pp L.testing doc
 //
 
 let is_test_ok (ϕres : fxty) (ϕok : fxty, kok : kind) =
-    let p x = use N = var.reset_normalization in sprintf "%O" x
+    let p x =
+        use N = var.reset_normalization
+        let r = sprintf "%O" x
+        in
+            r.Replace (Config.Printing.dynamic.flex_forall, Config.Printing.dynamic.forall)     // replace flex type capitalized Forall with the lowercase one
     let (===) a b = p a = p b
     in
-        ϕok.ftype === ϕres.ftype && kok === ϕres.kind
+        (ϕok === ϕres || ϕok.ftype === ϕres.ftype) && kok === ϕres.kind
 
 let decl_dummy_ty = Fx_F_Ty T_Unit
 
 
-let test1 (tc : typechecker) (input, res) =
+let test1 (tchk : typechecker) (input, res) =
     let typecheck1 s =
         let p = parse_expr_or_decl s
         testing (align (txt "input:" </> txt s <.> txt "parsed:" </> any p))
         let ϕ =
             match p with
-            | parsed.Expr e -> tc.W_expr e
-            | parsed.Decl d -> tc.W_decl d; decl_dummy_ty
+            | parsed.Expr e -> tchk.W_expr e
+            | parsed.Decl d ->
+                tchk.W_decl d
+                match d.value with
+                | D_Bind [{ patt = ULo (P_Var x) }] -> tchk.lookup_var_Γ x
+                | _ -> decl_dummy_ty
         p, ϕ, ["translated", txt p.pretty_translated; "type", any ϕ]
     in
         match res with
         | Ok so ->
             let ϕok, kok =
                 match so with
-                | Some s -> try tc.parse_expected_ty_expr s
+                | Some s -> try tchk.parse_expected_ty_expr s
                             with e -> unexpected "%s" __SOURCE_FILE__ __LINE__ (pretty_exn_and_inners e)   
                 | None   -> let ϕ = decl_dummy_ty in ϕ, ϕ.kind
             in
@@ -174,8 +196,8 @@ let test1 (tc : typechecker) (input, res) =
 
 
 let test ts =
-    let tc = new typechecker ()
-    let xs, span = cputime (List.map (test1 tc)) ts
+    let tchk = new typechecker ()
+    let xs, span = cputime (List.map (test1 tchk)) ts
     let sum = List.sum xs
     L.msg High "tested: %d\nfailed: %d\ncpu time: %s" (List.length ts) sum span.pretty
     sum
@@ -215,6 +237,7 @@ module Tests =
         "let i = fun x -> x in i i",                type_ok "forall 'a. 'a -> 'a"
         "fun i -> i i",                             wrong_type // infinite type
         "fun i -> (i 1, i true)",                   wrong_type // polymorphic use of parameter
+        "let single x = [x]",                       type_ok "forall 'a. 'a -> list 'a"
 //        "single id",                                ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
 //        "choose (fun x y -> x) (fun x y -> y)",     ok "forall 'a. 'a -> 'a -> 'a"
 //        "choose id",                                ok "forall ('a :> forall 'b. 'b -> 'b). 'a -> 'a"
