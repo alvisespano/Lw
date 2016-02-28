@@ -165,6 +165,7 @@ type [< NoEquality; NoComparison >] envs = {
 with
     static member create_envs () =
         L.msg Low "populating intrinsics..."
+        Config.Log.Presets.set_thresholds_for_intrinsics ()
         // pupulate Γ and Δ with types and values of builtin functions
         let Γ01, Δ01 =
             Builtin.Values.ΓΔ0

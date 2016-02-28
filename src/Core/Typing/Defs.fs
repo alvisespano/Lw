@@ -332,15 +332,8 @@ with
             | Jk_Inst (x, n) -> sprintf Config.Printing.jk_inst_fmt x n 
 
 type [< NoComparison; NoEquality >] jenv_mode =
-    | Jm_Overloadable
+    | Jm_Overload
     | Jm_Normal
-with
-    override this.ToString () = this.pretty
-            
-    member this.pretty =
-        match this with
-            | Jm_Overloadable -> "(overloadable) "  // TODOL: this trailing space is ugly
-            | Jm_Normal       -> ""
 
 type [< NoComparison; NoEquality >] jenv_value =
     {
@@ -352,8 +345,8 @@ with
             
     member this.pretty =        
         match this.mode with
-        | Jm_Overloadable -> sprintf "(overloadable) %O" this.scheme
-        | Jm_Normal       -> sprintf "%O" this.scheme
+        | Jm_Overload -> sprintf "<overload> %O" this.scheme
+        | Jm_Normal   -> sprintf "%O" this.scheme
 
 type jenv = Env.t<jenv_key, jenv_value>
 
@@ -670,6 +663,8 @@ type ty with
         | T_App (t1, t2)            -> Set.union t1.kinded_ftv t2.kinded_ftv
         | T_Forall (α, t)           -> Set.filter (fst >> (=) α >> not) t.kinded_ftv
 
+    member this.ftv = this.kinded_ftv |> Set.map fst
+
     member this.fv =
         match this with
         | T_Var (α, k)              -> Set.singleton α + k.fv
@@ -718,7 +713,9 @@ type fxty with
 
             | Fx_Forall _ as ϕ -> unexpected_case __SOURCE_FILE__ __LINE__ ϕ
                     
-        and R = wrap_pretty_with_kind R'
+        and R = function
+            | Fx_F_Ty _ as ϕ -> R' ϕ    // prevent double-wrapping an F-type
+            | ϕ              -> wrap_pretty_with_kind R' ϕ
         in
             R this
 

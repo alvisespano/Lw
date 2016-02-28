@@ -9,7 +9,6 @@ module Lw.Core.Config
 open System
 open Printf
 
-
 (* -- Compilation Switches --
  *
  * Can be activated in the project panel as compilation symbols.
@@ -169,16 +168,6 @@ module Log =
         l.show_datetime <- false
         l.show_urgency <- false
         l.show_thread <- true
-        #if RELEASE
-        l.debug_threshold <- Unmaskerable
-        l.msg_threshold <- High
-        l.warn_threshold <- Low
-        l.hint_threshold <- Normal
-        #else
-        #if DEBUG
-        l.all_thresholds <- Min
-        #endif
-        #endif
         l
 
     let verbose_pretty_location = false

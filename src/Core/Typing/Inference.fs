@@ -85,7 +85,7 @@ let rec W_expr (ctx : context) (e0 : expr) =
             let! θ' = M.get_θ
             let! cs' = M.get_constraints
             // TODOL: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)
-            L.debug Low "(%-3s) %O\n[:T]  %O\n[nf]  %O\n[F-t] %O\n[e*]  %O\n[C]   %O\n[Q]   %O\n[S]   %O\n[C']  %O\n[Q']  %O\n[S']  %O" rule e0 ϕ ϕ.nf ϕ.ftype e0.translated cs Q θ cs' Q' θ'
+            L.debug Low "%-5s %O\n[:t]  %O\n[nf]  %O\n[F-t] %O\n[e*]  %O\n[C]   %O\n[Q]   %O\n[S]   %O\n[C']  %O\n[Q']  %O\n[S']  %O" rule e0 ϕ ϕ.nf ϕ.ftype e0.translated cs Q θ cs' Q' θ'
             #endif
             return ϕ
         finally
@@ -202,14 +202,14 @@ and W_expr' ctx (e0 : expr) =
             let! Q0 = M.get_Q
             let! tx = M {
                 match τo with
-                | None ->
-                    do! M.add_prefix α (Fx_Bottom K_Star)
-                    return tα
+                | None -> return tα
                 | Some τ ->
                     let! t, k = Wk_and_eval_ty_expr_F ctx τ
                     do! M.kunify τ.loc K_Star k
                     return t
             }
+            for α in tx.ftv do
+                do! M.add_prefix α (Fx_Bottom K_Star)   // whether annotated or not, all free vars are added to the prefix
             let! ϕ1 = M.fork_Γ <| M {
                 let! _ = M.bind_ungeneralized_Γ x tx
                 return! W_expr ctx e
@@ -446,10 +446,9 @@ and W_decl' (ctx : context) (d0 : decl) =
             // generalization and binding
             let jk = jk dq x gb.to_bind
             let! _ =
-                let jm = if dq.over then Jm_Overloadable else Jm_Normal
+                let jm = if dq.over then Jm_Overload else Jm_Normal
                 in
                     M.bind_generalized_Γ jk jm gb.to_bind
-            let! Γ = M.get_Γ in assert gb.to_bind.fv.IsSubsetOf (fv_Γ Γ)    // all unquantified vars must be free in Γ
             Report.prompt ctx (prefixes @ dq.as_tokens) x gb.to_bind (Some (Config.Printing.ftype_instance_of_fxty_sep, gb.inferred))
 
             // translation
@@ -469,7 +468,7 @@ and W_decl' (ctx : context) (d0 : decl) =
             for { id = x; signature = τ } in l do
                 let! t, k = Wk_and_eval_ty_expr_F ctx τ
                 do! M.kunify τ.loc K_Star k
-                let! _ = M.bind_Γ (Jk_Var x) { mode = Jm_Overloadable; scheme = Ungeneralized t }
+                let! _ = M.bind_Γ (Jk_Var x) { mode = Jm_Overload; scheme = Ungeneralized t }
                 Report.prompt ctx Config.Printing.Prompt.overload_decl_prefixes x t None
 
         | D_Bind bs ->
@@ -595,7 +594,7 @@ and W_decl' (ctx : context) (d0 : decl) =
             for { id = x; signature = τx } in bs do
                 // the whole inferred kind must be star, which is even better that the co-domain     
                 let! tx, kx = Wk_and_eval_ty_expr_F ctx τx      // TODOH: support flex types for data constructors
-                let! (T_Foralls0 (αs, _) as tx) = M.auto_geneneralize tx
+                let! (T_Foralls0 (αs, _) as tx) = M.auto_geneneralize tx    // TODOH: take auto generalization directly to a Wk_and_eval_ty_expr or to a wrapper of it
                 do! M.kunify τx.loc K_Star kx                              
                 // each data constructor's return type must be equal to the type constructor being defined; arguments are not checked to be variables, so it means GADTs can be defined
                 let txcod = tx.return_ty

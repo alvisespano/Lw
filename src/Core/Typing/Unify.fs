@@ -169,7 +169,7 @@ module internal Mgu =
                 let Q3, θ3 = mgu ctx (Q + Q1 + Q2) t1 t2
                 let Q4, Q5 = Q3.split (Q.dom + (fv_Γ <| subst_jenv θ3 ctx.Γ))
                 in
-                    Q4, θ3, Fx_ForallsQ (Q5, Fx_F_Ty (S θ3 t1))
+                    Q4, θ3, FxU_ForallsQ (Q5, S θ3 t1)
           #if DEBUG_UNI && DEBUG_HML
           L.uni Normal "[mgu-scheme=] %O == %O\n              %O\n              Q' = %O\n              res = %O" ϕ1 ϕ2 θ Q' ϕ
           r

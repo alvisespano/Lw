@@ -11,6 +11,13 @@ open Printf
 open Lw.Core.Absyn
 open FSharp.Common
 
+(* -- Compilation Switches --
+ *
+ * Can be activated in the project panel as compilation symbols.
+ *
+ * DEBUG_INTRINSICS         // don't turn off log when typing intrinsics 
+ *)
+
 [<Measure>] type s
 
 module Interactive =
@@ -35,16 +42,38 @@ module Log =
     open FSharp.Common.Log
 
     module Presets =
+        let private l = Lw.Core.Config.Log.cfg
+
         let set_thresholds_for_interactive () =
-            let l = Lw.Core.Config.Log.cfg
             l.debug_threshold <- Normal
             l.msg_threshold <- Low
             l.warn_threshold <- Min
             l.hint_threshold <- Min
 
         let set_thresholds_for_unit_test () =
-            let l = Lw.Core.Config.Log.cfg
             l.debug_threshold <- Unmaskerable
             l.msg_threshold <- Low
             l.warn_threshold <- Min
             l.hint_threshold <- Min
+
+        let set_thresholds_for_interpreter () =
+            #if DEBUG
+            l.all_thresholds <- Min
+            #else
+            l.debug_threshold <- Unmaskerable
+            l.msg_threshold <- High
+            l.warn_threshold <- Low
+            l.hint_threshold <- Normal
+            #endif
+
+        let set_thresholds_for_intrinsics () =
+            #if DEBUG_INTRINSICS
+            l.all_thresholds <- Min
+            #else
+            l.debug_threshold <- Unmaskerable
+            l.msg_threshold <- Unmaskerable
+            l.warn_threshold <- Normal
+            l.hint_threshold <- Unmaskerable
+            #endif
+
+            

@@ -6,6 +6,8 @@
  
 module Lw.Interpreter.UnitTest
 
+#if UNIT_TEST
+
 open System
 open FSharp.Common
 open FSharp.Common.Log
@@ -90,16 +92,14 @@ let parse_expr_or_decl s =  // TODO: support parsing of type expressions and kin
       
 let colon2 = txt Config.Printing.kind_annotation_sep
 
-let any x = delay (fun () -> fmt "%O" x)
-
-//let fxty (ϕ : fxty) = fmt "" delay
+let any x = delay (fun () -> fmt "%O" x)    // delayed because normalization will take place when rendering the whole doc
 
 let pp_infos l =
     let l = Seq.map (fun (s : string, doc) -> sprintf "%s: " (s.TrimEnd [|':'; ' '|]), doc) l
     let w = Seq.maxBy (fst >> String.length) l |> fst |> String.length
     in
       [ for s : string, doc : Doc in l do
-            yield (txt s |> fill w) </> doc     //(fun n -> hang (n + 1) o)
+            yield (txt s |> fill w) </> doc
       ] |> vsep |> align
 
 let expected_infos (ϕok, kok) = ["expected", pp_infos ["type", any ϕok; "kind", any kok]]
@@ -121,16 +121,6 @@ type logger with
     member __.pp (L : PrintfFormat<_, _, _, _> -> _) doc =
         use N = var.reset_normalization
         L "%s" <| render None doc
-//        use N = var.reset_normalization
-//        let actions = {
-//            new Actions () with
-//            override __.User o =
-//                match o with
-//                | :? ty | :? fxty -> use N = var.reset_normalization in sprintf "%O" o
-//                | _               -> sprintf "%O" o
-//            override __.Write s = L "%s" s
-//        }
-//        outputWithActions actions None doc
 
 let test_ok msg infs = L.pp L.test_ok (pp_infos (["esist", txt msg] @ infs)); 0
 
@@ -225,7 +215,7 @@ module Tests =
         "'a' :: 'b' :: 'c' :: []",                  type_ok "list char"
         "'a' :: 'b' :: ['c']",                      type_ok "list char"
         "[true; 2]",                                wrong_type
-        "(Some 0 :: [None]) :: [[Some 2]]",         type_ok "list (list (option int))"   // TODO: support pipelining operators "|>" and "<|" in expressions AS WELL AS in type expressions
+        "(Some 0 :: [None]) :: [[Some 2]]",         type_ok "list (list (option int))"
         "[None]",                                   type_ok "list (option 'a)"
       ]
 
@@ -237,15 +227,32 @@ module Tests =
         "inc true",                                 wrong_type
         "let i = fun x -> x in i i",                type_ok "forall 'a. 'a -> 'a"
         "fun i -> i i",                             wrong_type // infinite type
-        "fun i -> (i 1, i true)",                   wrong_type // polymorphic use of parameter
+        "fun i -> (i 1, i true)",                   wrong_type // polymorphic use of unannotated parameter
         "let id x = x",                             type_ok "forall 'a. 'a -> 'a"
         "let single x = [x]",                       type_ok "forall 'a. 'a -> list 'a"
+      ]
+
+    let scoped_tyvars =
+      [
+        "let i x = x in i 1, i true, i",            type_ok "int * bool * (forall 'a. 'a -> 'a)"
+        "let i (x : 'a) = x in i 1, i true, i",     type_ok "int * bool * (forall 'a. 'a -> 'a)"
+        "let y =
+            let i (x : 'a) = x
+            in
+                i 1, i true",                       wrong_type // rejected because scoped type variables should not be generalized when are not at top level
+      ]
+
+    let HML =
+      [
+        "fun (i : forall 'a. 'a -> 'a) ->
+            (i 1, i true)",                         type_ok "int * bool" // polymorphic use of annotated parameter
         "single id",                                type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
-//        "choose (fun x y -> x) (fun x y -> y)",     ok "forall 'a. 'a -> 'a -> 'a"
-//        "choose id",                                ok "forall ('a :> forall 'b. 'b -> 'b). 'a -> 'a"
+        "let choose x y = x",                       type_ok ""
+        "choose (fun x y -> x) (fun x y -> y)",     type_ok "forall 'a. 'a -> 'a -> 'a"
+        "choose id",                                type_ok "forall ('a :> forall 'b. 'b -> 'b). 'a -> 'a"
       ]
     
-    let all = List.concat [ intrinsics; HM ]
+    let all = List.concat [ intrinsics; HM; scoped_tyvars; HML ]
 
     
 let main () =
@@ -483,3 +490,4 @@ testOk msg
 
 *)
 
+#endif

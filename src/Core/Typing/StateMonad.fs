@@ -28,8 +28,8 @@ type [< NoComparison; NoEquality; System.Diagnostics.DebuggerDisplayAttribute("{
         Q   : prefix            // prefix for quantified type variables
 
         // extras
-        constraints     : constraints       // global constraints
-        scoped_vars    : Env.t<id, int>    // named type variables
+        constraints : constraints       // global constraints
+        scoped_vars : Env.t<id, int>    // named type variables
     }
 with
     override this.ToString () = this.pretty
@@ -47,20 +47,20 @@ with
             δ   = tenv.empty
             Q   = Q_Nil
 
-            constraints     = constraints.empty
-            scoped_vars    = Env.empty
+            constraints = constraints.empty
+            scoped_vars = Env.empty
         }
 
         
 type M<'a> = Monad.M<'a, state>
 
 let (|Jb_Overload|Jb_Var|Jb_Data|Jb_OverVar|Jb_Unbound|) = function
-    | Some (Jk_Var _, { mode = Jm_Overloadable; scheme = Ungeneralized t }) -> Jb_Overload t.instantiate
-    | Some (Jk_Var _, { mode = Jm_Normal; scheme = σ })                     -> Jb_Var σ
-    | Some (Jk_Inst _, { mode = Jm_Overloadable; scheme = _ })              -> Jb_OverVar
-    | Some (Jk_Data _, { mode = Jm_Normal; scheme = σ })                    -> Jb_Data σ
-    | None                                                                  -> Jb_Unbound
-    | Some (jk, jv)                                                         -> unexpected "ill-formed jenv binding: %O = %O" __SOURCE_FILE__ __LINE__ jk jv
+    | Some (Jk_Var _, { mode = Jm_Overload; scheme = Ungeneralized t }) -> Jb_Overload t.instantiate
+    | Some (Jk_Var _, { mode = Jm_Normal; scheme = σ })                 -> Jb_Var σ
+    | Some (Jk_Inst _, { mode = Jm_Overload; scheme = _ })              -> Jb_OverVar
+    | Some (Jk_Data _, { mode = Jm_Normal; scheme = σ })                -> Jb_Data σ
+    | None                                                              -> Jb_Unbound
+    | Some (jk, jv)                                                     -> unexpected "ill-formed jenv binding: %O = %O" __SOURCE_FILE__ __LINE__ jk jv
 
 
 type basic_builder (loc : location) =
@@ -312,7 +312,7 @@ type type_inference_builder (loc) =
                     match jk, jm with
                     | Jk_Var y, _
                     | Jk_Data y, _
-                    | Jk_Inst (y, _), Jm_Overloadable -> x = y
+                    | Jk_Inst (y, _), Jm_Overload -> x = y
                     | _                               -> false)
         }
 
@@ -340,9 +340,9 @@ type type_inference_builder (loc) =
         M {
             // there must be no unquantified variables that are not free in Γ
             let! Γ = M.get_Γ
-            assert (ϕ.fv - (fv_Γ Γ)).IsEmpty
+            assert ϕ.fv.IsSubsetOf (fv_Γ Γ)
             let! cs = M.get_constraints
-            return! M.bind_Γ jk { mode = jm; scheme = {  constraints = cs; fxty = ϕ } }
+            return! M.bind_Γ jk { mode = jm; scheme = { constraints = cs; fxty = ϕ } }
         }
 
     member M.auto_geneneralize (t : ty) =

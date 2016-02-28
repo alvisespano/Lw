@@ -1,4 +1,12 @@
 ﻿
+28/2/2016:
+* UP: some work on scoped type variables
+* REFACT: redesigned how log thresholds are set according to solution configuration and interpreter mode
+* FIX: kind inference and type evaluation debug information revamped
+* FIX: lambda rule of HML has been generalized to support annotations in a transparent way: all ftv are added to the prefix, whether belonging to an annotation or not
+* FIX: subst_ty now substitutes kinds also to the result of a substitution
+
+
 27/2/2016:
 * UP: var normalization upgraded: it now supports a stack of normalization contexts, making the behaviour undoable and fitting with recursive uses; it also supports use of
       normalization context in a pure way, passing it as argument to pretty_normalized

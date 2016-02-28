@@ -126,10 +126,10 @@ let rec subst_ty θ =
     let S x = subst_ty θ x
     let Sk = subst_kind θ.k
     in function
-    | T_Var (α, _) as t ->
+    | T_Var (α, k) ->
         match θ.t.search α with
-        | Some t' -> t'
-        | None    -> t
+        | Some t' -> S t'               // reapply substitution to the resulting tyvar, which actually is not needed except for substituting kinds
+        | None    -> T_Var (α, Sk k)    // substitute kinds also in the resulting tyvar
 
     | T_Forall (α, t)           -> T_Forall (subst_var θ.t α, S t)
     | T_Cons (x, k)             -> T_Cons (x, Sk k)
@@ -147,7 +147,7 @@ let rec subst_fxty θ =
     | Fx_Forall ((α, ϕ1), ϕ2) -> Fx_Forall ((subst_var θ.t α, S ϕ1), S ϕ2)
 
 
-// first argument is the NEW subst, second argument is the OLD one
+/// first argument is the NEW subst, second argument is the OLD one
 let compose_ksubst (kθ' : ksubst) (kθ : ksubst) = kθ'.compose subst_kind kθ
 let compose_tksubst { t = tθ'; k = kθ' } { t = tθ; k = kθ } =
     let kθ = compose_ksubst kθ' kθ
@@ -187,18 +187,7 @@ type ty with
         | _          -> true
 
 let Fx_ForallsQ (Q : prefix, ϕ : fxty) = Fx_Foralls (Seq.toList Q, ϕ)
-
-[< System.Obsolete("Using this virtual constructor actually should not be necessary for making HML type inference work. If it actually does make things work, think twice and try to discover what makes it work.") >]
-let FxU_ForallsQ (Q, t : ty) =
-    let rec R Q t =
-        match Q with
-        | Q_Nil                        -> Q, t
-        | Q_Cons (Q, (α, Fx_Bottom _)) -> R Q (T_Forall (α, t))
-        // logga qui così vedi quando effettivamente viene quantificato un f-type; inoltre prova a cambiare la fxty.nf in modo che faccia Fx_Bottom nel caso aggunto da me e scopri le relazioni con questo
-        | Q_Cons _                     -> Q, t
-    let Q, t = R Q t
-    in
-        Fx_ForallsQ (Q, Fx_F_Ty t)
+let FxU_ForallsQ (Q, t : ty) = Fx_ForallsQ (Q, Fx_F_Ty t)
 
 // all outer quantified vars are taken, both from the flex type and from possible F-type quantifiers, hence right hand is guaranteed unquantified
 let (|FxU_ForallsQ|FxU_Unquantified|FxU_Bottom|) = function

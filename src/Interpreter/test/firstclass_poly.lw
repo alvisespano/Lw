@@ -7,6 +7,9 @@ namespace Test
 
 let id x = x
 
+let id2 (x : 'foo) = x
+
+(*
 let app f x = f x
 
 let i = app id id
@@ -20,5 +23,5 @@ let comb (id : forall 'a. 'a -> 'a) = id id
 let poly (f : forall 'a. 'a -> 'a) = f 1, f true
 
 let a = poly id
-
+*)
 

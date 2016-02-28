@@ -83,9 +83,11 @@ let main _ =
             Config.Log.Presets.set_thresholds_for_unit_test ()
             UnitTest.main ()
             #else
+            let envs = ref Intrinsic.envs.envs0
             if Config.Interactive.interactive_mode then
                 Config.Log.Presets.set_thresholds_for_interactive ()
-            let envs = ref Intrinsic.envs.envs0
+            else
+                Config.Log.Presets.set_thresholds_for_interpreter ()
             try
                 if not (String.IsNullOrWhiteSpace Args.filename) then
                     envs := interpret !envs Args.filename

@@ -83,11 +83,16 @@ module private Eval =
     let rec ty_expr (ctx : context) (τ0 : ty_expr) =
         let M = new type_eval_builder<_> (τ0)
         M {            
+            let rule =
+                    match τ0.value with
+                    | Te_PolyVar _  -> "(E-VAR)"
+                    | Te_App _      -> "(E-APP)"
+                    | _             -> "[T]"
             let! θ = M.get_θ
             τ0.typed <- subst_kind θ.k τ0.typed // apply latest subst to each typed node
-            let! t = ty_expr' ctx τ0
-            L.debug Min "[t::K] %O\n :: %O\n[T*]   %O" τ0 τ0.typed t
-            return t
+            let! ϕ = ty_expr' ctx τ0
+            L.debug Min "%-7s %O\n[::k]   %O\n[T*]    %O" rule τ0 τ0.typed ϕ
+            return ϕ
         } 
 
     and ty_expr' (ctx : context) (τ0 : ty_expr) =
@@ -288,8 +293,13 @@ module private Eval =
 let rec Wk_ty_expr (ctx : context) (τ0 : ty_expr) =
     let K = new kind_inference_builder<_> (τ0)
     K {
+        let rule =
+                match τ0.value with
+                | Te_PolyVar _  -> "(T-VAR)"
+                | Te_App _      -> "(T-APP)"
+                | _             -> "[T]"
         let! k = Wk_ty_expr' ctx τ0
-        L.debug Min "[t::K] %O\n      :: %O\n" τ0 k
+        L.debug Min "%-7s %O\n[::k]   %O" rule τ0 k
         return k
     }
 
