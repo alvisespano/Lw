@@ -375,6 +375,7 @@ type [< NoComparison; NoEquality >] uni_context =
         loc            : location
         γ              : kjenv
         Γ              : jenv
+        scoped_vars    : Set<var>
     }
 
 

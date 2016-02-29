@@ -1,4 +1,12 @@
 ﻿
+29/2/2016:
+* UP: Reserved_Cons removed from expr AST: it used to exist because of the evaluator, but it is not necessary as new data constructors X can be bound to Δ as (X, V_Cons (X, []))
+* REFACT: scoped vars have now become a set of vars
+* UP: split_prefix monadic function has now become split_for_gen and calls the pure version, which deals with Γ and scoped vars
+* REFACT: fork monadic methods have been renamed to undo
+* UP: UnitTest module improved even more
+
+
 28/2/2016:
 * UP: some work on scoped type variables
 * REFACT: redesigned how log thresholds are set according to solution configuration and interpreter mode

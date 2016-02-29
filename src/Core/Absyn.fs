@@ -827,7 +827,7 @@ with
 type [< NoComparison; NoEquality >] uexpr =
     | Lit of lit
     | Var of id
-    | Reserved_Cons of id    // internal only
+//    | Reserved_Cons of id    // internal only
     | FreeVar of id
     | PolyCons of id
     | Loosen of expr
@@ -906,7 +906,7 @@ type uexpr with
     member this.pretty =
         let (|A|) =
             let (|R|_|) = function
-                | (ULo (Lit _ | Var _ | FreeVar _ | Reserved_Cons _ | Record _ | Select _)) as e -> Some e
+                | (ULo (Lit _ | Var _ | FreeVar _ | (*Reserved_Cons _ |*) Record _ | Select _)) as e -> Some e
                 | _ -> None
             let (|L|_|) = function
                 | ULo (App _) | R _ as e -> Some e
@@ -923,7 +923,7 @@ type uexpr with
             | List es               -> sprintf "[%s]" (flatten_stringables "; " es)
             | Sym x                 -> sprintf "(%s)" x
             | Var x                 -> sprintf "%s" x
-            | Reserved_Cons x       -> x
+//            | Reserved_Cons x       -> x
             | FreeVar x             -> sprintf Config.Printing.freevar_fmt x
             | PolyCons x            -> sprintf Config.Printing.polycons_fmt x
             | App (A s)             -> s

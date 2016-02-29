@@ -124,7 +124,7 @@ module private Eval =
                 let! t2 = E_F τ2
                 match t1 with
                 | T_Closure (x, Δr, τ, _) ->
-                    return! M.fork_δ <| M {
+                    return! M.undo_δ <| M {
                         do! M.set_δ !Δr
                         do! M.bind_δ x t2
                         yield! E τ
@@ -158,7 +158,7 @@ module private Eval =
                 | _                      -> yield Fx_Forall ((α, ϕ1), ϕ2)
 
             | Te_Let (d, τ1) ->
-                yield! M.fork_δ <| M {
+                yield! M.undo_δ <| M {
                     do! ty_decl ctx d
                     yield! E τ1
                 }
@@ -179,7 +179,7 @@ module private Eval =
 
             | Te_Match (τ1, cases) ->
                 let! t1 = E_F τ1
-                yield! M.fork_δ <| M {
+                yield! M.undo_δ <| M {
                     let! τo = M.List.tryPick (fun (p, _, τ) -> M { let! b = ty_patt ctx p t1 in if b then return Some τ else return None }) cases
                     match τo with
                     | None   -> return Report.Error.type_patterns_not_exhaustive τ1.loc t1
@@ -328,7 +328,7 @@ and Wk_ty_expr' (ctx : context) (τ0 : ty_expr) =
 
         | Te_Lambda ((x, ko), τ) ->
             let kx = either kind.fresh_var ko
-            return! K.fork_γ <| K {
+            return! K.undo_γ <| K {
                 let! _ = K.bind_γ x (KUngeneralized kx)
                 let! k = R τ
                 yield K_Arrow (kx, k)
@@ -353,7 +353,7 @@ and Wk_ty_expr' (ctx : context) (τ0 : ty_expr) =
             | Some τ1 ->
                 let! k1 = R τ1
                 do! K.kunify τ1.loc k1 kx
-            return! K.fork_γ <| K {
+            return! K.undo_γ <| K {
                 let! _ = K.bind_γ x (KUngeneralized kx)
                 yield! R τ2
             }
@@ -364,7 +364,7 @@ and Wk_ty_expr' (ctx : context) (τ0 : ty_expr) =
             yield k
 
         | Te_Let (d, τ) ->
-            yield! K.fork_γ <| K {
+            yield! K.undo_γ <| K {
                 do! Wk_ty_decl { ctx with top_level_decl = false } d
                 yield! R τ
             }                 
@@ -374,7 +374,7 @@ and Wk_ty_expr' (ctx : context) (τ0 : ty_expr) =
             let! k1 = R τ1
             let kr0 = kind.fresh_var
             for p, _, τ in cases do
-                do! K.fork_γ <| K {
+                do! K.undo_γ <| K {
                     let! kp = Wk_ty_patt ctx p
                     do! K.kunify p.loc k1 kp
                     let! tr = Wk_ty_expr ctx τ
@@ -399,7 +399,7 @@ and Wk_ty_bindings (ctx : context) d bs =
     M {
         let! l = M.List.collect (fun { patt = p; expr = τ } -> M {
                     let! ke = Wk_ty_expr ctx τ
-                    return! M.fork_γ <| M {
+                    return! M.undo_γ <| M {
                         let! kp = Wk_ty_patt ctx p
                         do! M.kunify p.loc kp ke
                         return! M.List.map (fun x -> M { let! (KUngeneralized k) = M.lookup_γ x in return x, k }) (vars_in_ty_patt p |> Set.toList)
@@ -413,7 +413,7 @@ and Wk_ty_bindings (ctx : context) d bs =
 and Wk_ty_rec_bindings<'e> (ctx : context) (d : node<'e, kind>) bs =
     let M = new kind_inference_builder<_> (d)
     M {
-        let! bs = M.fork_γ <| M {
+        let! bs = M.undo_γ <| M {
                 for { par = x, ko } in bs do
                     let kx = either kind.fresh_var ko
                     do! M.ignore <| M.bind_γ x (KUngeneralized kx)

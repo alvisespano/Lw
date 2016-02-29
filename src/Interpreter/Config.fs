@@ -41,6 +41,11 @@ module Exit =
 module Log =
     open FSharp.Common.Log
 
+    let test_color = ConsoleColor.Blue
+    let test_ok_color = ConsoleColor.Green
+    let test_weak_ok_color = ConsoleColor.Yellow
+    let test_failed_color = ConsoleColor.Red
+
     module Presets =
         let private l = Lw.Core.Config.Log.cfg
 

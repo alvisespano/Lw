@@ -101,10 +101,10 @@ and W_decl ctx d =
             #if DEBUG
             use N = var.reset_normalization
             #endif
-            do! M.fork_scoped_vars <| M {
+            do! M.undo_scoped_vars <| M {
                 do! W_decl' ctx d   
             }
-            do! M.restrict_to_fv_in_Γ
+            do! M.prune_θ
         else
             // when it's an inner binding
             do! W_decl' ctx d
@@ -169,7 +169,7 @@ and W_expr' ctx (e0 : expr) =
 
             | Jb_Data σ ->
                 let! { fxty = ϕ } = M.instantiate_and_inherit_constraints σ
-                M.translate <- Reserved_Cons x
+//                M.translate <- Reserved_Cons x
                 yield ϕ
                 
             | Jb_Unbound ->
@@ -189,8 +189,8 @@ and W_expr' ctx (e0 : expr) =
             do! M.add_constraint (constraintt.fresh_strict Cm_FreeVar x t)
             yield t
 
-        | Reserved_Cons x ->
-            return unexpected "Reserved_Cons term is not supposed to appear in input code: %O" __SOURCE_FILE__ __LINE__ x
+//        | Reserved_Cons x ->
+//            return unexpected "Reserved_Cons term is not supposed to appear in input code: %O" __SOURCE_FILE__ __LINE__ x
 
         | PolyCons x ->
             let α = ty.fresh_star_var
@@ -210,7 +210,7 @@ and W_expr' ctx (e0 : expr) =
             }
             for α in tx.ftv do
                 do! M.add_prefix α (Fx_Bottom K_Star)   // whether annotated or not, all free vars are added to the prefix
-            let! ϕ1 = M.fork_Γ <| M {
+            let! ϕ1 = M.undo_Γ <| M {
                 let! _ = M.bind_ungeneralized_Γ x tx
                 return! W_expr ctx e
             }            
@@ -221,9 +221,9 @@ and W_expr' ctx (e0 : expr) =
             let β, tβ = ty.fresh_star_var_and_ty
             #if ENABLE_HML_OPTS
             do! M.extend (β, ϕ1)
-            let! Q3' = M.split_prefix (Q0.dom + fv_Γ Γ)      // HACK: this code should have the same behaviour as the original shown in HML paper
+            let! Q3' = M.split_for_gen Q0      // HACK: this code should have the same behaviour as the original shown in HML paper
             #else
-            let! Q3 = M.split_prefix (Q0.dom + fv_Γ Γ)
+            let! Q3 = M.split_for_gen Q0
             let Q3', θ3' = Q3.extend (β, ϕ1)
             do! M.update_θ θ3'
             #endif
@@ -241,7 +241,7 @@ and W_expr' ctx (e0 : expr) =
             do! M.extend (β, Fx_Bottom K_Star)
             do! M.unify e1.loc (T_Arrow (tα2, tβ)) tα1
             let! Γ = M.get_Γ
-            let! Q5 = M.split_prefix (Q0.dom + fv_Γ Γ)
+            let! Q5 = M.split_for_gen Q0
             yield Q5, tβ
            
         | Tuple ([] | [_]) as e ->
@@ -260,7 +260,7 @@ and W_expr' ctx (e0 : expr) =
             yield t2
 
         | Let (d, e) ->
-            yield! M.fork_Γ <| M {
+            yield! M.undo_Γ <| M {
                 do! M.ignore <| W_decl { ctx with top_level_decl = false } d
                 yield! W_expr ctx e
             }
@@ -337,7 +337,7 @@ and W_expr' ctx (e0 : expr) =
             yield t
 
         | Inject e ->
-            let! cs = M.fork_constraints <| M {
+            let! cs = M.undo_constraints <| M {
                 do! M.clear_constraints
                 let! _ = W_expr ctx e
                 return! M.get_constraints
@@ -472,13 +472,13 @@ and W_decl' (ctx : context) (d0 : decl) =
                 Report.prompt ctx Config.Printing.Prompt.overload_decl_prefixes x t None
 
         | D_Bind bs ->
-            do! M.fork_constraints <| M {
+            do! M.undo_constraints <| M {
                 // infer type for each binding in the let..and block
                 let! l = M.List.collect (fun ({ patt = p; expr = e } as b) -> M {
                             do! M.clear_constraints     // TODOH: probably there's a relation between contraints to be kept (i.e. not cleared) and the free vars in Γ
                             let! ϕe = W_expr ctx e
                             let te = ϕe.ftype
-                            return! M.fork_Γ <| M {
+                            return! M.undo_Γ <| M {
                                 // TODOL: support return type annotations after parameters like in "let f x y : int = ..."
                                 let (|B_Unannot|B_Annot|B_Patt|) = function
                                     | ULo (P_Var x)                    -> B_Unannot x
@@ -520,8 +520,8 @@ and W_decl' (ctx : context) (d0 : decl) =
             }
 
         | D_Rec bs ->
-            do! M.fork_constraints <| M {
-                let! l = M.fork_Γ <| M {
+            do! M.undo_constraints <| M {
+                let! l = M.undo_Γ <| M {
                     do! M.clear_constraints
                     // introduce fresh type variables or the annotated type for each rec binding
                     let! l = M.List.map (fun ({ qual = dq; par = x, _; expr = e } as b) -> M {

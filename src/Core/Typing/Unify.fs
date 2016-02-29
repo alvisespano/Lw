@@ -167,7 +167,7 @@ module internal Mgu =
             | FxU0_ForallsQ  (Mapped fxty.instantiate_unquantified (Q1, t1)), FxU0_ForallsQ (Mapped fxty.instantiate_unquantified (Q2, t2)) ->
                 assert (let p (a : prefix) b = a.is_disjoint b in p Q Q1 && p Q1 Q2 && p Q Q2)  // instantiating ϕ1 and ϕ2 makes this assert always false
                 let Q3, θ3 = mgu ctx (Q + Q1 + Q2) t1 t2
-                let Q4, Q5 = Q3.split (Q.dom + (fv_Γ <| subst_jenv θ3 ctx.Γ))
+                let Q4, Q5 = Q3.split (Q.dom + (fv_Γ (subst_jenv θ3 ctx.Γ)))    // HACK: abstract this code by using get_ungeneralizable_vars
                 in
                     Q4, θ3, FxU_ForallsQ (Q5, S θ3 t1)
           #if DEBUG_UNI && DEBUG_HML

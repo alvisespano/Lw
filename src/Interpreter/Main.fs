@@ -80,6 +80,7 @@ let main _ =
             L.debug Min "CWD: %s" System.Environment.CurrentDirectory
             #endif
             #if UNIT_TEST
+            ignore <| Intrinsic.envs.envs0 // just to trigger intrinsic population so that logger can be set to Unit Test thresholds afterwards
             Config.Log.Presets.set_thresholds_for_unit_test ()
             UnitTest.main ()
             #else

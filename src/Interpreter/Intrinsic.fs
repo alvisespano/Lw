@@ -200,7 +200,7 @@ with
         L.msg Min "intrinsics created"
         { Γ = Γ0; Δ = Δ0; γ = γ0; δ = δ0 }
 
-let lazy_envs0 = lazy envs.create_envs ()
+let private lazy_envs0 = lazy envs.create_envs ()
 
 type envs with
     static member envs0 = lazy_envs0.Value

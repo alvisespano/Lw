@@ -173,9 +173,6 @@ module Log =
     let verbose_pretty_location = false
     let not_implemented_color = ConsoleColor.DarkRed
     let uni_color = ConsoleColor.Blue
-    let test_color = ConsoleColor.Blue
-    let test_ok_color = ConsoleColor.Green
-    let test_failed_color = ConsoleColor.Red
     let resolve_color = ConsoleColor.Magenta
     let error_color = cfg.fatal_error_color
 

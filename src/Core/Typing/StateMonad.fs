@@ -29,7 +29,7 @@ type [< NoComparison; NoEquality; System.Diagnostics.DebuggerDisplayAttribute("{
 
         // extras
         constraints : constraints       // global constraints
-        scoped_vars : Env.t<id, int>    // named type variables
+        scoped_vars : Set<var>          // named type variables
     }
 with
     override this.ToString () = this.pretty
@@ -48,7 +48,7 @@ with
             Q   = Q_Nil
 
             constraints = constraints.empty
-            scoped_vars = Env.empty
+            scoped_vars = Set.empty
         }
 
         
@@ -124,21 +124,15 @@ type basic_builder (loc : location) =
 
     member M.add_scoped_var x =
         M {
-            let! vas = M.get_scoped_vars
-            match vas.search x with
-            | Some n -> return Va (n, Some x)
-            | None   -> let Va (n, _) as α = var.fresh_named x
-                        do! M.lift_scoped_vars (fun vas -> vas.bind x n)
+            let! αs = M.get_scoped_vars
+            match Set.toList αs |> List.tryFind (function Va (_, Some s) -> s = x | _ -> false) with
+            | Some α -> return α
+            | None   -> let α = var.fresh_named x
+                        do! M.lift_scoped_vars (Set.add α)
                         return α
         }
 
-    member M.get_scoped_vars_as_set =
-        M {
-            let! vas = M.get_scoped_vars
-            return Computation.B.set { for x, n in vas do yield Va (n, Some x) }
-        }
-
-    member M.fork_scoped_vars f =
+    member M.undo_scoped_vars f =
         M {
             let! Γ = M.get_scoped_vars
             let! r = f
@@ -157,7 +151,7 @@ type basic_builder (loc : location) =
     member M.gen_and_bind_γ x k =
         M {
             let! { γ = γ; θ = θ } = M.get_state
-            let! αs = M.get_scoped_vars_as_set
+            let! αs = M.get_scoped_vars
             let kσ = (subst_kind θ.k k).generalize γ αs
             return! M.bind_γ x kσ
         }
@@ -174,7 +168,7 @@ type basic_builder (loc : location) =
             return M.lookup Report.Error.unbound_type_symbol γ x
         }
 
-    member M.fork_γ f =
+    member M.undo_γ f =
         M {
             let! γ = M.get_γ
             let! r = f
@@ -193,7 +187,8 @@ type basic_builder (loc : location) =
         M {
             let! Γ = M.get_Γ
             let! γ = M.get_γ
-            return { uni_context.Γ = Γ; γ = γ; loc = loc }
+            let! αs = M.get_scoped_vars
+            return { uni_context.Γ = Γ; γ = γ; loc = loc; scoped_vars = αs }
         }
 
 
@@ -220,32 +215,42 @@ type type_inference_builder (loc) =
             return subst_ty θ t
         }
 
+    // abstract the computation of ungeneralizable vars, making code relying on it independant from the implementation
+    member M.get_ungeneralizable_vars =
+        M {
+            let! Γ = M.get_Γ
+            return fv_Γ Γ   // TODOL: currently scoped vars are not considered ungeneralizable, thus behave like anonymous vars
+        }
+
     // used by some HML rules inferring foralls where the type part have been substituted
     member M.Yield ((Q : prefix, t : ty)) =
         M {
             let! t = M.updated t
-            #if DEBUG_HML
             let! θ = M.get_θ
             let! Γ = M.get_Γ
+            let! scoped = M.get_scoped_vars
+            #if DEBUG_HML
             let p set = sprintf "{ %s }" <| flatten_stringables ", " set
-            L.debug High "[yield-Q] S.dom = %O\n          Q.dom = %O\n          fv_gamma = %O\n          t = %O" (p θ.dom) (p Q.dom) (p <| fv_Γ Γ) t
-            assert Q.dom.IsSubsetOf t.fv                    // generalizable vars must be present in t
-            assert (Set.intersect Q.dom θ.dom).IsEmpty      // prefix and subst must involve different variables
-            assert (Set.intersect Q.dom (fv_Γ Γ)).IsEmpty   // no variable free in Γ must be generalized
+            L.debug High "[yield-Q] S.dom = %O\n          Q.dom = %O\n          fv_gamma = %O\n          scoped = %O\n          t = %O" (p θ.dom) (p Q.dom) (p (fv_Γ Γ)) (p scoped) t
             #endif
+            assert (Set.intersect Q.dom θ.dom).IsEmpty      // prefix and subst must involve different variables
+            assert Q.dom.IsSubsetOf t.fv                    // generalizable vars must be present in t
+            let! αs = M.get_ungeneralizable_vars
+            assert (Set.intersect Q.dom αs).IsEmpty         // generalizable vars must not be among ungeneralizable ones
             return Fx_ForallsQ (Q, Fx_F_Ty t)
         }
 
     // banged versions
     member M.YieldFrom f = M { let! (r : fxty) = f in yield r }
 
-    member M.restrict_to_fv_in_Γ =
+    // restrict current θ to fv in Γ
+    member M.prune_θ =
         M {
             let! Γ = M.get_Γ
             do! M.lift_θ (fun θ -> let αs = fv_Γ Γ in { t = θ.t.restrict αs; k = θ.k.restrict αs })
         }
 
-    member M.fork_Γ f =
+    member M.undo_Γ f =
         M {
             let! Γ = M.get_Γ
             let! r = f
@@ -272,10 +277,11 @@ type type_inference_builder (loc) =
             return subst_constraints θ cs
         }
 
-    member M.split_prefix αs =
+    member M.split_for_gen (Q0 : prefix) =
         M {
+            let! αs = M.get_ungeneralizable_vars
             let! Q = M.get_Q
-            let Q1, Q2 = Q.split αs
+            let Q1, Q2 = Q.split (Q0.dom + αs)
             do! M.set_Q Q1
             return Q2
         }
@@ -312,8 +318,8 @@ type type_inference_builder (loc) =
                     match jk, jm with
                     | Jk_Var y, _
                     | Jk_Data y, _
-                    | Jk_Inst (y, _), Jm_Overload -> x = y
-                    | _                               -> false)
+                    | Jk_Inst (y, _), Jm_Overload -> x = y      // TODO: this is not really elegant: combinations may vary and this does not scale
+                    | _                           -> false)
         }
 
     member M.lookup_Γ jk =
@@ -335,12 +341,13 @@ type type_inference_builder (loc) =
             return! M.bind_Γ (Jk_Var x) { mode = Jm_Normal; scheme = Ungeneralized t }
         }
 
-    // HACK: generalization need to deal with scoped vars
     member M.bind_generalized_Γ jk jm (ϕ : fxty) =
-        M {
-            // there must be no unquantified variables that are not free in Γ
-            let! Γ = M.get_Γ
-            assert ϕ.fv.IsSubsetOf (fv_Γ Γ)
+        M {           
+            let! αs = M.get_ungeneralizable_vars
+            match ϕ with
+            | FxU0_ForallsQ (Q, _) -> assert (Set.intersect Q.dom αs).IsEmpty   // no quantified vars must be ungeneralizable
+            | FxU0_Bottom _        -> ()                                        // TODOL: is there something to check with kind vars?
+            assert ϕ.fv.IsSubsetOf αs                                           // dual check: free vars must be among the ungeneralizable ones
             let! cs = M.get_constraints
             return! M.bind_Γ jk { mode = jm; scheme = { constraints = cs; fxty = ϕ } }
         }
@@ -378,7 +385,7 @@ type type_inference_builder (loc) =
             return σ
         }
 
-    member M.fork_constraints f =
+    member M.undo_constraints f =
         M {
             let! π = M.get_constraints
             let! r = f
@@ -419,7 +426,7 @@ type type_eval_builder<'e> (τ : node<'e, kind>) =
             do! M.lift_δ (fun Δ -> Δ.bind x t)
         }
     
-    member M.fork_δ f =
+    member M.undo_δ f =
         M {
             let! δ = M.get_δ
             let! r = f

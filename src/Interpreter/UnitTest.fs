@@ -24,13 +24,26 @@ open Lw.Core.Typing.StateMonad
 open PPrint
 
 type logger with
-    member this.testing fmt = this.custom Config.Log.test_color "TEST" Config.Log.cfg.test_threshold Low fmt
+    member this.test pri fmt = this.custom Config.Log.test_color "TEST" Config.Log.cfg.test_threshold pri fmt
     member this.test_ok fmt = this.custom Config.Log.test_ok_color "OK" Min Low fmt
+    member this.test_weak_ok fmt = this.custom Config.Log.test_weak_ok_color "WEAK" Min Low fmt
     member this.test_failed fmt = this.custom_error Config.Log.test_failed_color "FAIL" fmt
 
-type [< NoComparison; NoEquality >] test_result =
+[< RequireQualifiedAccess >]
+type [< NoComparison; NoEquality >] result =
     | Ok of string option
     | Wrong of Type
+
+[< RequireQualifiedAccess >]
+type score = Ok | Failed | Weak
+with
+    override this.ToString () = this.pretty
+    member this.pretty =
+        match this with
+        | score.Ok      -> "OK"
+        | score.Failed  -> "FAILED"
+        | score.Weak    -> "WEAK OK"
+
 
 // TODO: reuse this for interactive as well
 type typechecker () =
@@ -92,7 +105,7 @@ let parse_expr_or_decl s =  // TODO: support parsing of type expressions and kin
       
 let colon2 = txt Config.Printing.kind_annotation_sep
 
-let any x = delay (fun () -> fmt "%O" x)    // delayed because normalization will take place when rendering the whole doc
+let any x = txt (use N = var.reset_normalization in sprintf "%O" x)   // normalize vars in case parameter x has type ty of fxty
 
 let pp_infos l =
     let l = Seq.map (fun (s : string, doc) -> sprintf "%s: " (s.TrimEnd [|':'; ' '|]), doc) l
@@ -102,7 +115,9 @@ let pp_infos l =
             yield (txt s |> fill w) </> doc
       ] |> vsep |> align
 
-let expected_infos (ϕok, kok) = ["expected", pp_infos ["type", any ϕok; "kind", any kok]]
+let typed_infos (ϕ, t, k) = ["flex type", ϕ; "F-type", t; "kind", k]
+
+let expected_infos (ϕok : fxty, kok : kind) = ["expected", pp_infos <| typed_infos (any ϕok, any ϕok.ftype, any kok)]
 
 let static_error_infos (input : string) (e : static_error) =
     let term =
@@ -114,42 +129,47 @@ let static_error_infos (input : string) (e : static_error) =
         ["raised", txt (e.header.ToUpper ()); "at", any e.location; "term", txt term; "message", txt e.message_body]
 
 
-// logging shorcuts
+// logging and pprint shorcuts
 //
 
 type logger with
-    member __.pp (L : PrintfFormat<_, _, _, _> -> _) doc =
-        use N = var.reset_normalization
-        L "%s" <| render None doc
+    member __.pp (L : PrintfFormat<_, _, _, _> -> _) doc = L "%s" <| render None doc
 
-let test_ok msg infs = L.pp L.test_ok (pp_infos (["esist", txt msg] @ infs)); 0
+let test_ok esit infs = L.pp L.test_ok (pp_infos (["esist", txt esit] @ infs)); score.Ok
 
-let test_failed msg infs = L.pp L.test_failed (pp_infos (["reason", txt msg] @ infs)); 1
+let test_failed msg infs = L.pp L.test_failed (pp_infos (["reason", txt msg] @ infs)); score.Failed
 
-let testing doc = L.pp L.testing doc
+let test_weak_ok esit infs = L.pp L.test_weak_ok (pp_infos (["esit", txt esit] @ infs)); score.Weak
+
+let testing pri doc = L.pp (L.test pri) doc
 
 
 // testers
 //
 
-let is_test_ok (ϕres : fxty) (ϕok : fxty, kok : kind) =
+//type fxty with
+//    member ϕ.is_ftype = ϕ = ϕ.ftype
+
+let compare_test (ϕres : fxty) (ϕok : fxty, kok : kind) =
     let p x =
         use N = var.reset_normalization
         let r = sprintf "%O" x
         in
-            r.Replace (Config.Printing.dynamic.flex_forall, Config.Printing.dynamic.forall)     // replace flex type capitalized Forall with the lowercase one
+            r.Replace (Config.Printing.dynamic.flex_forall, Config.Printing.dynamic.forall)     // replace capitalized Forall with the lowercase one
     let (===) a b = p a = p b
+    let is_ftype (ϕ : fxty) = ϕ.ftype === ϕ
     in
-        // TODO: when flex types are different output a warning or return a special result to the caller, e.g. a variant Equal|AlmostEqual|NotEqual
-        (ϕok === ϕres || ϕok.ftype === ϕres.ftype) && kok === ϕres.kind
+        (if is_ftype ϕok then true else ϕok === ϕres), ϕok.ftype === ϕres.ftype, kok === ϕres.kind
+        
 
 let decl_dummy_ty = Fx_F_Ty T_Unit
 
 
 let test1 (tchk : typechecker) (input, res) =
     let typecheck1 s =
+        testing Min (txt "input:" </> txt s)
         let p = parse_expr_or_decl s
-        testing (align (txt "input:" </> txt s <.> txt "parsed:" </> any p))
+        testing Low (txt "parsed:" </> any p)
         let ϕ =
             match p with
             | parsed.Expr e -> tchk.W_expr e
@@ -158,10 +178,13 @@ let test1 (tchk : typechecker) (input, res) =
                 match d.value with
                 | D_Bind [{ patt = ULo (P_Var x) }] -> tchk.lookup_var_Γ x
                 | _ -> decl_dummy_ty
-        p, ϕ, ["translated", txt p.pretty_translated; "flex type", any ϕ; "F-type", any ϕ.ftype]
+        let inf o b = (txt (sprintf "(%s)" (if b then "OK" else "NO"))) <+> any o
+        in
+            p, ϕ, fun (ϕb, tb, kb) -> [ "translated", txt p.pretty_translated
+                                        "inferred", pp_infos <| typed_infos (inf ϕ ϕb, inf ϕ.ftype tb, inf ϕ.kind kb) ]
     in
         match res with
-        | Ok so ->
+        | result.Ok so ->
             let ϕok, kok =
                 match so with
                 | Some s -> try tchk.parse_expected_ty_expr s
@@ -170,16 +193,23 @@ let test1 (tchk : typechecker) (input, res) =
             in
                 try
                     let _, ϕres, infs1 = typecheck1 input
-                    if is_test_ok ϕres (ϕok, kok) then test_ok "type is ok" infs1
-                    else test_failed "wrong type or kind" <| infs1 @ expected_infos (ϕok, kok)
+                    let b3 = compare_test ϕres (ϕok, kok)
+                    let infs2 = expected_infos (ϕok, kok)
+                    let infs1 = infs1 b3
+                    in
+                        match b3 with
+                        | true, true, true  -> test_ok "all ok" infs1
+                        | true, false, true -> test_weak_ok "F-type are different" (infs1 @ infs2)
+                        | false, true, true -> test_weak_ok "flex types are different" (infs1 @ infs2)
+                        | _                 -> test_failed "expected to be ok" (infs1 @ infs2)
                 with :? static_error as e ->
-                    test_failed "static error thrown" <| static_error_infos input e @ expected_infos (ϕok, kok)
+                    test_failed "unwanted static error" <| static_error_infos input e @ expected_infos (ϕok, kok)
                     
-        | Wrong T ->
+        | result.Wrong T ->
             assert T.IsSubclassOf typeof<static_error>
             try
                let _, _, infs1 = typecheck1 input
-               test_failed "expected an error" <| infs1 @ ["error expected", txt T.Name]
+               test_failed "expected to be wrong" <| infs1 (false, false, false) @ ["error expected", txt T.Name]
             with :? static_error as e ->
                 if (let t = e.GetType() in t = T || t.IsSubclassOf T) then
                     test_ok "justly rejected" <| static_error_infos input e
@@ -189,9 +219,12 @@ let test1 (tchk : typechecker) (input, res) =
 let test ts =
     let tchk = new typechecker ()
     let xs, span = cputime (List.map (test1 tchk)) ts
-    let sum = List.sum xs
-    L.msg High "tested: %d\nfailed: %d\ncpu time: %s" (List.length ts) sum span.pretty
-    sum
+    let results =
+        let counts = List.countBy identity xs |> List.sortBy (fst >> function score.Ok -> 1 | score.Weak -> 2 | score.Failed -> 3)
+        in
+            mappen_strings (uncurry2 <| sprintf "%O = %d") "\n" counts
+    L.msg High "cpu time: %s\ntest results:\n%s" span.pretty results // %d\nfailed: %d\ncpu time: %s" (List.length ts) sum span.pretty
+    List.sumBy (function score.Ok | score.Weak -> 1 | _ -> 0) xs
 
 
 
@@ -200,9 +233,9 @@ let test ts =
 
 module Tests =
 
-    let type_ok s = Ok (Some s)
-    let any = Ok None
-    let wrong< 'exn when 'exn :> static_error > = Wrong typeof<'exn>
+    let type_ok s = result.Ok (Some s)
+    let any = result.Ok None
+    let wrong< 'exn when 'exn :> static_error > = result.Wrong typeof<'exn>
     let wrong_type = wrong<type_error>
     let wrong_syntax = wrong<syntax_error>
     
@@ -217,6 +250,8 @@ module Tests =
         "[true; 2]",                                wrong_type
         "(Some 0 :: [None]) :: [[Some 2]]",         type_ok "list (list (option int))"
         "[None]",                                   type_ok "list (option 'a)"
+        "1 + 3",                                    type_ok "int"
+        "if 1 then () else ()",                     wrong_type
       ]
 
     let HM =
@@ -232,24 +267,26 @@ module Tests =
         "let single x = [x]",                       type_ok "forall 'a. 'a -> list 'a"
       ]
 
-    let scoped_tyvars =
-      [
-        "let i x = x in i 1, i true, i",            type_ok "int * bool * (forall 'a. 'a -> 'a)"
-        "let i (x : 'a) = x in i 1, i true, i",     type_ok "int * bool * (forall 'a. 'a -> 'a)"
-        "let y =
-            let i (x : 'a) = x
-            in
-                i 1, i true",                       wrong_type // rejected because scoped type variables should not be generalized when are not at top level
-      ]
-
     let HML =
       [
+        "let i x = x in i 1, i true, i",            type_ok "int * bool * (forall 'a. 'a -> 'a)"
         "fun (i : forall 'a. 'a -> 'a) ->
-            (i 1, i true)",                         type_ok "int * bool" // polymorphic use of annotated parameter
+            (i 1, i true)",                         type_ok "(forall 'a. 'a -> 'a) -> int * bool" // polymorphic use of annotated parameter
         "single id",                                type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
-        "let choose x y = x",                       type_ok ""
+        "let const x y = x",                        type_ok "forall 'a 'b. 'a -> 'b -> 'a"
+        "let const2 x y = y",                       type_ok "forall 'a 'b. 'a -> 'b -> 'b"
+        "let choose x y = if x = y then x else y",  type_ok "forall 'a. 'a -> 'a -> 'a"
         "choose (fun x y -> x) (fun x y -> y)",     type_ok "forall 'a. 'a -> 'a -> 'a"
         "choose id",                                type_ok "forall ('a :> forall 'b. 'b -> 'b). 'a -> 'a"
+      ]
+
+    let scoped_tyvars =
+      [
+        "let i (x : 'bar) = x in i 1, i true, i",   type_ok "int * bool * (forall 'bar. 'bar -> 'bar)"
+        "let y =
+            let i (x : 'foo) = x
+            in
+                i 1, i true",                       type_ok "int * bool"    // generalization of scoped vars is valid
       ]
     
     let all = List.concat [ intrinsics; HM; scoped_tyvars; HML ]
