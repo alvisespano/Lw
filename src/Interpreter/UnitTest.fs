@@ -30,8 +30,12 @@ type logger with
     member this.test_failed fmt = this.custom_error Config.Log.test_failed_color "FAIL" fmt
 
 [< RequireQualifiedAccess >]
+type flag =
+    | StrictVarNames
+
+[< RequireQualifiedAccess >]
 type [< NoComparison; NoEquality >] result =
-    | Ok of string option
+    | Ok of string option * flag list
     | Wrong of Type
 
 [< RequireQualifiedAccess >]
@@ -42,7 +46,8 @@ with
         match this with
         | score.Ok      -> "OK"
         | score.Failed  -> "FAILED"
-        | score.Weak    -> "WEAK OK"
+        | score.Weak    -> "WEAK"
+
 
 
 // TODO: reuse this for interactive as well
@@ -147,8 +152,33 @@ let testing pri doc = L.pp (L.test pri) doc
 // testers
 //
 
-//type fxty with
-//    member ϕ.is_ftype = ϕ = ϕ.ftype
+type var with
+    member this.anonymize =
+        match this with
+        | Va (n, _) -> Va (n, None)
+
+type kind with
+    member this.anonymize_vars =
+        match this with
+        | K_Var α        -> K_Var α.anonymize
+        | K_Cons (x, ks) -> K_Cons (x, List.map (fun (k : kind) -> k.anonymize_vars) ks)
+
+type ty with
+    member this.anonymize_vars =
+        match this with
+        | T_Forall (α, t)        -> T_Forall (α.anonymize, t.anonymize_vars)
+        | T_Cons (x, k)          -> T_Cons (x, k.anonymize_vars)
+        | T_Var (α, k)           -> T_Var (α.anonymize, k.anonymize_vars)
+        | T_HTuple ts            -> T_HTuple (List.map (fun (t : ty) -> t.anonymize_vars) ts)
+        | T_App (t1, t2)         -> T_App (t1.anonymize_vars, t2.anonymize_vars)
+        | T_Closure (x, Δ, τ, k) -> T_Closure (x, Δ, τ, k.anonymize_vars)
+
+type fxty with
+    member this.anonymize_vars =
+        match this with
+        | Fx_Forall ((α, t1), t2) -> Fx_Forall ((α.anonymize, t1.anonymize_vars), t2.anonymize_vars)
+        | Fx_Bottom k             -> Fx_Bottom k.anonymize_vars
+        | Fx_F_Ty t               -> Fx_F_Ty t.anonymize_vars
 
 let compare_test (ϕres : fxty) (ϕok : fxty, kok : kind) =
     let p x =
@@ -164,8 +194,10 @@ let compare_test (ϕres : fxty) (ϕok : fxty, kok : kind) =
 
 let decl_dummy_ty = Fx_F_Ty T_Unit
 
+type entry = string * result
+type section = string * entry list
 
-let test1 (tchk : typechecker) (input, res) =
+let test_entry (tchk : typechecker) sec n ((input, res) : entry) =
     let typecheck1 s =
         testing Min (txt "input:" </> txt s)
         let p = parse_expr_or_decl s
@@ -177,14 +209,16 @@ let test1 (tchk : typechecker) (input, res) =
                 tchk.W_decl d
                 match d.value with
                 | D_Bind [{ patt = ULo (P_Var x) }] -> tchk.lookup_var_Γ x
-                | _ -> decl_dummy_ty
+                | _                                 -> decl_dummy_ty
         let inf o b = (txt (sprintf "(%s)" (if b then "OK" else "NO"))) <+> any o
         in
-            p, ϕ, fun (ϕb, tb, kb) -> [ "translated", txt p.pretty_translated
-                                        "inferred", pp_infos <| typed_infos (inf ϕ ϕb, inf ϕ.ftype tb, inf ϕ.kind kb) ]
+            ϕ, fun (ϕb, tb, kb) -> [ "entry", txt (sprintf "#%d in section \"%s\"" (n + 1) sec)
+                                     "translated", txt p.pretty_translated
+                                     "inferred", pp_infos <| typed_infos (inf ϕ ϕb, inf ϕ.ftype tb, inf ϕ.kind kb) ]
     in
         match res with
-        | result.Ok so ->
+        | result.Ok (so, flags) ->
+            let is_enabled flag = List.contains flag flags
             let ϕok, kok =
                 match so with
                 | Some s -> try tchk.parse_expected_ty_expr s
@@ -192,7 +226,8 @@ let test1 (tchk : typechecker) (input, res) =
                 | None   -> let ϕ = decl_dummy_ty in ϕ, ϕ.kind
             in
                 try
-                    let _, ϕres, infs1 = typecheck1 input
+                    let ϕres, infs1 = typecheck1 input
+                    let ϕok, kok, ϕres = if is_enabled flag.StrictVarNames then ϕok, kok, ϕres else ϕok.anonymize_vars, kok.anonymize_vars, ϕres.anonymize_vars
                     let b3 = compare_test ϕres (ϕok, kok)
                     let infs2 = expected_infos (ϕok, kok)
                     let infs1 = infs1 b3
@@ -208,7 +243,7 @@ let test1 (tchk : typechecker) (input, res) =
         | result.Wrong T ->
             assert T.IsSubclassOf typeof<static_error>
             try
-               let _, _, infs1 = typecheck1 input
+               let _, infs1 = typecheck1 input
                test_failed "expected to be wrong" <| infs1 (false, false, false) @ ["error expected", txt T.Name]
             with :? static_error as e ->
                 if (let t = e.GetType() in t = T || t.IsSubclassOf T) then
@@ -216,16 +251,27 @@ let test1 (tchk : typechecker) (input, res) =
                 else reraise ()
 
 
-let test ts =
-    let tchk = new typechecker ()
-    let xs, span = cputime (List.map (test1 tchk)) ts
-    let results =
-        let counts = List.countBy identity xs |> List.sortBy (fst >> function score.Ok -> 1 | score.Weak -> 2 | score.Failed -> 3)
-        in
-            mappen_strings (uncurry2 <| sprintf "%O = %d") "\n" counts
-    L.msg High "cpu time: %s\ntest results:\n%s" span.pretty results // %d\nfailed: %d\ncpu time: %s" (List.length ts) sum span.pretty
-    List.sumBy (function score.Ok | score.Weak -> 1 | _ -> 0) xs
+let score_infos scores =
+    [score.Ok; score.Weak; score.Failed] @ scores   // trick for making countBy always count at least 1 for each kind of score
+    |> List.countBy identity
+    |> List.sortBy (fst >> function score.Ok -> 1 | score.Weak -> 2 | score.Failed -> 3)
+    |> List.map (fun (score, n) -> sprintf "%O" score, fmt "%d" (n  - 1))   // n-1 because of the trick above
 
+let section_infos sec (span : TimeSpan) (scores : score list) =
+    ["section", txt sec; "entries", fmt "%d" scores.Length; "cpu time", txt span.pretty; "results", pp_infos (score_infos scores)]
+
+let test_section tchk ((sec, entries) : section) =
+    let scores, span = cputime (List.mapi (fun i -> test_entry tchk sec i)) entries
+    let infs = section_infos sec span scores
+    L.pp (L.msg Normal) (pp_infos infs)
+    scores
+
+let test_sections secs =
+    let tchk = new typechecker ()
+    let scores, span = cputime (fun () -> List.map (test_section tchk) secs |> List.concat) () 
+    let infs = section_infos (mappen_strings fst ", " secs) span scores
+    L.pp (L.msg High) (pp_infos infs)
+    List.sumBy (function score.Ok | score.Weak -> 1 | _ -> 0) scores
 
 
 // unit tests
@@ -233,13 +279,16 @@ let test ts =
 
 module Tests =
 
-    let type_ok s = result.Ok (Some s)
-    let any = result.Ok None
+    let type_ok s = result.Ok (Some s, [])
+    let type_is s = result.Ok (Some s, [flag.StrictVarNames])
+    let ok = result.Ok (None, [])
     let wrong< 'exn when 'exn :> static_error > = result.Wrong typeof<'exn>
     let wrong_type = wrong<type_error>
     let wrong_syntax = wrong<syntax_error>
     
-    let intrinsics =
+    let all : section list =
+     [
+      "Intrinsics",
       [
         "[]",                                       type_ok "list 'a"
         "[1; 2]",                                   type_ok "list int"
@@ -254,7 +303,28 @@ module Tests =
         "if 1 then () else ()",                     wrong_type
       ]
 
-    let HM =
+      "Type Annotations",
+      [
+        "fun f x y ->
+            ((f : 'a -> 'a) x, y) : _ * int",       type_ok "('a -> 'a) -> 'a -> int -> 'a * int"
+        "fun f (x : 'x) y ->
+            ((f : 'a -> _) x, y) : _ * int",        type_ok "('b -> 'a) -> 'b -> int -> 'b * int"
+        "fun f (x : 'b) y ->
+            ((f : _ -> 'a) x, y) : 'a * _",         type_ok "('b -> 'a) -> 'b -> int -> 'a * 'c"
+
+      ]
+
+      "Lists",
+      [
+        "let rec map f = function
+            | [] -> []
+            | x :: xs -> f x :: map f xs",          type_ok "('a -> 'b) -> list 'a -> list 'b"
+        "let rec fold f z = function
+            | [] -> z
+            | x :: xs -> fold f (f z x) xs",        type_ok "('b -> 'a -> 'b) -> 'b -> list 'a -> 'b"
+      ]
+
+      "ML Type Inference",
       [
         "fun x -> x",                               type_ok "forall 'a. 'a -> 'a"
         "fun f x -> f x",                           type_ok "forall 'a 'b. ('a -> 'b) -> 'a -> 'b"
@@ -267,7 +337,7 @@ module Tests =
         "let single x = [x]",                       type_ok "forall 'a. 'a -> list 'a"
       ]
 
-    let HML =
+      "HML",
       [
         "let i x = x in i 1, i true, i",            type_ok "int * bool * (forall 'a. 'a -> 'a)"
         "fun (i : forall 'a. 'a -> 'a) ->
@@ -280,20 +350,72 @@ module Tests =
         "choose id",                                type_ok "forall ('a :> forall 'b. 'b -> 'b). 'a -> 'a"
       ]
 
-    let scoped_tyvars =
+      "Scoped Type Variables",
       [
-        "let i (x : 'bar) = x in i 1, i true, i",   type_ok "int * bool * (forall 'bar. 'bar -> 'bar)"
+        "let i (x : 'bar) = x in i 1, i true, i",   type_is "int * bool * (forall 'bar. 'bar -> 'bar)"
         "let y =
             let i (x : 'foo) = x
             in
                 i 1, i true",                       type_ok "int * bool"    // generalization of scoped vars is valid
       ]
+     ]
+    // impredicative application and higher rank arguments are fully supported    
+    (*let HR = 
+      [
+        "xauto",    ok "forall a. (forall a. a -> a) -> a -> a"
+        ,("auto", ok "(forall a. a -> a) -> (forall a. a -> a)")
+        ,("\\(i :: forall a. a -> a) -> i i", ok "forall (a >= forall b. b -> b). (forall b. b -> b) -> a") -- ok "forall a. (forall a. a -> a) -> a -> a")
+        ,("auto id", ok "forall a. a -> a")
+        ,("apply auto id", ok "forall a. a -> a")
+        ,("(single :: (forall a. a -> a) -> [forall a. a->a]) id", ok "[forall a. a-> a]")
+        ,("runST (returnST 1)", ok "Int")
+        ,("runST (newRef 1)", Wrong)
+        ,("apply runST (returnST 1)", ok "Int")
+        ,("map xauto ids", ok "forall a. [a -> a]")
+        ,("map xauto (map xauto ids)", Wrong)
+        ,("map auto ids", ok "[forall a. a -> a]")
+        ,("map auto (map auto ids)", ok "[forall a. a -> a]")
+        ,("head ids", ok "forall a. a -> a")
+        ,("tail ids", ok "[forall a. a -> a]")
+        ,("apply tail ids", ok "[forall a. a -> a]")
+        ,("map head (single ids)", ok "[forall a. a -> a]")
+        ,("apply (map head) (single ids)", ok "[forall a. a -> a]")
+
+        -- check infinite poly types
+        ,("(undefined :: some a. [a -> a] -> Int) (undefined :: some c. [(forall d. d -> c) -> c])", Wrong)
+        ,("(undefined :: some a. [a -> a] -> Int) (undefined :: [(forall d. d -> d) -> (Int -> Int)])", Wrong)
+        ,("(undefined :: some a. [a -> (forall b. b -> b)] -> Int) (undefined :: some c. [(forall d. d -> d) -> c])", ok "Int")
+
+        -- these fail horribly in ghc: (choose auto id) is rejected while ((choose auto) id) is accepted -- so much for parenthesis :-)
+        ,("choose id auto", ok "(forall a. a -> a) -> (forall a. a -> a)")
+        ,("choose auto id", ok "(forall a. a -> a) -> (forall a. a -> a)")
+        ,("choose xauto xauto", ok "forall a. (forall b. b -> b) -> a -> a")
+        ,("choose id xauto", Wrong)
+        ,("choose xauto id", Wrong)
+
+        -- these fail too in ghc: (choose ids []) is accepted while (choose [] ids) is rejected
+        ,("choose [] ids", ok "[forall a. a -> a]")
+        ,("choose ids []", ok "[forall a. a -> a]")
     
-    let all = List.concat [ intrinsics; HM; scoped_tyvars; HML ]
+        -- check escaping skolems
+        ,("\\x -> auto x", Wrong)                                                                             -- escape in match
+        ,("let poly (xs :: [forall a. a -> a]) = 1 in (\\x -> poly x)", Wrong)                              -- escape in apply
+        ,("\\x -> (x :: [forall a. a -> a])", Wrong)                                                          -- escape in apply
+        ,("\\x -> let polys (xs :: [forall a . a -> a]) = 1; f y = x in polys [f::some a. forall b. b -> a]",Wrong)  -- escape in unify (with rigid annotations, otherwise we get a skolem mismatch)
+        ,("ids :: forall b. [forall a. a -> b]", Wrong)                                                       -- unify different skolems
+
+        -- co/contra variance
+        ,("let g (x::(forall a. a -> a) -> Int) = x id; f (x :: Int -> Int) = x 1 in g f", Wrong)                                      -- HMF is invariant
+        ,("let g (x::(forall a. a -> a) -> Int) = x id; f (x :: Int -> Int) = x 1 in g (\\(x :: forall a. a -> a) -> f x)", ok "Int")  -- but we can always use explicit annotations to type such examples
+
+        -- shared polymorphism
+        ,("let f (x :: [forall a.a -> a]) = x in let g (x :: [Int -> Int]) = x in let ids = [id] in (f ids, g ids)", ok "([forall a. a -> a],[Int -> Int])")
+      ]*)
+
 
     
 let main () =
-    test Tests.all
+    test_sections Tests.all
 
 
 

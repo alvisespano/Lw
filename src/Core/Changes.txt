@@ -1,4 +1,9 @@
 ﻿
+1/3/2016:
+* UP: UnitTest revamped with flag subsystem for special behaviours
+* UP: UnitTest types are now subject to anonymization of all type variables, unless StrictVarNames flag is enabled
+
+
 29/2/2016:
 * UP: Reserved_Cons removed from expr AST: it used to exist because of the evaluator, but it is not necessary as new data constructors X can be bound to Δ as (X, V_Cons (X, []))
 * REFACT: scoped vars have now become a set of vars

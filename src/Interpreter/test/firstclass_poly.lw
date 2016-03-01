@@ -5,9 +5,16 @@
 
 namespace Test 
 
-let id x = x
+let annot f x y = ((f : 'a -> 'a) x, y) : _ * int
 
-let id2 (x : 'foo) = x
+(*let f x = match x with 1 -> true
+
+let rec map f = function
+    | [] -> []
+    | x :: xs -> f x :: map f xs
+
+let id x = x
+*)
 
 (*
 let app f x = f x

@@ -645,10 +645,18 @@ type ty with
             | T_Closure (x, _, τ, _) -> sprintf "<[%O]>" (Te_Lambda ((x, None), τ))
 
             | T_ForallsK (αks, t) ->
+                #if ENABLE_PREFIX_SORTING
+                let αks = List.sortBy (fun (α, _) -> sprintf "%O" α) αks
                 use A = var.add_quantifieds (List.map fst αks)
-                let ts = List.map T_Var αks
+                let t = t.pretty
+                let ts = mappen_strings (fun (α, k) -> sprintf "%O" (T_Var (α, k))) Config.Printing.forall_prefix_sep αks
+                #else
+                use A = var.add_quantifieds (List.map fst αks)
+                let ts = mappen_strings (fun (α, k) -> sprintf "%O" (T_Var (α, k))) Config.Printing.forall_prefix_sep αks
+                let t = t.pretty
+                #endif
                 in
-                    sprintf "%s %s. %O" Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_prefix_sep ts) t
+                    sprintf "%s %s. %s" Config.Printing.dynamic.forall ts t
 
             | T_Forall _ as t -> unexpected_case __SOURCE_FILE__ __LINE__ t
         and R = wrap_pretty_with_kind R'
@@ -707,10 +715,18 @@ type fxty with
             | Fx_Bottom _   -> Config.Printing.dynamic.bottom
             | Fx_F_Ty t     -> t.pretty
             | Fx_Foralls (qs, t) ->
-                let Q = prefix.ofSeq qs
-                use N = var.add_quantifieds (Seq.map fst Q)
+                #if ENABLE_PREFIX_SORTING
+                let qs = List.sortBy (fun (α, _) -> sprintf "%O" α) qs
+                use A = var.add_quantifieds (Seq.map fst qs)
+                let t = t.pretty
+                let ts = mappen_strings prefix.pretty_item Config.Printing.forall_prefix_sep qs
+                #else
+                use A = var.add_quantifieds (Seq.map fst qs)
+                let ts = mappen_strings prefix.pretty_item Config.Printing.forall_prefix_sep qs
+                let t = t.pretty
+                #endif
                 in
-                    sprintf "%s %O. %O" Config.Printing.dynamic.flex_forall Q t
+                    sprintf "%s %s. %s" Config.Printing.dynamic.flex_forall ts t
 
             | Fx_Forall _ as ϕ -> unexpected_case __SOURCE_FILE__ __LINE__ ϕ
                     

@@ -113,23 +113,6 @@ let make_arrow_by_apps arrow_cons apps (|Arrow_Cons|_|) (|Apps|_|) =
     in
         Arrow, (|Arrow|_|)
 
-//let Arrows arrow =
-//    let rec R = function
-//        | []      -> unexpected "empty arrow atom list" __SOURCE_FILE__ __LINE__
-//        | [x]     -> x
-//        | x :: xs -> arrow (x, R xs)
-//    in
-//        R
-//
-//let rec (|Arrows|_|) (|Arrow|_|) = function
-//    | Arrow (x1, Arrows (|Arrow|_|) l) -> Some (x1 :: l)
-//    | Arrow (x1, x2)                   -> Some [x1; x2]
-//    | _                                -> None
-//
-//let (|Arrows1|) (|Arrows|_|) = function
-//    | Arrows xs -> xs
-//    | x         -> [x]
-
 let make_arrows_by f (|F|) =
     let rec Arrows arrow = function
         | []        -> unexpected "empty list of Arrows items" __SOURCE_FILE__ __LINE__
@@ -146,23 +129,8 @@ let make_arrows_by f (|F|) =
         make_patterns (Arrows, (|Arrows|_|), (|Arrows1|))
 
 
-
 // apps active pattern creator
 //
-
-//let (|Apps1|) (|Apps|_|) = function
-//    | Apps xs -> xs
-//    | x       -> [x]
-//
-///// Etherogeneous Apps factory given the projection pattern/function F
-//let rec FApps F (app : ('e * 'e) -> 'u) (l : 'e list) : 'u =
-//    match l with
-//    | [] | [_] as l -> unexpected "empty or singleton list for Apps: %O" __SOURCE_FILE__ __LINE__  l
-//    | l             -> let xs, x = List.takeButLast l in app (F (FApps F app xs), x)
-//let rec (|FApps|_|) (|F|) (|App|_|) = function
-//    | App (F (FApps (|F|) (|App|_|) l), x2) -> Some (l @ [x2])
-//    | App (x1, x2)                          -> Some [x1; x2]
-//    | _  -> None
 
 let make_apps_by f (|F|) =
     let rec Apps app = function
@@ -212,7 +180,7 @@ type 'n id_param = param<id, 'n>
 let pretty_param sep (id, tyo) =
     match tyo with
         | None   -> sprintf "%O" id
-        | Some a -> sprintf "%O %s %O" id sep a
+        | Some a -> sprintf "(%O %s %O)" id sep a
 
 
 // unification variables
@@ -289,6 +257,7 @@ type var with
                 #if !DISABLE_TYVAR_NORM
                 ignore <| var.ctx_stack.Pop ()
                 #endif
+                ()
         }
 
     static member add_quantified α =
@@ -570,17 +539,6 @@ let Te_Unit = Te_Primitive Config.Typing.Names.Type.unit
 
 // special patterns for type expressions and type patterns
 
-//module Old =
-////     old version without the new make_* functions
-//    let Te_Apps τs = (Apps (fun (τ1, τ2) -> Lo τ1.loc <| Te_App (τ1, τ2)) τs).value
-//    let (|Te_Apps|_|) = (|Apps|_|) (function Te_App (ULo τ1, ULo τ2) -> Some (τ1, τ2) | _ -> None)
-//    let Te_Arrow (t1 : ty_expr, t2 : ty_expr) = Te_Apps [Lo t1.loc (Te_Id Config.Typing.Names.Type.arrow); t1; t2]
-//    let (|Te_Arrow|_|) = function
-//        | Te_Apps [Te_Id s; τ1; τ2] when s = Config.Typing.Names.Type.arrow -> Some (τ1, τ2)
-//        | _ -> None
-//    let Te_Arrows' τs = (Arrows (fun (e1 : ty_expr, e2) -> Lo e1.loc <| Te_Arrow (e1, e2)) τs).value
-
-
 /// This magic function transforms a pattern factory into the same factory supporting nodes.
 let nodify make app (|App|_|) =
     let f (loc, x) = Lo loc x
@@ -603,20 +561,6 @@ let private (|Te_Rowed|_|) name = function
     | _ -> None
 
 let Te_Record, Te_Variant, Te_Tuple, (|Te_Record|_|), (|Te_Variant|_|), (|Te_Tuple|_|) = make_rows Te_Rowed (|Te_Rowed|_|)
-
-// old version without the new make_* functions
-//let Tp_Arrow_Cons = Tp_Cons Config.Typing.Names.Type.arrow
-//let (|Tp_Arrow_Cons|_|) = function
-//    | Tp_Cons s when s = Config.Typing.Names.Type.arrow -> Some ()
-//    | _ -> None
-//
-//let Tp_Apps ps = (Apps (fun (τ1, τ2) -> Lo τ1.loc <| Tp_App (τ1, τ2)) ps).value
-//let (|Tp_Apps|_|) = (|Apps|_|) (function Tp_App (ULo τ1, ULo τ2) -> Some (τ1, τ2) | _ -> None)
-//
-//let Tp_Arrow (t1 : ty_patt, t2) = Tp_Apps [Lo t1.loc Tp_Arrow_Cons; t1; t2]
-//let (|Tp_Arrow|_|) = function
-//    | Tp_Apps [Tp_Arrow_Cons; t1; t2] -> Some (t1, t2)
-//    | _ -> None
 
 let Tp_Apps, (|Tp_Apps1|), (|Tp_Apps|_|) = nodify make_apps_by Tp_App (function Tp_App (τ1, τ2) -> Some (τ1, τ2) | _ -> None)
 let Tp_Arrow, (|Tp_Arrow|_|) = let A = Config.Typing.Names.Type.arrow in make_arrow_by_apps (ULo (Tp_Cons A)) Tp_Apps (function ULo (Tp_Cons x) when x = A -> Some () | _ -> None) (|Tp_Apps|_|)
@@ -929,9 +873,9 @@ type uexpr with
             | App (A s)             -> s
             | Lambda (tpar, e)      -> sprintf "fun %s -> %O" (pretty_param Config.Printing.type_annotation_sep tpar) e
             | Select (e, id)        -> sprintf "%O.%s" e id
-            | Restrict (e, id)      -> sprintf "%O \ %s" e id
+            | Restrict (e, id)      -> sprintf "%O \\ %s" e id
             | If (e1, e2, e3)       -> sprintf "if %O then %O else %O" e1 e2 e3
-            | Annot (e, τ)          -> sprintf "(%O : %O)" e τ
+            | Annot (e, τ)          -> sprintf "%O : %O" e τ
             | Let (d, e)            -> sprintf "%O in %O" d e
             | Match (e, cases)      -> sprintf "match %O with\n| %s" e (pretty_cases cases)
             | Tuple ([] | [_])      -> unexpected "empty or unary tuple expression" __SOURCE_FILE__ __LINE__ this
@@ -941,7 +885,7 @@ type uexpr with
             | Solve (e, τ)          -> sprintf "%O where %O" e τ
             | Record (bs, None)     -> sprintf "{ %s }" (mappen_strings (fun (x, e) -> sprintf "%s = %O" x e) "; " bs)
             | Record (bs, Some e)   -> sprintf "{ %s | %O }" (mappen_strings (fun (x, e) -> sprintf "%s = %O" x e) "; " bs) e
-            | Inject e              -> sprintf "\_ %O" e
+            | Inject e              -> sprintf "\\_ %O" e
             | Eject e               -> sprintf "%O _/" e
             | Loosen e              -> sprintf "(%O)#" e
 

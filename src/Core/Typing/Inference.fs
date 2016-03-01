@@ -26,7 +26,7 @@ open Lw.Core.Typing.Meta
 
 
 type translatable_type_inference_builder<'e> with
-    member M.desugar f (e' : node<_, _>) =
+    member M.W_desugared f (e' : node<_, _>) =
         M {
             L.debug Low "[DESUGAR] %O ~~> %O" M.current_node e'
             let! t = f e'
@@ -124,7 +124,7 @@ and W_expr_F ctx e0 =
 and W_expr' ctx (e0 : expr) =
     let Lo x = Lo e0.loc x
     let M = new translatable_type_inference_builder< _> (e0)
-    let desugar = M.desugar (W_expr ctx)
+    let W_desugared_expr = M.W_desugared (W_expr ctx)
     M {
         match e0.value with
         | Lit lit ->
@@ -282,13 +282,27 @@ and W_expr' ctx (e0 : expr) =
                 let! te = W_expr_F ctx e
                 do! M.unify e.loc tr0 te
             yield tr0
+//            let! te1 = W_expr_F ctx e1
+//            let tr0 = ty.fresh_star_var
+//            for p, ewo, e in cases do
+//                let! tp = W_patt_F ctx p
+//                do! M.unify p.loc te1 tp
+//                match ewo with
+//                | None    -> return ()
+//                | Some ew -> let! tew = W_expr_F ctx ew
+//                             do! M.unify ew.loc T_Bool tew
+//                let! te = W_expr_F ctx e
+//                do! M.unify e.loc tr0 te
+//            yield tr0
         
         // HACK: Annot must be rewritten as an application to an annotated lambda
         | Annot (e, τ) ->
-            let! t, _ = Wk_and_eval_ty_expr_F ctx τ
-            let! te = W_expr_F ctx e
-            do! M.unify e.loc t te
-            yield t
+//            let! t, _ = Wk_and_eval_ty_expr_F ctx τ  
+//            let! te = W_expr_F ctx e
+//            do! M.unify e.loc t te
+//            yield t
+            let x = fresh_reserved_id ()
+            yield! W_desugared_expr (Lo <| App (Lo <| Lambda ((x, Some τ), Lo <| Var x), e))
 
         | Combine es ->
             if es.Length <= 1 then Debugger.Break ()
@@ -348,7 +362,7 @@ and W_expr' ctx (e0 : expr) =
                 let bs = [ for c in cs -> let xi = c.name in { qual = decl_qual.none; patt = Lo <| P_Var xi; expr = Lo <| Select (Lo <| Id x, xi) } ]
                 in
                     Let (Lo <| D_Bind bs, e)
-            yield! desugar (Lo <| Lambda ((x, None), Lo e1))    // TODOL: infer the type of the desugared expression?
+            yield! W_desugared_expr (Lo <| Lambda ((x, None), Lo e1))
 
         | Eject e ->
             let! t = W_expr_F ctx e
@@ -365,7 +379,7 @@ and W_expr' ctx (e0 : expr) =
             let x = fresh_reserved_id ()
             let e1 = Record ([ for { name = y } in cs -> y, Lo <| Id y ], None)
             let e2 = App (e, Lo <| Id x)
-            yield! desugar (Lo <| Let (Lo <| D_Bind [{ qual = decl_qual.none; patt = Lo <| P_Var x; expr = Lo e1 }], Lo e2))    // TODO: infer the type of the desugared expression?
+            yield! W_desugared_expr (Lo <| Let (Lo <| D_Bind [{ qual = decl_qual.none; patt = Lo <| P_Var x; expr = Lo e1 }], Lo e2))    // TODO: infer the type of the desugared expression?
 
         | Solve (e, τ) ->
             let! te = W_expr_F ctx e
@@ -399,7 +413,7 @@ and W_expr' ctx (e0 : expr) =
 
 and W_decl' (ctx : context) (d0 : decl) =
     let M = new translatable_type_inference_builder<_> (d0)
-    let desugar = M.desugar (W_decl ctx) 
+    let desugar = M.W_desugared (W_decl ctx) 
     let unify_and_resolve (ctx : context) (e : node<_, _>) t1 t2 =
         M {
             do! M.unify e.loc t1 t2
