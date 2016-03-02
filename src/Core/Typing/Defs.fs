@@ -20,7 +20,7 @@ open Lw.Core.Absyn
 // types, schemes, constraints, environments, etc.
 //
 
-type kscheme = { forall : Set<var>; kind : kind }
+type [< NoComparison; NoEquality >] kscheme = { forall : Set<var>; kind : kind }
 with
     static member binding_separator = "::"
 
@@ -28,11 +28,34 @@ type kjenv = Env.t<id, kscheme>
 
 type kconsenv = Env.t<id, var list * kind>
 
-type tenv = Env.t<id, ty>
+
+/// Equality operator factory for types supporting the 'kind' getter property. Parameter f is the actual comparison function, which will
+/// be called passing the a monadic builder, the operator for comparing variables and the 2 arguments to be compared.
+/// In order to use this factory, define f as a monadic function over the passed builder and implement the equality algorithm by using the operator passed as argument.
+/// When recursion is needed, just use the (=) operator recursively - simple as that.
+let inline internal is_ty_equal f (x : ^t) (y : ^t) =
+    let M = new Monad.state_builder<Env.t<var, var>> ()
+    let is_var_equal α β =
+        M {
+            let! env = M.get_state
+            match env.search α with
+            | Some γ -> return α = γ
+            | None   -> do! M.lift_state <| fun env -> env.bind α β
+                        return true
+        }
+    let inline is_ty_equal x y =
+        M {
+            let! r = f M is_var_equal x y
+            return (^t : (member kind : kind) x) = (^t : (member kind : kind) y) && r
+        }
+    in
+        is_ty_equal x y Env.empty |> fst
 
 
 // System-F types
 //
+
+type tenv = Env.t<id, ty>
 
 and [< NoComparison; CustomEquality; DebuggerDisplay("{ToString()}") >] ty =
     | T_Cons of id * kind
@@ -66,23 +89,27 @@ with
         | T_Forall (α, t)           -> (α, t).GetHashCode ()
         | T_Closure (_, _, _, _)    -> unexpected "hashing type closure: %O" __SOURCE_FILE__ __LINE__ this
 
-    // TODO: why not using pretty printer for comparing types?
     interface IEquatable<ty> with
         member x.Equals y =
-            x.kind = y.kind
-                 && match x, y with
-                    | T_Cons (x, _), T_Cons (y, _)          -> x = y
-                    | T_Var (α, _), T_Var (β, _)            -> α = β
-                    | T_App (t1, t2), T_App (t1', t2')      -> t1 = t1' && t2 = t2'
-                    | T_Forall (α, t1), T_Forall (β, t2)    -> α = β && t1 = t2
-                    | T_HTuple ts, T_HTuple ts'
-                        when ts.Length = ts'.Length         -> List.fold2 (fun b t t' -> b && t = t') true ts ts'
-                    | T_Closure _, _
-                    | _, T_Closure _                        -> L.unexpected_error "comparing type closures: %O = %O" x y; false
-                    | _                                     -> false
+            is_ty_equal (fun M (=~) x y ->
+                    M {
+                        match x, y with
+                        | T_Cons (x, _), T_Cons (y, _)          -> return x = y
+                        | T_Var (α, _), T_Var (β, _)            -> return! α =~ β
+                        | T_App (t1, t2), T_App (t1', t2')      -> return [t1; t2] = [t1'; t2']
+                        | T_Forall (α, t1), T_Forall (β, t2)    -> let! b = α =~ β in return b && t1 = t2
+                        | T_HTuple ts, T_HTuple ts'             -> return ts = ts'
+                        #if DEBUG
+                        | T_Closure _, _ | _, T_Closure _       -> L.unexpected_error "comparing type closures: %O = %O" x y
+                                                                   return false
+                        #endif
+                        | _                                     -> return false
+                    })
+                x y
 
 
 // flexible types
+//
 
 type [< NoComparison; CustomEquality; DebuggerDisplay("{ToString()}") >] fxty =
     | Fx_Forall of (var * fxty) * fxty
@@ -108,13 +135,22 @@ with
 
     interface IEquatable<fxty> with
         member x.Equals y =
-            x.kind = y.kind
-                 && match x, y with
-                    | Fx_Forall ((α, t1), t2),
-                        Fx_Forall ((α', t1'), t2')  -> α = α' && t1 = t1' && t2 = t2'
-                    | Fx_Bottom k1, Fx_Bottom k2    -> k1 = k2
-                    | Fx_F_Ty t1, Fx_F_Ty t2        -> t1 = t2
-                    | _                             -> false
+            is_ty_equal (fun M (=~) x y ->
+                    M {
+                        match x, y with
+                        | Fx_Forall ((α, t1), t2), Fx_Forall ((α', t1'), t2') ->
+                            let! b = α =~ α'
+                            return b && [t1; t2] = [t1'; t2']
+
+                        | Fx_F_Ty t1, Fx_F_Ty t2 ->
+                            return t1 = t2
+
+                        | Fx_Bottom _, Fx_Bottom _ ->
+                            return true // bacause kinds have already been compared by factory
+
+                        | _ -> return false
+                    })
+                x y
 
 
 
@@ -664,15 +700,17 @@ type ty with
             R this
 
     member this.kinded_ftv =
-        match this with
-        | T_Var (α, k)              -> Set.singleton (α, k) 
-        | T_Closure (_, _, _, k)   
-        | T_Cons (_, k)             -> Set.empty
-        | T_HTuple ts               -> List.fold (fun r (t : ty) -> Set.union r t.kinded_ftv) Set.empty ts
-        | T_App (t1, t2)            -> Set.union t1.kinded_ftv t2.kinded_ftv
-        | T_Forall (α, t)           -> Set.filter (fst >> (=) α >> not) t.kinded_ftv
+        seq {
+                match this with
+                | T_Var (α, k)              -> yield (α, k) 
+                | T_Closure (_, _, _, k)   
+                | T_Cons (_, k)             -> ()
+                | T_HTuple ts               -> for t in ts do yield! t.kinded_ftv
+                | T_App (t1, t2)            -> yield! t1.kinded_ftv; yield! t2.kinded_ftv
+                | T_Forall (α, t)           -> yield! Seq.filter (fst >> (=) α >> not) t.kinded_ftv
+            } |> Seq.distinctBy fst
 
-    member this.ftv = this.kinded_ftv |> Set.map fst
+    member this.ftv = this.kinded_ftv |> Seq.map fst |> Set.ofSeq
 
     member this.fv =
         match this with

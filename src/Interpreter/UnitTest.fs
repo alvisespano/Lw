@@ -31,7 +31,7 @@ type logger with
 
 [< RequireQualifiedAccess >]
 type flag =
-    | StrictVarNames
+    | Verbatim
 
 [< RequireQualifiedAccess >]
 type [< NoComparison; NoEquality >] result =
@@ -72,12 +72,13 @@ type typechecker () =
             try parse_ty_expr s
             with :? syntax_error as e -> unexpected "syntax error while parsing type expression: %s\n%O" __SOURCE_FILE__ __LINE__ s e
         let ϕ, k = this.Wk_and_eval_ty_expr_fx τ
+        assert (ϕ.kind = k)
         let ϕ =
             match ϕ with
             | Fx_F_Ty t -> Fx_F_Ty <| this.auto_generalize (new location ()) t
             | _         -> ϕ
         in
-            ϕ, k
+            ϕ
 
 [< RequireQualifiedAccess >]
 type [< NoEquality; NoComparison >] parsed =
@@ -105,6 +106,7 @@ let parse_expr_or_decl s =  // TODO: support parsing of type expressions and kin
            | e               -> unexpected "syntax error while parsing expression or declaration: %s\n%O" __SOURCE_FILE__ __LINE__ s e
 
 
+
 // PPrint extensions
 //
       
@@ -122,7 +124,7 @@ let pp_infos l =
 
 let typed_infos (ϕ, t, k) = ["flex type", ϕ; "F-type", t; "kind", k]
 
-let expected_infos (ϕok : fxty, kok : kind) = ["expected", pp_infos <| typed_infos (any ϕok, any ϕok.ftype, any kok)]
+let expected_infos (ϕok : fxty) = ["expected", pp_infos <| typed_infos (any ϕok, any ϕok.ftype, any ϕok.kind)]
 
 let static_error_infos (input : string) (e : static_error) =
     let term =
@@ -180,17 +182,31 @@ type fxty with
         | Fx_Bottom k             -> Fx_Bottom k.anonymize_vars
         | Fx_F_Ty t               -> Fx_F_Ty t.anonymize_vars
 
-let compare_test (ϕres : fxty) (ϕok : fxty, kok : kind) =
+
+let compare_test eq_ty eq_fxty eq_kind (ϕres : fxty) (ϕok : fxty) =
+    let tb = eq_ty ϕok.ftype ϕres.ftype
+    let kb = eq_kind ϕok.kind ϕres.kind
+    let ϕb =
+        match ϕres.is_really_flex, ϕok.is_really_flex with
+        | true, true   -> eq_fxty ϕres ϕok
+        | false, true  -> false
+        | true, false 
+        | false, false -> tb
+    in
+        ϕb, tb, kb
+
+let compare_test_eq = compare_test (=) (=) (=)
+
+let compare_test_verbatim =
     let p x =
         use N = var.reset_normalization
         let r = sprintf "%O" x
         in
             r.Replace (Config.Printing.dynamic.flex_forall, Config.Printing.dynamic.forall)     // replace capitalized Forall with the lowercase one
     let (===) a b = p a = p b
-    let is_ftype (ϕ : fxty) = ϕ.ftype === ϕ
     in
-        (if is_ftype ϕok then true else ϕok === ϕres), ϕok.ftype === ϕres.ftype, kok === ϕres.kind
-        
+        compare_test (===) (===) (===)
+
 
 let decl_dummy_ty = Fx_F_Ty T_Unit
 
@@ -219,26 +235,28 @@ let test_entry (tchk : typechecker) sec n ((input, res) : entry) =
         match res with
         | result.Ok (so, flags) ->
             let is_enabled flag = List.contains flag flags
-            let ϕok, kok =
+            let ϕok =
                 match so with
                 | Some s -> try tchk.parse_expected_ty_expr s
                             with e -> unexpected "%s" __SOURCE_FILE__ __LINE__ (pretty_exn_and_inners e)   
-                | None   -> let ϕ = decl_dummy_ty in ϕ, ϕ.kind
+                | None   -> decl_dummy_ty
             in
                 try
                     let ϕres, infs1 = typecheck1 input
-                    let ϕok, kok, ϕres = if is_enabled flag.StrictVarNames then ϕok, kok, ϕres else ϕok.anonymize_vars, kok.anonymize_vars, ϕres.anonymize_vars
-                    let b3 = compare_test ϕres (ϕok, kok)
-                    let infs2 = expected_infos (ϕok, kok)
+                    let compare_test = if is_enabled flag.Verbatim then compare_test_verbatim else compare_test_eq
+                    let b3 = compare_test ϕres ϕok
+                    let infs2 = expected_infos ϕok
                     let infs1 = infs1 b3
                     in
                         match b3 with
                         | true, true, true  -> test_ok "all ok" infs1
                         | true, false, true -> test_weak_ok "F-type are different" (infs1 @ infs2)
                         | false, true, true -> test_weak_ok "flex types are different" (infs1 @ infs2)
-                        | _                 -> test_failed "expected to be ok" (infs1 @ infs2)
+                        | true, false, false
+                        | false, true, false -> test_failed "type is ok but kind is not" (infs1 @ infs2)
+                        | _                  -> test_failed "expected to be ok" (infs1 @ infs2)
                 with :? static_error as e ->
-                    test_failed "unwanted static error" <| static_error_infos input e @ expected_infos (ϕok, kok)
+                    test_failed "unwanted static error" <| static_error_infos input e @ expected_infos ϕok
                     
         | result.Wrong T ->
             assert T.IsSubclassOf typeof<static_error>
@@ -263,28 +281,32 @@ let section_infos sec (span : TimeSpan) (scores : score list) =
 let test_section tchk ((sec, entries) : section) =
     let scores, span = cputime (List.mapi (fun i -> test_entry tchk sec i)) entries
     let infs = section_infos sec span scores
-    L.pp (L.msg Normal) (pp_infos infs)
+    L.pp (L.msg High) (pp_infos infs)
     scores
 
 let test_sections secs =
     let tchk = new typechecker ()
     let scores, span = cputime (fun () -> List.map (test_section tchk) secs |> List.concat) () 
     let infs = section_infos (mappen_strings fst ", " secs) span scores
-    L.pp (L.msg High) (pp_infos infs)
+    L.pp (L.msg Unmaskerable) (pp_infos infs)
     List.sumBy (function score.Ok | score.Weak -> 1 | _ -> 0) scores
 
 
 // unit tests
 //
 
+
 module Tests =
 
     let type_ok s = result.Ok (Some s, [])
-    let type_is s = result.Ok (Some s, [flag.StrictVarNames])
+    let type_is s = result.Ok (Some s, [flag.Verbatim])
     let ok = result.Ok (None, [])
     let wrong< 'exn when 'exn :> static_error > = result.Wrong typeof<'exn>
     let wrong_type = wrong<type_error>
     let wrong_syntax = wrong<syntax_error>
+
+    let test_in_fsharp = fun f (x : 'b) y -> ((f : _ -> 'a) x, y) : 'a * _
+
     
     let all : section list =
      [
@@ -303,15 +325,21 @@ module Tests =
         "if 1 then () else ()",                     wrong_type
       ]
 
+      // TODO: make a section for testing the implementation of ty.Equals and fxty.Equals
       "Type Annotations",
       [
-        "fun f x y ->
-            ((f : 'a -> 'a) x, y) : _ * int",       type_ok "('a -> 'a) -> 'a -> int -> 'a * int"
-        "fun f (x : 'x) y ->
-            ((f : 'a -> _) x, y) : _ * int",        type_ok "('b -> 'a) -> 'b -> int -> 'b * int"
-        "fun f (x : 'b) y ->
-            ((f : _ -> 'a) x, y) : 'a * _",         type_ok "('b -> 'a) -> 'b -> int -> 'a * 'c"
+        "fun f x y -> ((f : 'a -> 'a) x, y) : _ * int",         type_ok "('a -> 'a) -> 'a -> int -> 'a * int"
+        "fun f (x : 'x) y -> ((f : 'a -> _) x, y) : _ * int",   type_ok "('x -> 'a) -> 'x -> int -> 'a * int"
+        "fun f (x : 'b) y -> ((f : _ -> 'a) x, y) : 'a * _",    type_ok "('b -> 'a) -> 'b -> 'c -> 'a * 'c"
+      ]
 
+      "Scoped Type Variables",
+      [
+        "let i (x : 'bar) = x in i 1, i true, i",   type_is "int * bool * (forall 'bar. 'bar -> 'bar)"
+        "let y =
+            let i (x : 'foo) = x
+            in
+                i 1, i true",                       type_ok "int * bool"    // generalization of scoped vars is valid
       ]
 
       "Lists",
@@ -350,14 +378,6 @@ module Tests =
         "choose id",                                type_ok "forall ('a :> forall 'b. 'b -> 'b). 'a -> 'a"
       ]
 
-      "Scoped Type Variables",
-      [
-        "let i (x : 'bar) = x in i 1, i true, i",   type_is "int * bool * (forall 'bar. 'bar -> 'bar)"
-        "let y =
-            let i (x : 'foo) = x
-            in
-                i 1, i true",                       type_ok "int * bool"    // generalization of scoped vars is valid
-      ]
      ]
     // impredicative application and higher rank arguments are fully supported    
     (*let HR = 

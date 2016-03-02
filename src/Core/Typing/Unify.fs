@@ -133,7 +133,7 @@ module internal Mgu =
             | T_ForallsK0 (αks, t1), FxU0_ForallsQ (Mapped fxty.instantiate_unquantified (Q', t2)) ->
                 assert Q0.is_disjoint Q'
                 let skcs, t1' = skolemize_ty αks t1
-                let Q1, θ1 = mgu ctx (Q0 + Q') t1' t2
+                let Q1, θ1 = mgu_F ctx (Q0 + Q') t1' t2
                 let Q2, Q3 = Q1.split Q0.dom
                 #if DISABLE_HML_FIXES
                 let θ2 = { θ1 with t = θ1.t.remove Q3.dom } 
@@ -149,7 +149,7 @@ module internal Mgu =
           #endif
 
 
-        and mgu_scheme ctx (Q : prefix) (ϕ1 : fxty) (ϕ2 : fxty) =
+        and mgu_fx ctx (Q : prefix) (ϕ1 : fxty) (ϕ2 : fxty) =
           #if ENFORCE_NF_IN_UNI
           let ϕ1 = ϕ1.nf
           let ϕ2 = ϕ2.nf
@@ -166,7 +166,7 @@ module internal Mgu =
 
             | FxU0_ForallsQ  (Mapped fxty.instantiate_unquantified (Q1, t1)), FxU0_ForallsQ (Mapped fxty.instantiate_unquantified (Q2, t2)) ->
                 assert (let p (a : prefix) b = a.is_disjoint b in p Q Q1 && p Q1 Q2 && p Q Q2)  // instantiating ϕ1 and ϕ2 makes this assert always false
-                let Q3, θ3 = mgu ctx (Q + Q1 + Q2) t1 t2
+                let Q3, θ3 = mgu_F ctx (Q + Q1 + Q2) t1 t2
                 let Q4, Q5 = Q3.split (Q.dom + (fv_Γ (subst_jenv θ3 ctx.Γ)))    // HACK: abstract this code by using get_ungeneralizable_vars
                 in
                     Q4, θ3, FxU_ForallsQ (Q5, S θ3 t1)
@@ -177,7 +177,7 @@ module internal Mgu =
 
 
         // TODOL: rewrite the whole unification with monads?
-        and mgu (ctx : uni_context) Q0 t1_ t2_ : prefix * tksubst =
+        and mgu_F (ctx : uni_context) Q0 t1_ t2_ : prefix * tksubst =
             let loc = ctx.loc
             let rec R (Q0 : prefix) (t1 : ty) (t2 : ty) =
               #if DEBUG_UNI && DEBUG_UNI_DEEP
@@ -220,7 +220,7 @@ module internal Mgu =
                     let check_wrt α t = if check_circularity_wrt α Q0 t then let S = S θ0 in Report.Error.circularity loc (S t1_) (S t2_) (T_Var (α, t.kind)) (S t2_)
                     check_wrt α1 ϕ2
                     check_wrt α2 ϕ1
-                    let Q1, θ1, ϕ = let S = subst_fxty in mgu_scheme ctx Q0 (S θ0 ϕ1) (S θ0 ϕ2)  // TODO: this θ0 subst should be applied also on the 2 types involved in the 2 updates below?
+                    let Q1, θ1, ϕ = let S = subst_fxty in mgu_fx ctx Q0 (S θ0 ϕ1) (S θ0 ϕ2)  // TODO: this θ0 subst should be applied also on the 2 types involved in the 2 updates below?
                     let Q2, θ2 = Q1.update_with_subst (α1, T_Var (α2, k2))   // do not use t2 here! it would always refer to right-hand type of the pattern, and in case of reversed named var it would refer to α1!
                     let Q3, θ3 = Q2.update_with_bound (α2, ϕ)
                     in
@@ -263,15 +263,16 @@ module internal Mgu =
                 with Mismatch (t1, t2) -> Report.Error.type_mismatch loc t1_ t2_ t1 t2
 
        
-let mgu = Mgu.Pure.mgu
+let mgu = Mgu.Pure.mgu_F
 let subsume = Mgu.Pure.subsume
+let mgu_fx = Mgu.Pure.mgu_fx
 
 let try_mgu ctx Q t1 t2 =
     try Some (mgu ctx Q t1 t2)
     with :? Report.type_error -> None
     
 type type_inference_builder with
-    member M.unify loc (t1 : ty) (t2 : ty) =
+    member M.unify_F loc (t1 : ty) (t2 : ty) =
         M {
             let! Q = M.get_Q
             let! t1 = M.updated t1
@@ -293,16 +294,28 @@ type type_inference_builder with
             do! M.update_θ θ
         }
 
+    member M.unify_fx loc (ϕ1 : fxty) (ϕ2 : fxty) =
+        M {
+            let! Q = M.get_Q
+            let! ϕ1 = M.updated ϕ1
+            let! ϕ2 = M.updated ϕ2
+            let! uctx = M.get_uni_context loc
+            let Q, θ, ϕ = mgu_fx uctx Q ϕ1 ϕ2
+            do! M.set_Q Q
+            do! M.update_θ θ
+            return ϕ
+        }
+
     member M.attempt_unify loc t1 t2 =
         M {
             let! st = M.get_state
-            try do! M.unify loc t1 t2
+            try do! M.unify_F loc t1 t2
             with :? Report.type_error -> do! M.set_state st          
         }
 
 type ty with
     member t1.try_instance_of ctx (t2 : ty) =
-        let Q = prefix.B { for α, k in t1.kinded_ftv + t2.kinded_ftv do yield α, Fx_Bottom k }
+        let Q = prefix.B { for α, k in Seq.append t1.kinded_ftv t2.kinded_ftv do yield α, Fx_Bottom k }
         let _, θ = mgu ctx Q t1 t2
         in
             if t2.fv.IsSubsetOf θ.dom then Some θ   // TODO: in https://web.cecs.pdx.edu/~mpj/thih/TypingHaskellInHaskell.html they define a "match" function similar to one-way-only MGU, useful here!

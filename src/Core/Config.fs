@@ -27,7 +27,7 @@ open Printf
  * DISABLE_TYVAR_NORM       // turn off variable normalization
  * DISABLE_HML_FIXES        // disable little fixes done by me
  * ENABLE_HML_OPTS          // introduce a number of (hopefully not bugged) optimizations for HML inference
- * ENFORCE_NF_IN_UNI        // force types involved into unification to 
+ * ENFORCE_NF_IN_UNI        // force types involved into unification to normal form
  * DEFINE_K_APP             // define K_App and K_Apps active patterns for kinds, and implement K_Arrow and K_Arrows though them: this is inefficient and unnecessary unless K_App are really needed
  *)
 

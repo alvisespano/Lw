@@ -363,6 +363,13 @@ type type_inference_builder (loc) =
             do! M.lift_Q (fun Q -> Q + (α, t))
         }
 
+    member M.add_fresh_star_to_prefix =
+        M {
+            let α, tα = ty.fresh_star_var_and_ty
+            do! M.add_prefix α (Fx_Bottom K_Star)
+            return tα
+        }
+
     member M.add_constraint c =
         M {
             do! M.lift_constraints (fun cs -> cs.add c)
@@ -401,6 +408,9 @@ type translatable_type_inference_builder<'e> (e : node<'e, unit>) =
     member __.translate
         //with get () = e.translated
         with set x = e.translated <- Translated x
+
+    member __.already_translated
+        with set x = e.translated <- x
 
 
 // specialized monad for type evaluation

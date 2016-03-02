@@ -51,13 +51,17 @@ module Log =
 
         let set_thresholds_for_interactive () =
             l.debug_threshold <- Normal
+            #if DEBUG
             l.msg_threshold <- Low
+            #else
+            l.msg_threshold <- Normal
+            #endif
             l.warn_threshold <- Min
             l.hint_threshold <- Min
 
         let set_thresholds_for_unit_test () =
             l.debug_threshold <- Unmaskerable
-            l.msg_threshold <- Low
+            l.msg_threshold <- High
             l.warn_threshold <- Min
             l.hint_threshold <- Min
 

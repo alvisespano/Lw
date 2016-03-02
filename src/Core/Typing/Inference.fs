@@ -139,7 +139,7 @@ and W_expr' ctx (e0 : expr) =
             | Some e ->
                 let! ϕ = W_expr ctx e
                 let ρ = var.fresh
-                do! M.unify e.loc (T_Record ([], Some ρ)) ϕ.ftype
+                do! M.unify_F e.loc (T_Record ([], Some ρ)) ϕ.ftype
                 yield T_Record (bs, Some ρ)
 
         | Var x ->
@@ -239,7 +239,7 @@ and W_expr' ctx (e0 : expr) =
             do! M.extend (α1, ϕ1)
             do! M.extend (α2, ϕ2)
             do! M.extend (β, Fx_Bottom K_Star)
-            do! M.unify e1.loc (T_Arrow (tα2, tβ)) tα1
+            do! M.unify_F e1.loc (T_Arrow (tα2, tβ)) tα1
             let! Γ = M.get_Γ
             let! Q5 = M.split_for_gen Q0
             yield Q5, tβ
@@ -252,11 +252,12 @@ and W_expr' ctx (e0 : expr) =
             yield T_Tuple ts
 
         | If (e1, e2, e3) ->
+            // TODOL: desugar to match with booleans?
             let! t1 = W_expr_F ctx e1
-            do! M.unify e1.loc T_Bool t1
+            do! M.unify_F e1.loc T_Bool t1
             let! t2 = W_expr_F ctx e2
             let! t3 = W_expr_F ctx e3
-            do! M.unify e3.loc t2 t3
+            do! M.unify_F e3.loc t2 t3
             yield t2
 
         | Let (d, e) ->
@@ -270,39 +271,27 @@ and W_expr' ctx (e0 : expr) =
              
         // TODO: why don't we try to use flex types here and unify schemes instead? does it make sense?
         | Match (e1, cases) ->
-            let! te1 = W_expr_F ctx e1
-            let tr0 = ty.fresh_star_var
-            for p, ewo, e in cases do
-                let! tp = W_patt_F ctx p
-                do! M.unify p.loc te1 tp
-                match ewo with
-                | None    -> return ()
-                | Some ew -> let! tew = W_expr_F ctx ew
-                             do! M.unify ew.loc T_Bool tew
-                let! te = W_expr_F ctx e
-                do! M.unify e.loc tr0 te
-            yield tr0
-//            let! te1 = W_expr_F ctx e1
-//            let tr0 = ty.fresh_star_var
-//            for p, ewo, e in cases do
-//                let! tp = W_patt_F ctx p
-//                do! M.unify p.loc te1 tp
-//                match ewo with
-//                | None    -> return ()
-//                | Some ew -> let! tew = W_expr_F ctx ew
-//                             do! M.unify ew.loc T_Bool tew
-//                let! te = W_expr_F ctx e
-//                do! M.unify e.loc tr0 te
-//            yield tr0
+            let! ϕe1 = W_expr ctx e1
+            let! tr = M.add_fresh_star_to_prefix    // TODOH: why not use extend?
+            let! (_, ϕr) =
+                M.List.fold (fun (ϕe1, ϕr) (p, ewo, e) -> M {
+                    let! ϕp = W_patt ctx p
+                    let! ϕe1 = M.unify_fx p.loc ϕe1 ϕp
+                    match ewo with
+                    | None    -> return ()
+                    | Some ew -> let! tew = W_expr_F ctx ew
+                                 do! M.unify_F ew.loc T_Bool tew
+                    let! ϕe = W_expr ctx e
+                    let! ϕr = M.unify_fx e.loc ϕr ϕe
+                    return ϕe1, ϕr
+                }) (ϕe1, Fx_F_Ty tr) cases
+            yield ϕr
         
-        // HACK: Annot must be rewritten as an application to an annotated lambda
         | Annot (e, τ) ->
-//            let! t, _ = Wk_and_eval_ty_expr_F ctx τ  
-//            let! te = W_expr_F ctx e
-//            do! M.unify e.loc t te
-//            yield t
             let x = fresh_reserved_id ()
-            yield! W_desugared_expr (Lo <| App (Lo <| Lambda ((x, Some τ), Lo <| Var x), e))
+            let! ϕ = W_desugared_expr (Lo <| App (Lo <| Lambda ((x, Some τ), Lo <| Var x), e))
+            M.already_translated <- e.translated
+            yield ϕ
 
         | Combine es ->
             if es.Length <= 1 then Debugger.Break ()
@@ -315,7 +304,7 @@ and W_expr' ctx (e0 : expr) =
                     R es
             for ei in es do
                 let! ti = W_expr_F ctx ei
-                try do! M.unify ei.loc T_Unit ti
+                try do! M.unify_F ei.loc T_Unit ti
                 with :? Report.type_error as e -> Report.Warn.expected_unit_statement ei.loc ti
             yield! W_expr ctx e
 
@@ -323,14 +312,14 @@ and W_expr' ctx (e0 : expr) =
             let! te = W_expr_F ctx e
             let α = ty.fresh_star_var
             let t = T_Open_Record [x, α]
-            do! M.unify e.loc t te
+            do! M.unify_F e.loc t te
             yield α
             
         | Restrict (e, x) ->
             let! te = W_expr_F ctx e
             let α = ty.fresh_star_var
             let ρ = var.fresh
-            do! M.unify e.loc (T_Record ([x, α], Some ρ)) te
+            do! M.unify_F e.loc (T_Record ([x, α], Some ρ)) te
             yield T_Record ([], Some ρ)
 
         | Loosen e ->
@@ -368,7 +357,7 @@ and W_expr' ctx (e0 : expr) =
             let! t = W_expr_F ctx e
             let α = ty.fresh_star_var
             let tr = T_Open_Record []
-            do! M.unify e.loc (T_Arrow (tr, α)) t   // TODO: probably this is not working in HML and something like the (APP) rule must be used
+            do! M.unify_F e.loc (T_Arrow (tr, α)) t   // TODO: probably this is not working in HML and something like the (APP) rule must be used
             match tr with
             | T_Record (xts, _) ->
                 for x, t in xts do
@@ -384,7 +373,7 @@ and W_expr' ctx (e0 : expr) =
         | Solve (e, τ) ->
             let! te = W_expr_F ctx e
             let! t, _ = Wk_and_eval_ty_expr_F ctx τ
-            do! M.unify e.loc (T_Open_Record []) t
+            do! M.unify_F e.loc (T_Open_Record []) t
             let xts =
                 match t with
                 | T_Record (xts, _) -> xts
@@ -393,7 +382,7 @@ and W_expr' ctx (e0 : expr) =
             do! M.List.iter (fun (x, t) -> M {
                     let! o = M.search_binding_by_name_Γ x
                     match o with
-                    | Jb_Overload t' -> try do! M.unify τ.loc t t'
+                    | Jb_Overload t' -> try do! M.unify_F τ.loc t t'
                                         with _ -> Report.Warn.manually_resolved_symbol_does_respect_overload e.loc x t t'
                     | Jb_Unbound     -> Report.Warn.manually_resolved_symbol_does_not_exist e.loc x t
                     | _              -> ()
@@ -416,7 +405,7 @@ and W_decl' (ctx : context) (d0 : decl) =
     let desugar = M.W_desugared (W_decl ctx) 
     let unify_and_resolve (ctx : context) (e : node<_, _>) t1 t2 =
         M {
-            do! M.unify e.loc t1 t2
+            do! M.unify_F e.loc t1 t2
             do! resolve_constraints ctx e
         }
     let jk decl_qual x t = if decl_qual.over then Jk_Inst (x, t.GetHashCode ()) else Jk_Var x
@@ -509,7 +498,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                                     let! ϕe' = M {
                                         match ϕx with
                                         | Fx_F_Ty tx ->
-                                            do! M.unify τ.loc tx te
+                                            do! M.unify_F τ.loc tx te
                                             yield te                        // bind inferred type as an F-type when the annotation is an F-type
                                         | _ ->
                                             do! M.subsume τ.loc te ϕx
@@ -520,7 +509,7 @@ and W_decl' (ctx : context) (d0 : decl) =
 
                                 | B_Patt p ->
                                     let! tp = W_patt_F ctx p
-                                    do! M.unify e.loc tp te                 // HACK: pattern-based let-bindings needs to be written in terms of (LAMBDA) and (APP) rules
+                                    do! M.unify_F e.loc tp te                 // HACK: pattern-based let-bindings needs to be written in terms of (LAMBDA) and (APP) rules
                                     do! resolve_constraints ctx e
                                     let! cs = M.get_constraints
                                     return! vars_in_patt p |> Set.toList |> M.List.map (fun x -> M {
@@ -691,7 +680,7 @@ and W_patt ctx (p0 : patt) : M<fxty> =
             if not (Set.isEmpty set) then Report.Error.different_vars_in_sides_of_or_pattern loc0 set
             let! t1 = W_patt_F ctx p1
             let! t2 = W_patt_F ctx p2
-            do! M.unify p2.loc t1 t2
+            do! M.unify_F p2.loc t1 t2
             yield t1
 
         | P_And (p1, p2) ->
@@ -701,7 +690,7 @@ and W_patt ctx (p0 : patt) : M<fxty> =
             if not (Set.isEmpty set) then Report.Error.same_vars_in_sides_of_or_pattern loc0 set
             let! t1 = W_patt_F ctx p1
             let! t2 = W_patt_F ctx p2
-            do! M.unify p2.loc t1 t2
+            do! M.unify_F p2.loc t1 t2
             yield t1
 
         | P_App (p1, p2) ->
@@ -709,7 +698,7 @@ and W_patt ctx (p0 : patt) : M<fxty> =
             let! t1 = W_patt_F ctx p1
             let! t2 = W_patt_F ctx p2
             let α = ty.fresh_star_var
-            do! M.unify p1.loc (T_Arrow (t2, α)) t1
+            do! M.unify_F p1.loc (T_Arrow (t2, α)) t1
             yield α
 
         | P_Wildcard ->
@@ -723,7 +712,7 @@ and W_patt ctx (p0 : patt) : M<fxty> =
         | P_Annot (p, τ) ->
             let! t, _ = Wk_and_eval_ty_expr_F ctx τ
             let! tp = W_patt_F ctx p
-            do! M.unify p.loc t tp
+            do! M.unify_F p.loc t tp
             yield t
     }
 
@@ -738,5 +727,5 @@ and W_program (prg : program) =
         | None -> ()
         | Some e ->
             let! t = W_expr_F ctx (Lo e.loc <| Val e)
-            do! M.unify e.loc T_Int t
+            do! M.unify_F e.loc T_Int t
     }

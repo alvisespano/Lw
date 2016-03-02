@@ -1,7 +1,18 @@
 ﻿
+2/3/2016:
+* UP: ty and fxty equality rewritten: it now deals with variables in a special way, such that for example forall 'a 'b. 'a -> 'b is equal to forall 'x 'y. 'x -> 'y and even
+      when quantified variables are out of order, e.g. forall 'a 'b. 'a -> 'b is equal to forall 'y 'x. 'x -> 'y
+* REFACT: UnitTest code simplified: kind of expected flex type is not returned explicitly anymore, as it can always be fetched by calling .kind
+* UP: UnitTest comparison has been improved: it now supports type equality as well as verbatim-equality (using pretty printing)
+* REFACT: some important renaming: M.unify is now M.unify_F, and so mgu is mgu_F; also, new monadic M.unify_fx stands for old mgu_scheme which has now become mgu_fx
+* UP: match rule rewritten using flex types and flex unification
+* FIX: annot rule had wrong translation: now the translated inner expression is set as the whole translated output
+* NEW: method fxty.is_really_flex tests whether the flex type could be actually be a System-F type
+
+
 1/3/2016:
 * UP: UnitTest revamped with flag subsystem for special behaviours
-* UP: UnitTest types are now subject to anonymization of all type variables, unless StrictVarNames flag is enabled
+Evento senza titolo* UP: UnitTest types are now subject to anonymization of all type variables, unless StrictVarNames flag is enabled
 
 
 29/2/2016:

@@ -252,7 +252,7 @@ type ty with
 type fxty with
     static member instantiate_unquantified (Q : prefix, t : ty) =
             assert t.is_unquantified
-            assert not Q.is_empty
+//            assert not Q.is_empty
             let θ = !> (new tsubst (Env.t.B { for α, ϕ in Q do yield α, T_Var (var.fresh, ϕ.kind) }))
             in
                 subst_prefix θ Q, subst_ty θ t
@@ -278,7 +278,6 @@ type fxty with
 
     member this.is_nf = this.nf = this
 
-
     member this.ftype =
         let rec R = function
             | Fx_F_Ty t -> t
@@ -297,6 +296,13 @@ type fxty with
         L.debug High "[ftype] ftype(%O) = %O" this r
         #endif
         r
+
+    member this.is_really_flex =
+        match this with
+        | FxU_ForallsQ (Q, _) when Seq.forall (function (_, Fx_Bottom _) -> true | _ -> false) Q -> false
+        | FxU_Unquantified _ -> false
+        | _ -> true
+
 
 let Ungeneralized t = { constraints = constraints.empty; fxty = Fx_F_Ty t }
 
