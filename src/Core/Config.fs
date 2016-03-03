@@ -24,11 +24,11 @@ open Printf
  * DEBUG_UNI                // turn on log in unification functions
  * DEBUG_UNI_DEEP           // log even recursive calls of unification functions
  *
- * DISABLE_TYVAR_NORM       // turn off variable normalization
+ * DISABLE_VAR_NORM       // turn off variable normalization
  * DISABLE_HML_FIXES        // disable little fixes done by me
  * ENABLE_HML_OPTS          // introduce a number of (hopefully not bugged) optimizations for HML inference
  * ENFORCE_NF_IN_UNI        // force types involved into unification to normal form
- * DEFINE_K_APP             // define K_App and K_Apps active patterns for kinds, and implement K_Arrow and K_Arrows though them: this is inefficient and unnecessary unless K_App are really needed
+ * DEFINE_K_APP             // define K_App/K_Apps active patterns for kinds, and implement K_Arrow and K_Arrows though them: this is inefficient and unnecessary unless K_App is really needed
  *)
 
 let reserved_id_fmt : StringFormat<string -> string> = "$%s"
@@ -127,10 +127,10 @@ module Printing =
     let constraint_id_fmt : StringFormat<string -> int -> string> = "%s#%X"
     let fresh_reserved_id : StringFormat<int -> string> = "?%d"
     let tuple_index_label_fmt : StringFormat<int -> string> = "#%d"
-    let already_existing_named_var_fmt : StringFormat<string -> int -> string> = "%s%d" // this is needed for disambiguating name for a named var that already existed and whose name conflicted with automatically-named vars
+    let already_existing_named_var_fmt : StringFormat<string -> int -> string> = "%s%d" // this is needed for disambiguating the name of a named var that already existed and whose name conflicted
     #if DEBUG_VAR_NAMES
-    let anonymous_var_fmt : StringFormat<string -> int -> string> = "%s$%d"
-    let named_var_fmt : StringFormat<string -> int -> string> = "[%s]$%d"
+    let anonymous_var_fmt : StringFormat<string -> int -> string> = "%s?%d"
+    let named_var_fmt : StringFormat<string -> int -> string> = "<%s>?%d"
     #endif
     let empty_prefix = "()"
     let ftype_instance_of_fxty_sep = "<:"
@@ -153,14 +153,6 @@ module Printing =
 
 module Log =
     open FSharp.Common.Log
-
-    type config () =
-        inherit FSharp.Common.Log.config ()
-        member val test_threshold = Min with get, set
-        override this.all_thresholds
-            with set lv =
-                base.all_thresholds <- lv
-                this.test_threshold <- lv
 
     let cfg =
         let l = new config ()

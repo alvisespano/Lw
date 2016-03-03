@@ -61,7 +61,6 @@ let W_lit = function
 let rec W_expr (ctx : context) (e0 : expr) =
     let M = new translatable_type_inference_builder<_> (e0)
     M {
-//        let e = e0.value // uexpr must be bound before translation, or printing will not work
         L.tabulate 2
         try
             let rule =
@@ -208,8 +207,9 @@ and W_expr' ctx (e0 : expr) =
                     do! M.kunify τ.loc K_Star k
                     return t
             }
+            // whether annotated or not, all free vars are added to the prefix
             for α in tx.ftv do
-                do! M.add_prefix α (Fx_Bottom K_Star)   // whether annotated or not, all free vars are added to the prefix
+                do! M.add_prefix α (Fx_Bottom K_Star)   // TODOH: use extend here
             let! ϕ1 = M.undo_Γ <| M {
                 let! _ = M.bind_ungeneralized_Γ x tx
                 return! W_expr ctx e
@@ -489,6 +489,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                                     | p                                -> B_Patt p
                                 match p with
                                 | B_Unannot x ->
+                                    do! resolve_constraints ctx e
                                     let! cs = M.get_constraints
                                     return [{ expr = b.expr; qual = b.qual; id = x; constraints = cs; to_bind = Fx_F_Ty te; inferred = ϕe }]     // by default bind inferred types as F-types
 
@@ -504,6 +505,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                                             do! M.subsume τ.loc te ϕx
                                             yield ϕe                        // bind the inferred type when annotation is a flex type instead
                                     }
+                                    do! resolve_constraints ctx e
                                     let! cs = M.get_constraints
                                     return [{ expr = b.expr; qual = b.qual; id = x; constraints = cs; to_bind = ϕe'; inferred = ϕe }]
 
@@ -529,24 +531,22 @@ and W_decl' (ctx : context) (d0 : decl) =
                     // introduce fresh type variables or the annotated type for each rec binding
                     let! l = M.List.map (fun ({ qual = dq; par = x, _; expr = e } as b) -> M {
                                 // HACK: let rec implemented roughly
-                                let! tx = M {
-                                    match b.par with
-                                    | _, None ->
-                                        let α, tα = ty.fresh_star_var_and_ty
-                                        do! M.add_prefix α (Fx_Bottom K_Star)
-                                        return tα
+                                match b.par with
+                                | _, None ->
+                                    let! tα = M.add_fresh_star_to_prefix
+                                    return Fx_F_Ty tα
 
-                                    | _, Some τ -> 
-                                        let! t, k = Wk_and_eval_ty_expr_F ctx τ
-                                        do! M.kunify τ.loc K_Star k
-                                        return t                                                
+                                | _, Some τ -> 
+                                    let! ϕ, k = Wk_and_eval_ty_expr_fx ctx τ
+                                    do! M.kunify τ.loc K_Star k
+                                    return ϕ                                                
                                 }
-                                let! _ = M.bind_Γ (jk dq x tx) { mode = Jm_Normal; scheme = Ungeneralized tx }
+                                let! _ = M.bind_ungeneralized_Γ x ϕx
                                 return b, x, tx
                             }) bs
                     // check arrow and value restriction for each rec binding
                     for { expr = e }, _, tx in l do
-                        let! te = W_expr_F ctx e 
+                        let! ϕe = W_expr ctx e 
                         do! unify_and_resolve ctx e tx te
                         match te with
                         | T_Arrow _ -> ()
@@ -614,15 +614,44 @@ and W_decl' (ctx : context) (d0 : decl) =
             return not_implemented "%O" __SOURCE_FILE__ __LINE__ d0
     }  
 
-
 and W_patt_F ctx p0 =
-    let M = new translatable_type_inference_builder<_> (p0)
+    let M = new type_inference_builder (p0.loc)
     M {
         let! ϕ = W_patt ctx p0
         return ϕ.ftype
     }
 
-and W_patt ctx (p0 : patt) : M<fxty> =
+and W_patt ctx (p0 : patt) =
+    let M = new type_inference_builder (p0.loc)
+    M {
+        L.tabulate 2
+        try
+            let rule =
+                sprintf "%-9s" <|
+                match p0.value with
+                | P_Var _     -> "(P-VAR)"
+                | P_Cons _    -> "(P-CONS)"
+                | P_App _     -> "(P-APP)"
+                | _         -> "[p]"
+            let! Q = M.get_Q
+            let! θ = M.get_θ
+            #if DEBUG_BEFORE_INFERENCE
+            L.debug Min "%s %O\n[Q]   %O" rule p0 Q
+            #endif
+            let! (ϕ : fxty) = W_patt' ctx p0
+            // TODOH: insert automatic generalization here, besides automatic resolution
+            #if DEBUG_INFERENCE
+            let! Q' = M.get_Q
+            let! θ' = M.get_θ
+            // TODOL: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)
+            L.debug Low "%s %O\n[:t]  %O\n[nf]  %O\n[F-t] %O\n[e*]  %O\n[Q]   %O\n[S]   %O\n[Q']  %O\n[S']  %O" rule p0 ϕ ϕ.nf ϕ.ftype p0.translated Q θ Q' θ'
+            #endif
+            return ϕ
+        finally
+            L.undo_tabulate
+    }
+
+and W_patt' ctx (p0 : patt) : M<fxty> =
     let M = new type_inference_builder (p0.loc)
     let loc0 = p0.loc
     M {
@@ -693,13 +722,20 @@ and W_patt ctx (p0 : patt) : M<fxty> =
             do! M.unify_F p2.loc t1 t2
             yield t1
 
+        // TODO: rewrite (P-APP) rule using a W_app method reused also by (APP) rule
         | P_App (p1, p2) ->
-            // HACK: this is wrong, probabily: better rewrite pattern application using HML (APP) rule
-            let! t1 = W_patt_F ctx p1
-            let! t2 = W_patt_F ctx p2
-            let α = ty.fresh_star_var
-            do! M.unify_F p1.loc (T_Arrow (t2, α)) t1
-            yield α
+            let! Q0 = M.get_Q
+            let! ϕ1 = W_patt ctx p1
+            let! ϕ2 = W_patt ctx p2
+            let α1, tα1 = ty.fresh_star_var_and_ty
+            let α2, tα2 = ty.fresh_star_var_and_ty
+            let β, tβ = ty.fresh_star_var_and_ty
+            do! M.extend (α1, ϕ1)
+            do! M.extend (α2, ϕ2)
+            do! M.extend (β, Fx_Bottom K_Star)
+            do! M.unify_F p1.loc (T_Arrow (tα2, tβ)) tα1
+            let! Q5 = M.split_for_gen Q0
+            yield Q5, tβ
 
         | P_Wildcard ->
             yield ty.fresh_star_var

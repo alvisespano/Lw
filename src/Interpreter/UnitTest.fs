@@ -24,7 +24,7 @@ open Lw.Core.Typing.StateMonad
 open PPrint
 
 type logger with
-    member this.test pri fmt = this.custom Config.Log.test_color "TEST" Config.Log.cfg.test_threshold pri fmt
+    member this.test pri fmt = this.custom Config.Log.test_color "TEST" Min pri fmt
     member this.test_ok fmt = this.custom Config.Log.test_ok_color "OK" Min Low fmt
     member this.test_weak_ok fmt = this.custom Config.Log.test_weak_ok_color "WEAK" Min Low fmt
     member this.test_failed fmt = this.custom_error Config.Log.test_failed_color "FAIL" fmt

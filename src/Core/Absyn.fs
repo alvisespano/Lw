@@ -53,7 +53,7 @@ type [< NoEquality; NoComparison >] node<'a, 't> (value : 'a, ?loc : location) =
         with get () = match _typed with Some x -> x | None -> unexpected "node %O has not been typed" __SOURCE_FILE__ __LINE__ this
         and set t = _typed <- Some t
 
-    member val value = value with get, set
+    member val value = value with get //, set
     member val loc = defaultArg loc (new location ())
     abstract pretty : string
     default this.pretty = sprintf "%O" this.value
@@ -213,21 +213,21 @@ module var =
 
 type var with
     static member fresh =
-      #if DEBUG_TYVARS
+      #if DEBUG_FRESH_VARS
       let r =
       #endif
         Va (fresh_int (), None)
-      #if DEBUG_TYVARS
+      #if DEBUG_FRESH_VARS
       L.hint Low "new fresh var: %O" r
       r
       #endif
 
     static member fresh_named s =
-      #if DEBUG_TYVARS
+      #if DEBUG_FRESH_VARS
       let r =
       #endif
         Va (fresh_int (), Some s)
-      #if DEBUG_TYVARS
+      #if DEBUG_FRESH_VARS
       L.hint Low "new fresh named var: %O" r
       r
       #endif
@@ -249,12 +249,12 @@ type var with
     static member get_normalization_context = new var.normalization_context ()
 
     static member reset_normalization =
-        #if !DISABLE_TYVAR_NORM
+        #if !DISABLE_VAR_NORM
         var.ctx_stack.Push (var.get_normalization_context)
         #endif
         { new IDisposable with
             member __.Dispose () =
-                #if !DISABLE_TYVAR_NORM
+                #if !DISABLE_VAR_NORM
                 ignore <| var.ctx_stack.Pop ()
                 #endif
                 ()
@@ -276,29 +276,17 @@ type var with
     member private __.has_normalization_enabled = if var.ctx_stack.Count > 0 then Some (var.ctx_stack.Peek ()) else None
     
     member this.pretty =
-        this.pretty_with_quantification
-            <| match this.has_normalization_enabled with
-               | None     -> this.pretty_unnormalized
-               | Some ctx -> this.pretty_normalized ctx
+        match this.has_normalization_enabled with
+        | None     -> this.pretty_unnormalized
+        | Some ctx -> this.pretty_normalized ctx
 
     override this.ToString () = this.pretty
 
     member this.pretty_unnormalized = 
         match this with
-        | Va (n, Some s) ->
-            #if DEBUG_VAR_NAMES
-            sprintf "%s_%d" s n
-            #else
-            s
-            #endif
-
-        | Va (n, None) ->
-            let s = var.letterize n
-            #if DEBUG_VAR_NAMES
-            sprintf "%s?%d" s n
-            #else
-            s
-            #endif
+        | Va (n, None)   -> var.letterize n
+        | Va (_, Some s) -> s
+        |> this.pretty_with_quantification
 
     member this.pretty_normalized ctx =
         let env = ctx.env
@@ -326,7 +314,7 @@ type var with
                     in
                         R s 0
         ctx.env <- env.bind this.uid name
-        name
+        name |> this.pretty_with_quantification
 
     member this.pretty_with_quantification name =
         #if DEBUG_VAR_NAMES

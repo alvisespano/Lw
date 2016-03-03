@@ -12,6 +12,7 @@ open System
 open System.Collections.Generic
 open System.Diagnostics
 open FSharp.Common
+open FSharp.Common.Log
 open Lw.Core
 open Lw.Core.Globals
 open Lw.Core.Absyn
@@ -28,34 +29,49 @@ type kjenv = Env.t<id, kscheme>
 
 type kconsenv = Env.t<id, var list * kind>
 
+type kinded =
+    abstract kind : kind
 
-/// Equality operator factory for types supporting the 'kind' getter property. Parameter f is the actual comparison function, which will
-/// be called passing the a monadic builder, the operator for comparing variables and the 2 arguments to be compared.
-/// In order to use this factory, define f as a monadic function over the passed builder and implement the equality algorithm by using the operator passed as argument.
-/// When recursion is needed, just use the (=) operator recursively - simple as that.
-let inline internal is_ty_equal f (x : ^t) (y : ^t) =
-    let M = new Monad.state_builder<Env.t<var, var>> ()
-    let is_var_equal α β =
-        M {
-            let! env = M.get_state
-            match env.search α with
-            | Some γ -> return α = γ
-            | None   -> do! M.lift_state <| fun env -> env.bind α β
-                        return true
-        }
-    let inline is_ty_equal x y =
-        M {
-            let! r = f M is_var_equal x y
-            return (^t : (member kind : kind) x) = (^t : (member kind : kind) y) && r
-        }
-    in
-        is_ty_equal x y Env.empty |> fst
+module TyEq =
+    type state = Env.t<var, var>
+
+    type M<'a> = Monad.M<'a, state>
+
+    type equivalent<'t> =
+        inherit kinded
+        abstract is_equivalent : 't -> M<bool>
+
+    type state_builder<'t when 't :> equivalent<'t>> () =
+        inherit Monad.state_builder<state> ()
+
+        member M.is_var_equivalent (α : var) (β : var) =
+            M {
+                if α = β then return true
+                else
+                    let! env = M.get_state
+                    match env.search α with
+                    | Some γ -> return β = γ
+                    | None   -> do! M.lift_state <| fun env -> env.bind α β
+                                return true
+            }
+
+        member M.is_equivalent (x : 't) y =
+            M {
+                let! r = x.is_equivalent y
+                return x.kind = y.kind && r
+            }
+
+        member M.are_equivalent l1 l2 =
+            M {
+                return! M.List.fold (fun b (t1, t2) -> M { let! b' = M.is_equivalent t1 t2 in return b' && b }) true (List.zip l1 l2)
+            }
+
 
 
 // System-F types
 //
 
-type tenv = Env.t<id, ty>
+type tenv = Env.t<id, ty>   // type constructor environment (namely, δ, analogous to the value environment Δ)
 
 and [< NoComparison; CustomEquality; DebuggerDisplay("{ToString()}") >] ty =
     | T_Cons of id * kind
@@ -67,17 +83,6 @@ and [< NoComparison; CustomEquality; DebuggerDisplay("{ToString()}") >] ty =
 with
     static member binding_separator = Config.Printing.type_annotation_sep
 
-    member this.kind =
-        match this with
-        | T_Cons (_, k)
-        | T_Var (_, k)
-        | T_Closure (_, _, _, k) -> k
-        | T_HTuple ts            -> K_HTuple [for t in ts do yield t.kind]
-        | T_Forall (_, t)        -> t.kind
-        | T_App (t1, _)          -> match t1.kind with
-                                    | K_Arrow (_, k) -> k
-                                    | k              -> unexpected "non-arrow kind %O in left hand of type application: %O" __SOURCE_FILE__ __LINE__ k this
-
     override x.Equals y = CustomCompare.equals_with (fun x y -> (x :> IEquatable<ty>).Equals y) x y
 
     override this.GetHashCode () =
@@ -87,25 +92,41 @@ with
         | T_HTuple ts               -> ts.GetHashCode ()
         | T_App (t1, t2)            -> (t1, t2).GetHashCode ()
         | T_Forall (α, t)           -> (α, t).GetHashCode ()
-        | T_Closure (_, _, _, _)    -> unexpected "hashing type closure: %O" __SOURCE_FILE__ __LINE__ this
+        | T_Closure (_, _, _, _)    -> unexpected "hashing type closure: %O" __SOURCE_FILE__ __LINE__ this   
+
+    member this.kind = (this :> kinded).kind
+
+    interface TyEq.equivalent<ty> with
+        member this.kind =
+            match this with
+            | T_Cons (_, k)
+            | T_Var (_, k)
+            | T_Closure (_, _, _, k) -> k
+            | T_HTuple ts            -> K_HTuple [for t in ts do yield t.kind]
+            | T_Forall (_, t)        -> t.kind
+            | T_App (t1, _)          -> match t1.kind with
+                                        | K_Arrow (_, k) -> k
+                                        | k              -> unexpected "non-arrow kind %O in left hand of type application: %O" __SOURCE_FILE__ __LINE__ k this
+
+        member x.is_equivalent y =
+            let M = new TyEq.state_builder<ty> ()
+            let (&&&) = M.binop_and
+            M {   
+                match x, y with
+                | T_Cons (x, _), T_Cons (y, _)          -> return x = y
+                | T_Var (α, _), T_Var (β, _)            -> return! M.is_var_equivalent α β
+                | T_App (t1, t2), T_App (t1', t2')      -> return! M.is_equivalent t1 t1' &&& M.is_equivalent t2 t2'
+                | T_Forall (α, t1), T_Forall (β, t2)    -> return! M.is_var_equivalent α β &&& M.is_equivalent t1 t2
+                | T_HTuple ts, T_HTuple ts'             -> return! M.are_equivalent ts ts'
+                #if DEBUG
+                | T_Closure _, _ | _, T_Closure _       -> L.unexpected_error "comparing type closures: %O = %O" x y
+                                                           return false
+                #endif
+                | _                                     -> return false
+            }
 
     interface IEquatable<ty> with
-        member x.Equals y =
-            is_ty_equal (fun M (=~) x y ->
-                    M {
-                        match x, y with
-                        | T_Cons (x, _), T_Cons (y, _)          -> return x = y
-                        | T_Var (α, _), T_Var (β, _)            -> return! α =~ β
-                        | T_App (t1, t2), T_App (t1', t2')      -> return [t1; t2] = [t1'; t2']
-                        | T_Forall (α, t1), T_Forall (β, t2)    -> let! b = α =~ β in return b && t1 = t2
-                        | T_HTuple ts, T_HTuple ts'             -> return ts = ts'
-                        #if DEBUG
-                        | T_Closure _, _ | _, T_Closure _       -> L.unexpected_error "comparing type closures: %O = %O" x y
-                                                                   return false
-                        #endif
-                        | _                                     -> return false
-                    })
-                x y
+        member x.Equals y = (x :> TyEq.equivalent<_>).is_equivalent y TyEq.state.empty |> fst
 
 
 // flexible types
@@ -119,12 +140,6 @@ with
     static member binding_separator = Config.Printing.type_annotation_sep
     static member reduction_separator = Config.Printing.ftype_instance_of_fxty_sep
 
-    member this.kind =
-        match this with
-        | Fx_Bottom k             -> k
-        | Fx_Forall (_, ϕ)        -> ϕ.kind
-        | Fx_F_Ty t               -> t.kind
-
     override x.Equals y = CustomCompare.equals_with (fun x y -> (x :> IEquatable<fxty>).Equals y) x y
 
     override this.GetHashCode () =
@@ -133,24 +148,34 @@ with
         | Fx_Forall ((α, ϕ1), ϕ2)    -> (α, ϕ1, ϕ2).GetHashCode ()
         | Fx_F_Ty t                  -> t.GetHashCode ()
 
+    member this.kind = (this :> kinded).kind
+
+    interface TyEq.equivalent<fxty> with
+        member this.kind =
+            match this with
+            | Fx_Bottom k             -> k
+            | Fx_Forall (_, ϕ)        -> ϕ.kind
+            | Fx_F_Ty t               -> t.kind
+
+        member x.is_equivalent y =
+            let M = new TyEq.state_builder<fxty> ()
+            let (&&&) = M.binop_and
+            M {
+                match x, y with
+                | Fx_Forall ((α, ϕ1), ϕ2), Fx_Forall ((α', ϕ1'), ϕ2') ->
+                    return! M.is_var_equivalent α α' &&& M.is_equivalent ϕ1 ϕ1' &&& M.is_equivalent ϕ2 ϕ2'
+
+                | Fx_F_Ty t1, Fx_F_Ty t2 ->
+                    return! (t1 :> TyEq.equivalent<_>).is_equivalent t2
+
+                | Fx_Bottom _, Fx_Bottom _ ->
+                    return true
+
+                | _ -> return false
+            }
+
     interface IEquatable<fxty> with
-        member x.Equals y =
-            is_ty_equal (fun M (=~) x y ->
-                    M {
-                        match x, y with
-                        | Fx_Forall ((α, t1), t2), Fx_Forall ((α', t1'), t2') ->
-                            let! b = α =~ α'
-                            return b && [t1; t2] = [t1'; t2']
-
-                        | Fx_F_Ty t1, Fx_F_Ty t2 ->
-                            return t1 = t2
-
-                        | Fx_Bottom _, Fx_Bottom _ ->
-                            return true // bacause kinds have already been compared by factory
-
-                        | _ -> return false
-                    })
-                x y
+        member x.Equals y = (x :> TyEq.equivalent<_>).is_equivalent y TyEq.state.empty |> fst
 
 
 

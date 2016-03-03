@@ -1,4 +1,12 @@
 ﻿
+3/3/2016:
+* FIX: var pretty printing polished and fixed for working with various compilation symbols
+* NEW: kinded interface for types having the kind property
+* NEW: type equivalence logic stuffed into a monad: it can now be reused with several types in an easier way
+* FIX: match rule seems to work
+* BUG: let rec seems to be wrong: it's being worked
+
+
 2/3/2016:
 * UP: ty and fxty equality rewritten: it now deals with variables in a special way, such that for example forall 'a 'b. 'a -> 'b is equal to forall 'x 'y. 'x -> 'y and even
       when quantified variables are out of order, e.g. forall 'a 'b. 'a -> 'b is equal to forall 'y 'x. 'x -> 'y
@@ -179,7 +187,7 @@ Evento senza titolo* UP: UnitTest types are now subject to anonymization of all 
 * FIX: monadic extend was bugged: now there's only a pretty natural extend dealing with the Q within the monad, and no more extend overloads dealing with Q as a parameter
 * FIX: in rule (LAMBDA) uses of former monadic extend overloads have been rewritten using the pure version of extend
 * REFACT: var.reset_normalization does not take a set of quantified variables anymore: it just resets normalization; it is now used only by Report, not by scheme and kscheme pretty printers anymore
-* FIX: var.reset_normalization didn't work as intended when compilation flag DISABLE_TYVAR_NORM was enabled; now it should
+* FIX: var.reset_normalization didn't work as intended when compilation flag DISABLE_VAR_NORM was enabled; now it should
 * REFACT: some new var.add_quantified static overloads dealing with a single var, a sequence of vars and a prefix
 * REFACT: substitution composition (again!!) was reversed: probably it didn't matter anyway, but hey...
 
