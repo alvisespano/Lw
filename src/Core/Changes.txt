@@ -1,4 +1,8 @@
 ﻿
+4/3/2016:
+* UP: some patterns and let rec being upgraded to HML
+
+
 3/3/2016:
 * FIX: var pretty printing polished and fixed for working with various compilation symbols
 * NEW: kinded interface for types having the kind property

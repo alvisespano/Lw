@@ -5,19 +5,20 @@
 
 namespace Test 
 
-let test_patt f x =
+
+
+let rec map f = function
+    | [] -> []
+    | x :: xs -> f x :: map f xs
+
+
+(*
+let patt_in_non_letrec f x =
     match x with
     | [] -> 3
     | x :: xs -> f x
 
-(*
-let rec map f = function
-    | [] -> []
-    | x :: xs -> f x :: map f xs
-*)
-
-(*
-let app f x = f x
+    let app f x = f x
 let id x = x
 
 let i = app id id

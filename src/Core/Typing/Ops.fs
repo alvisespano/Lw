@@ -297,19 +297,23 @@ type fxty with
         #endif
         r
 
-    member this.is_really_flex =
+    member this.maybe_ftype =
         match this with
-        | FxU_ForallsQ (Q, _) when Seq.forall (function (_, Fx_Bottom _) -> true | _ -> false) Q -> false
-        | FxU_Unquantified _ -> false
-        | _ -> true
+        | FxU_ForallsQ (Q, _) when Seq.forall (function (_, Fx_Bottom _) -> true | _ -> false) Q -> Some this.ftype
+        | FxU_Unquantified t -> Some t
+        | _ -> None
 
+
+// TODO: is this representation ok for ungeneralized bindings?
+//let Ungeneralized ϕ = { constraints = constraints.empty; fxty = ϕ }
+//let (|Ungeneralized|) = function
+//    | { constraints = cs; fxty = ϕ } when cs.is_empty -> ϕ
+//    | σ -> unexpected "expected an ungeneralized type scheme but got: %O" __SOURCE_FILE__ __LINE__ σ
 
 let Ungeneralized t = { constraints = constraints.empty; fxty = Fx_F_Ty t }
-
 let (|Ungeneralized|) = function
     | { constraints = cs; fxty = Fx_F_Ty t } when cs.is_empty -> t
     | σ -> unexpected "expected an ungeneralized type scheme but got: %O" __SOURCE_FILE__ __LINE__ σ
-
 
 // operations over constraints, schemes and environments
 //

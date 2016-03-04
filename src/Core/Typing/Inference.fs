@@ -44,7 +44,7 @@ type [< NoComparison; NoEquality >] gen_binding = {
 }
 
 
-// type inference algorithms
+// type inference bits
 //
 
 let W_lit = function
@@ -55,8 +55,85 @@ let W_lit = function
     | Char _      -> T_Char
     | Unit        -> T_Unit
 
+let auto_jk decl_qual x t = if decl_qual.over then Jk_Inst (x, t.GetHashCode ()) else Jk_Var x
 
-// some wrappers
+let gen_bind ctx prefixes ({ id = x; qual = dq; expr = e0; to_bind = ϕ } as gb) =
+    let M = new translatable_type_inference_builder<_> (e0)
+    let loc0 = e0.loc
+    let Lo0 x = Lo loc0 x
+    M {
+        // check shadowing and interaction with previous bindings
+        let! jb = M.search_binding_by_name_Γ x
+        if dq.over then
+            match jb with                
+            | Jb_Overload pt -> let! uctx = M.get_uni_context loc0
+                                if not (ϕ.is_instance_of uctx pt) then Report.Error.instance_not_valid loc0 x ϕ pt   // open-world overloadable instance
+            | Jb_Unbound     -> Report.Warn.let_over_without_previous_let loc0 x                                                     // let-over binding without a previous let-non-over is a warning
+            | _              -> ()                                                                                                  // let-over binding after anything else is valid closed-world overloading
+        else
+            match jb with                
+            | Jb_Overload _ -> Report.Warn.shadowing_overloaded_symbol loc0 x    // let-non-over after overload
+            | _             -> ()                                               // normal binding that can shadow legally
+
+        // check constraints solvability and scope escaping
+        let! cs = M.get_constraints
+        for { name = cx; ty = ct } as c in cs do
+            let αs = ct.fv - ϕ.fv in if not αs.IsEmpty then Report.Hint.unsolvable_constraint loc0 x ϕ cx ct αs
+            match c.mode with
+            | Cm_OpenWorldOverload ->
+                let! jb = M.search_binding_by_name_Γ cx
+                match jb with
+                | Jb_Overload _ -> ()
+                | _ ->
+                    Report.Warn.constraint_escaped_scope_of_overload loc0 cx ct x ϕ
+                    do! M.remove_constraint c
+                    do! M.add_constraint { c with mode = Cm_FreeVar; ty = ct }              // escaped overload constraint becomes a FreeVar constraint
+
+            | Cm_ClosedWorldOverload ->
+                Report.Error.closed_world_overload_constraint_not_resolved loc0 cx ct x ϕ    // closed-world overload constraint not resolved
+
+            | _ -> ()
+
+        // generalization and binding
+        let jk = auto_jk dq x gb.to_bind
+        let! _ =
+            let jm = if dq.over then Jm_Overload else Jm_Normal
+            in
+                M.bind_generalized_Γ jk jm gb.to_bind
+        Report.prompt ctx (prefixes @ dq.as_tokens) x gb.to_bind (Some (Config.Printing.ftype_instance_of_fxty_sep, gb.inferred))
+
+        // translation
+        let e1 = if cs.is_empty then e0 else LambdaFun ([possibly_tuple Lo0 P_CId P_Tuple cs], Lo0 e0.value)
+        return jk, e1
+    }
+
+
+let W_annotated loc (ϕx : fxty) (ϕe : fxty) =
+    let M = new type_inference_builder (loc)
+    M {
+        let! ϕ = M {
+            match ϕx.maybe_ftype with
+            | Some tx ->
+                let te = ϕe.ftype
+                do! M.unify_F loc tx te
+                yield te                        // bind as an F-type when the annotation is an F-type
+            | None ->
+                yield! M.unify_fx loc ϕx ϕe   // bind the flex unification result when annotation is a flex type instead
+        }
+        return ϕ
+    }
+
+let check_rec_value_restriction loc (ϕe : fxty) =
+    let M = new type_inference_builder (loc)
+    M {
+        match ϕe with
+        | FxU0_ForallsQ (_, T_Arrow _) -> ()
+        | _ -> Report.Error.value_restriction_non_arrow_in_letrec loc ϕe
+    }
+
+
+// main inference function recursive wrappers
+//
 
 let rec W_expr (ctx : context) (e0 : expr) =
     let M = new translatable_type_inference_builder<_> (e0)
@@ -109,9 +186,43 @@ and W_decl ctx d =
             do! W_decl' ctx d
     }  
 
+and W_patt ctx (p0 : patt) =
+    let M = new type_inference_builder (p0.loc)
+    M {
+        L.tabulate 2
+        try
+            let rule =
+                sprintf "%-9s" <|
+                match p0.value with
+                | P_Var _     -> "(P-VAR)"
+                | P_Cons _    -> "(P-CONS)"
+                | P_App _     -> "(P-APP)"
+                | _         -> "[p]"
+            let! Q = M.get_Q
+            let! θ = M.get_θ
+            #if DEBUG_BEFORE_INFERENCE
+            L.debug Min "%s %O\n[Q]   %O" rule p0 Q
+            #endif
+            let! (ϕ : fxty) = W_patt' ctx p0
+            // TODOH: insert automatic generalization here, besides automatic resolution
+            #if DEBUG_INFERENCE
+            let! Q' = M.get_Q
+            let! θ' = M.get_θ
+            // TODOL: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)
+            L.debug Low "%s %O\n[:t]  %O\n[nf]  %O\n[F-t] %O\n[e*]  %O\n[Q]   %O\n[S]   %O\n[Q']  %O\n[S']  %O" rule p0 ϕ ϕ.nf ϕ.ftype p0.translated Q θ Q' θ'
+            #endif
+            return ϕ
+        finally
+            L.undo_tabulate
+    }
 
-// main W functions
-//
+and W_patt_F ctx (p0 : patt) =
+    let M = new type_inference_builder (p0.loc)
+    M {
+        let! ϕ = W_patt ctx p0
+        return ϕ.ftype
+    }
+
 
 and W_expr_F ctx e0 =
     let M = new translatable_type_inference_builder< _> (e0)
@@ -119,6 +230,10 @@ and W_expr_F ctx e0 =
         let! ϕ = W_expr ctx e0
         return ϕ.ftype
     }
+
+
+// main inference functions
+//
 
 and W_expr' ctx (e0 : expr) =
     let Lo x = Lo e0.loc x
@@ -197,11 +312,10 @@ and W_expr' ctx (e0 : expr) =
             yield T_Open_Variant [x, T_Arrow (α, β)]
 
         | Lambda ((x, τo), e) ->
-            let α, tα = ty.fresh_star_var_and_ty
             let! Q0 = M.get_Q
             let! tx = M {
                 match τo with
-                | None -> return tα
+                | None -> return ty.fresh_star_var
                 | Some τ ->
                     let! t, k = Wk_and_eval_ty_expr_F ctx τ
                     do! M.kunify τ.loc K_Star k
@@ -211,13 +325,12 @@ and W_expr' ctx (e0 : expr) =
             for α in tx.ftv do
                 do! M.add_prefix α (Fx_Bottom K_Star)   // TODOH: use extend here
             let! ϕ1 = M.undo_Γ <| M {
-                let! _ = M.bind_ungeneralized_Γ x tx
+                let! _ = M.bind_ungeneralized_var_Γ x tx
                 return! W_expr ctx e
             }            
             let! tx = M.updated tx
             // check that the inferred type of parameter is a monotype when no annotation was provided
             if τo.IsNone && not tx.is_monomorphic then Report.Error.inferred_lambda_parameter_is_not_monomorphic e0.loc x tx
-            let! Γ = M.get_Γ
             let β, tβ = ty.fresh_star_var_and_ty
             #if ENABLE_HML_OPTS
             do! M.extend (β, ϕ1)
@@ -289,7 +402,7 @@ and W_expr' ctx (e0 : expr) =
         
         | Annot (e, τ) ->
             let x = fresh_reserved_id ()
-            let! ϕ = W_desugared_expr (Lo <| App (Lo <| Lambda ((x, Some τ), Lo <| Var x), e))
+            let! ϕ = W_desugared_expr (Lo <| App (Lo <| Lambda ((x, Some τ), Lo <| Var x), e))  // TODO: or maybe just use unification of flex types?
             M.already_translated <- e.translated
             yield ϕ
 
@@ -408,56 +521,6 @@ and W_decl' (ctx : context) (d0 : decl) =
             do! M.unify_F e.loc t1 t2
             do! resolve_constraints ctx e
         }
-    let jk decl_qual x t = if decl_qual.over then Jk_Inst (x, t.GetHashCode ()) else Jk_Var x
-
-    let gen_bind prefixes ({ id = x; qual = dq; expr = e0; to_bind = ϕ } as gb) =
-        let loc = e0.loc
-        let Lo x = Lo loc x
-        M {
-            // check shadowing and interaction with previous bindings
-            let! jb = M.search_binding_by_name_Γ x
-            if dq.over then
-                match jb with                
-                | Jb_Overload pt -> let! uctx = M.get_uni_context loc
-                                    if not (ϕ.is_instance_of uctx pt) then Report.Error.instance_not_valid loc x ϕ pt   // open-world overloadable instance
-                | Jb_Unbound     -> Report.Warn.let_over_without_previous_let loc x                                                     // let-over binding without a previous let-non-over is a warning
-                | _              -> ()                                                                                                  // let-over binding after anything else is valid closed-world overloading
-            else
-                match jb with                
-                | Jb_Overload _ -> Report.Warn.shadowing_overloaded_symbol loc x    // let-non-over after overload
-                | _             -> ()                                               // normal binding that can shadow legally
-
-            // check constraints solvability and scope escaping
-            let! cs = M.get_constraints
-            for { name = cx; ty = ct } as c in cs do
-                let αs = ct.fv - ϕ.fv in if not αs.IsEmpty then Report.Hint.unsolvable_constraint loc x ϕ cx ct αs
-                match c.mode with
-                | Cm_OpenWorldOverload ->
-                    let! jb = M.search_binding_by_name_Γ cx
-                    match jb with
-                    | Jb_Overload _ -> ()
-                    | _ ->
-                        Report.Warn.constraint_escaped_scope_of_overload loc cx ct x ϕ
-                        do! M.remove_constraint c
-                        do! M.add_constraint { c with mode = Cm_FreeVar; ty = ct }              // escaped overload constraint becomes a FreeVar constraint
-
-                | Cm_ClosedWorldOverload ->
-                    Report.Error.closed_world_overload_constraint_not_resolved loc cx ct x ϕ    // closed-world overload constraint not resolved
-
-                | _ -> ()
-
-            // generalization and binding
-            let jk = jk dq x gb.to_bind
-            let! _ =
-                let jm = if dq.over then Jm_Overload else Jm_Normal
-                in
-                    M.bind_generalized_Γ jk jm gb.to_bind
-            Report.prompt ctx (prefixes @ dq.as_tokens) x gb.to_bind (Some (Config.Printing.ftype_instance_of_fxty_sep, gb.inferred))
-
-            // translation
-            let e1 = if cs.is_empty then e0 else LambdaFun ([possibly_tuple Lo P_CId P_Tuple cs], Lo e0.value)
-            return jk, e1
-        }
 
     M {
         match d0.value with
@@ -480,7 +543,6 @@ and W_decl' (ctx : context) (d0 : decl) =
                 let! l = M.List.collect (fun ({ patt = p; expr = e } as b) -> M {
                             do! M.clear_constraints     // TODOH: probably there's a relation between contraints to be kept (i.e. not cleared) and the free vars in Γ
                             let! ϕe = W_expr ctx e
-                            let te = ϕe.ftype
                             return! M.undo_Γ <| M {
                                 // TODOL: support return type annotations after parameters like in "let f x y : int = ..."
                                 let (|B_Unannot|B_Annot|B_Patt|) = function
@@ -491,27 +553,19 @@ and W_decl' (ctx : context) (d0 : decl) =
                                 | B_Unannot x ->
                                     do! resolve_constraints ctx e
                                     let! cs = M.get_constraints
-                                    return [{ expr = b.expr; qual = b.qual; id = x; constraints = cs; to_bind = Fx_F_Ty te; inferred = ϕe }]     // by default bind inferred types as F-types
+                                    return [{ expr = b.expr; qual = b.qual; id = x; constraints = cs; to_bind = Fx_F_Ty ϕe.ftype; inferred = ϕe }]     // by default bind the inferred type as an F-type
 
                                 | B_Annot (x, τ) ->
                                     let! ϕx, k = Wk_and_eval_ty_expr_fx ctx τ
                                     do! M.kunify τ.loc K_Star k
-                                    let! ϕe' = M {
-                                        match ϕx with
-                                        | Fx_F_Ty tx ->
-                                            do! M.unify_F τ.loc tx te
-                                            yield te                        // bind inferred type as an F-type when the annotation is an F-type
-                                        | _ ->
-                                            do! M.subsume τ.loc te ϕx
-                                            yield ϕe                        // bind the inferred type when annotation is a flex type instead
-                                    }
+                                    let! ϕe' = W_annotated τ.loc ϕx ϕe
                                     do! resolve_constraints ctx e
                                     let! cs = M.get_constraints
                                     return [{ expr = b.expr; qual = b.qual; id = x; constraints = cs; to_bind = ϕe'; inferred = ϕe }]
 
                                 | B_Patt p ->
                                     let! tp = W_patt_F ctx p
-                                    do! M.unify_F e.loc tp te                 // HACK: pattern-based let-bindings needs to be written in terms of (LAMBDA) and (APP) rules
+                                    do! M.unify_F e.loc tp ϕe.ftype                 // HACK: pattern-based let-bindings needs to be written in terms of (LAMBDA) and (APP) rules
                                     do! resolve_constraints ctx e
                                     let! cs = M.get_constraints
                                     return! vars_in_patt p |> Set.toList |> M.List.map (fun x -> M {
@@ -520,7 +574,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                                         })
                             }
                         }) bs
-                let! bs' = M.List.map (fun gb -> M { let! () = M.set_constraints gb.constraints in return! gen_bind Config.Printing.Prompt.value_decl_prefixes gb }) l
+                let! bs' = M.List.map (fun gb -> M { let! () = M.set_constraints gb.constraints in return! gen_bind ctx Config.Printing.Prompt.value_decl_prefixes gb }) l
                 M.translate <- D_Bind [for jk, e in bs' -> { qual = decl_qual.none; patt = Lo e.loc (P_Jk jk); expr = e }]
             }
 
@@ -529,41 +583,40 @@ and W_decl' (ctx : context) (d0 : decl) =
                 let! l = M.undo_Γ <| M {
                     do! M.clear_constraints
                     // introduce fresh type variables or the annotated type for each rec binding
-                    let! l = M.List.map (fun ({ qual = dq; par = x, _; expr = e } as b) -> M {
-                                // HACK: let rec implemented roughly
-                                match b.par with
-                                | _, None ->
-                                    let! tα = M.add_fresh_star_to_prefix
-                                    return Fx_F_Ty tα
+                    let! l = M.List.map (fun ({ par = x, _ } as b) -> M {
+                                let! tx = M {
+                                    let α, tα = ty.fresh_star_var_and_ty
+                                    match snd b.par with
+                                    | None ->
+                                        return ty.fresh_star_var
 
-                                | _, Some τ -> 
-                                    let! ϕ, k = Wk_and_eval_ty_expr_fx ctx τ
-                                    do! M.kunify τ.loc K_Star k
-                                    return ϕ                                                
+                                    | Some τ -> 
+                                        let! t, k = Wk_and_eval_ty_expr_F ctx τ
+                                        do! M.kunify τ.loc K_Star k
+                                        return t
                                 }
-                                let! _ = M.bind_ungeneralized_Γ x ϕx
+                                for α in tx.fv do   // UNDONE: reproduce the many-Lambda behaviour
+                                    do! M.add_prefix α (Fx_Bottom K_Star)
+                                let! _ = M.bind_ungeneralized_var_Γ x tx
                                 return b, x, tx
                             }) bs
-                    // check arrow and value restriction for each rec binding
-                    for { expr = e }, _, tx in l do
-                        let! ϕe = W_expr ctx e 
-                        do! unify_and_resolve ctx e tx te
-                        match te with
-                        | T_Arrow _ -> ()
-                        | _         -> Report.Error.value_restriction_non_arrow_in_letrec e.loc te
+                    // infer each rec binding
+                    for { expr = e }, _, ϕx in l do
+                        let! ϕe = W_expr ctx e
+                        let! ϕe = W_annotated e.loc ϕx ϕe
+                        do! check_rec_value_restriction e.loc ϕe
                     return l
                 }
-                let! bs' = M.List.map (fun (b : rec_binding, x, tx) -> M {
-                                let ϕ = Fx_F_Ty tx
+                let! bs' = M.List.map (fun (b : rec_binding, x, ϕ) -> M {
                                 let! cs = M.get_constraints // TODOH: every rec..and binding must have the same contraints, right?
-                                return! gen_bind Config.Printing.Prompt.rec_value_decl_prefixes { expr = b.expr; qual = b.qual; id = x; constraints = cs; inferred = ϕ; to_bind = ϕ }
+                                return! gen_bind ctx Config.Printing.Prompt.rec_value_decl_prefixes { expr = b.expr; qual = b.qual; id = x; constraints = cs; inferred = ϕ; to_bind = ϕ }
                             }) l
                 M.translate <- D_Rec [for jk, e in bs' -> { qual = decl_qual.none; par = jk.pretty, None; expr = e }]
             }
 
         | D_Open (q, e) ->
             let! t = W_expr_F ctx e
-            do! unify_and_resolve ctx e (T_Open_Record []) t
+            do! unify_and_resolve ctx e (T_Open_Record []) t    // HACK: probably not working in HML
             let Lo x = Lo e.loc x
             match t with
             | T_Record (bs, _) ->
@@ -614,46 +667,12 @@ and W_decl' (ctx : context) (d0 : decl) =
             return not_implemented "%O" __SOURCE_FILE__ __LINE__ d0
     }  
 
-and W_patt_F ctx p0 =
-    let M = new type_inference_builder (p0.loc)
-    M {
-        let! ϕ = W_patt ctx p0
-        return ϕ.ftype
-    }
 
-and W_patt ctx (p0 : patt) =
-    let M = new type_inference_builder (p0.loc)
-    M {
-        L.tabulate 2
-        try
-            let rule =
-                sprintf "%-9s" <|
-                match p0.value with
-                | P_Var _     -> "(P-VAR)"
-                | P_Cons _    -> "(P-CONS)"
-                | P_App _     -> "(P-APP)"
-                | _         -> "[p]"
-            let! Q = M.get_Q
-            let! θ = M.get_θ
-            #if DEBUG_BEFORE_INFERENCE
-            L.debug Min "%s %O\n[Q]   %O" rule p0 Q
-            #endif
-            let! (ϕ : fxty) = W_patt' ctx p0
-            // TODOH: insert automatic generalization here, besides automatic resolution
-            #if DEBUG_INFERENCE
-            let! Q' = M.get_Q
-            let! θ' = M.get_θ
-            // TODOL: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)
-            L.debug Low "%s %O\n[:t]  %O\n[nf]  %O\n[F-t] %O\n[e*]  %O\n[Q]   %O\n[S]   %O\n[Q']  %O\n[S']  %O" rule p0 ϕ ϕ.nf ϕ.ftype p0.translated Q θ Q' θ'
-            #endif
-            return ϕ
-        finally
-            L.undo_tabulate
-    }
 
 and W_patt' ctx (p0 : patt) : M<fxty> =
     let M = new type_inference_builder (p0.loc)
     let loc0 = p0.loc
+    let Lo0 = Lo loc0
     M {
         match p0.value with
         | P_Cons x ->
@@ -681,12 +700,22 @@ and W_patt' ctx (p0 : patt) : M<fxty> =
             yield T_Open_Variant [x, T_Arrow (α, β)]
 
         | P_Var x ->
-            let α = var.fresh
-            let k = K_Star
-            do! M.add_prefix α (Fx_Bottom k)
-            let t = T_Var (α, k)
-            do! M.ignore <| M.bind_ungeneralized_Γ x t
-            yield t
+            let! tα = M.add_fresh_star_to_prefix
+            let! _ = M.bind_ungeneralized_var_Γ x tα
+            yield tα
+
+        | P_As (p, x) ->
+            yield! W_patt ctx (Lo0 <| P_And (p, Lo0 (P_Var x)) )
+
+        | P_Wildcard ->
+            yield! W_patt ctx (Lo0 <| P_Var (fresh_reserved_id ()))
+
+        // HACK: this does not use the Lambda-App trick used in Annot nor 
+        | P_Annot (p, τ) ->
+            let! ϕτ, k = Wk_and_eval_ty_expr_fx ctx τ
+            do! M.kunify τ.loc K_Star k             // any pattern is a value, so it has kind star
+            let! ϕp = W_patt ctx p
+            yield! W_annotated τ.loc ϕτ ϕp
 
         | P_Lit lit ->
             yield W_lit lit
@@ -736,20 +765,6 @@ and W_patt' ctx (p0 : patt) : M<fxty> =
             do! M.unify_F p1.loc (T_Arrow (tα2, tβ)) tα1
             let! Q5 = M.split_for_gen Q0
             yield Q5, tβ
-
-        | P_Wildcard ->
-            yield ty.fresh_star_var
-
-        | P_As (p, x) ->
-            let! tp = W_patt_F ctx p
-            let! _ = M.bind_ungeneralized_Γ x tp
-            yield tp
-
-        | P_Annot (p, τ) ->
-            let! t, _ = Wk_and_eval_ty_expr_F ctx τ
-            let! tp = W_patt_F ctx p
-            do! M.unify_F p.loc t tp
-            yield t
     }
 
 

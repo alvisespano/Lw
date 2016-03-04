@@ -182,6 +182,8 @@ type fxty with
         | Fx_Bottom k             -> Fx_Bottom k.anonymize_vars
         | Fx_F_Ty t               -> Fx_F_Ty t.anonymize_vars
 
+    member this.is_really_flex = this.maybe_ftype.IsNone
+
 
 let compare_test eq_ty eq_fxty eq_kind (ϕres : fxty) (ϕok : fxty) =
     let tb = eq_ty ϕok.ftype ϕres.ftype
@@ -305,8 +307,12 @@ module Tests =
     let wrong_type = wrong<type_error>
     let wrong_syntax = wrong<syntax_error>
 
-    let test_in_fsharp = fun f (x : 'b) y -> ((f : _ -> 'a) x, y) : 'a * _
-
+    let test_in_fsharp () =
+        let rec map f = function
+            | [] -> []
+            | x :: xs -> f x :: map f xs
+        and map2 f (l1, l2) = map f l1, map f l2
+        ()
     
     let all : section list =
      [

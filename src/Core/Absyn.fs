@@ -869,6 +869,7 @@ type uexpr with
         match this with
             | Lit l                 -> l.pretty
             | List es               -> sprintf "[%s]" (flatten_stringables "; " es)
+            | List_Cons (e1, e2)    -> sprintf "%O :: %O" e1 e2
             | Sym x                 -> sprintf "(%s)" x
             | Var x                 -> sprintf "%s" x
 //            | Reserved_Cons x       -> x

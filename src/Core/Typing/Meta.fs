@@ -543,11 +543,14 @@ let Wk_and_eval_ty_expr_F (ctx : context) τ =
     let M = new kind_inference_builder<_> (τ)
     M {
         let! ϕ, k = Wk_and_eval_ty_expr_fx ctx τ
-        match ϕ with
-        | Fx_F_Ty t -> return t, k
-        | _         -> let t = ϕ.ftype
-                       Report.Warn.annot_flex_type_became_Ftype τ.loc ϕ t
-                       return t, k
+        match ϕ.maybe_ftype with
+        | Some t ->
+            return t, k
+
+        | None ->
+            let t = ϕ.ftype
+            Report.Warn.annot_flex_type_became_Ftype τ.loc ϕ t
+            return t, k
     }
 
 

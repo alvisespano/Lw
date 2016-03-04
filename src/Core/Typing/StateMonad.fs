@@ -55,7 +55,7 @@ with
 type M<'a> = Monad.M<'a, state>
 
 let (|Jb_Overload|Jb_Var|Jb_Data|Jb_OverVar|Jb_Unbound|) = function
-    | Some (Jk_Var _, { mode = Jm_Overload; scheme = Ungeneralized t }) -> Jb_Overload t.instantiate
+    | Some (Jk_Var _, { mode = Jm_Overload; scheme = Ungeneralized ϕ }) -> Jb_Overload ϕ    // HACK: flex types are bound to oveloaded symbols
     | Some (Jk_Var _, { mode = Jm_Normal; scheme = σ })                 -> Jb_Var σ
     | Some (Jk_Inst _, { mode = Jm_Overload; scheme = _ })              -> Jb_OverVar
     | Some (Jk_Data _, { mode = Jm_Normal; scheme = σ })                -> Jb_Data σ
@@ -336,9 +336,19 @@ type type_inference_builder (loc) =
             return σ
         }
 
-    member M.bind_ungeneralized_Γ x t =
+    member M.bind_ungeneralized_var_Γ x t =
         M {
-            return! M.bind_Γ (Jk_Var x) { mode = Jm_Normal; scheme = Ungeneralized t }
+            return! M.bind_ungeneralized_Γ (Jk_Var x) Jm_Normal t
+        }
+
+    member M.bind_generalized_var_Γ x ϕ =
+        M {
+            return! M.bind_generalized_Γ (Jk_Var x) Jm_Normal ϕ
+        }
+
+    member M.bind_ungeneralized_Γ jk jm (t : ty) =
+        M {
+            return! M.bind_Γ jk { mode = jm; scheme = Ungeneralized t }
         }
 
     member M.bind_generalized_Γ jk jm (ϕ : fxty) =
