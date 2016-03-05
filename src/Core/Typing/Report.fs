@@ -127,14 +127,17 @@ module Error =
         E 22 loc "when generalizing symbol `%O : %O` the constraint `%s : %O` has not been resolved and was referring to a closed-world overloaded symbol" x t cx ct
 
     let inferred_lambda_parameter_is_not_monomorphic loc x t =
-        E 23 loc "function parameter is used polymorphically without explicit annotation: %s : %O" x t
+        E 23 loc "function parameter is used polymorphically without an explicit annotation: %s : %O" x t
 
     let skolemized_type_variable_escaped loc tsk =
         E 24 loc "skolem type variable %O escaped" tsk
 
-    let unquantified_variables_in_type loc t =
-        E 25 loc "type has unquantified type variables: %O" t
+    let inferred_rec_definition_is_not_monomorphic loc x t =
+        E 25 loc "recursive definition is used polymorphically without an explicit annotation: %s : %O" x t
 
+    let invalid_pattern_application loc p =
+        E 26 loc "pattern application must have a data constructor as left-most term, but here is: " p
+        
 
 [< RequireQualifiedAccess >]
 module Warn =
@@ -186,6 +189,8 @@ module Warn =
     let annot_flex_type_became_Ftype loc ϕ t =
         W 14 loc Low "type annotation %O is a flexible type and is reduced to a standard (System-F) type: %O" ϕ t
 
+    let unquantified_variables_in_type loc t =
+        W 15 loc Low "type expression has unquantified type variables: %O" t
 
 [< RequireQualifiedAccess >]
 module Hint =

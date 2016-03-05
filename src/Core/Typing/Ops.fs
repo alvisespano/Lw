@@ -342,8 +342,9 @@ type ty with
     member t.auto_generalize loc Γ =
         let αs = t.fv - fv_Γ Γ
         if t.is_unquantified then T_Foralls (Set.toList αs, t)
-        elif not αs.IsEmpty then Report.Error.unquantified_variables_in_type loc t
-        else t
+        else
+            if not αs.IsEmpty then Report.Warn.unquantified_variables_in_type loc t
+            t
 
 
 // operations over kinds

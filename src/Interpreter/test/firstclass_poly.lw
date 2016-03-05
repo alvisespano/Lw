@@ -9,8 +9,11 @@ namespace Test
 
 let rec map f = function
     | [] -> []
-    | x :: xs -> f x :: map f xs
+    | x :: xs -> f x :: map2 f xs
 
+and map2 = id map
+
+and id x = x
 
 (*
 let patt_in_non_letrec f x =

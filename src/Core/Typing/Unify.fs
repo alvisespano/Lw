@@ -102,11 +102,9 @@ module internal Mgu =
             let cons = cons_in_tksubst θ + Q.cons
             in
                 if Set.contains c cons then
-//                    #if DEBUG_HML
-//                    L.warn Low ""
                     Report.Error.skolemized_type_variable_escaped ctx.loc c
 
-        let inline check_skolems_escape ctx cs (Q, θ) =
+        let check_skolems_escape ctx cs (Q, θ) =
             for c in cs do
                 check_skolem_escape ctx c (Q, θ)
 
@@ -187,9 +185,9 @@ module internal Mgu =
                 #if ENFORCE_NF_IN_UNI
                 let t1 = t1.nf
                 let t2 = t2.nf
+                #endif
                 assert t1.is_nf
                 assert t2.is_nf
-                #endif
                 match t1, t2 with
                 | T_Cons (x, k1), T_Cons (y, k2) when x = y -> Q0, kmgu ctx k1 k2
                 | T_Var (α, k1), T_Var (β, k2) when α = β   -> Q0, kmgu ctx k1 k2
@@ -272,7 +270,7 @@ let try_mgu ctx Q t1 t2 =
     with :? Report.type_error -> None
     
 type type_inference_builder with
-    member M.unify_F loc (t1 : ty) (t2 : ty) =
+    member M.unify loc (t1 : ty) (t2 : ty) =
         M {
             let! Q = M.get_Q
             let! t1 = M.updated t1
@@ -309,7 +307,7 @@ type type_inference_builder with
     member M.attempt_unify loc t1 t2 =
         M {
             let! st = M.get_state
-            try do! M.unify_F loc t1 t2
+            try do! M.unify loc t1 t2
             with :? Report.type_error -> do! M.set_state st          
         }
 

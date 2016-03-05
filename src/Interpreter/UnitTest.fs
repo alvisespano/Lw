@@ -35,8 +35,9 @@ type flag =
 
 [< RequireQualifiedAccess >]
 type [< NoComparison; NoEquality >] result =
-    | Ok of string option * flag list
-    | Wrong of Type
+    | TypedOk of string option * flag list
+    | TypedWrong of Type
+    | TypeEq of string * bool
 
 [< RequireQualifiedAccess >]
 type score = Ok | Failed | Weak
@@ -67,18 +68,20 @@ type typechecker () =
     member __.auto_generalize loc (t : ty) = t.auto_generalize loc st.Γ
     member __.lookup_var_Γ x = (st.Γ.lookup (Jk_Var x)).scheme.fxty
 
-    member this.parse_expected_ty_expr s =
+    member this.parse_ty_expr s =
         let τ =
             try parse_ty_expr s
             with :? syntax_error as e -> unexpected "syntax error while parsing type expression: %s\n%O" __SOURCE_FILE__ __LINE__ s e
         let ϕ, k = this.Wk_and_eval_ty_expr_fx τ
         assert (ϕ.kind = k)
-        let ϕ =
-            match ϕ with
-            | Fx_F_Ty t -> Fx_F_Ty <| this.auto_generalize (new location ()) t
-            | _         -> ϕ
-        in
-            ϕ
+        ϕ
+
+    member this.parse_ty_expr_and_auto_gen s =
+        match this.parse_ty_expr s with
+        | Fx_F_Ty t -> Fx_F_Ty <| this.auto_generalize (new location ()) t
+        | ϕ         -> ϕ
+
+
 
 [< RequireQualifiedAccess >]
 type [< NoEquality; NoComparison >] parsed =
@@ -111,8 +114,10 @@ let parse_expr_or_decl s =  // TODO: support parsing of type expressions and kin
 //
       
 let colon2 = txt Config.Printing.kind_annotation_sep
-
-let any x = txt (use N = var.reset_normalization in sprintf "%O" x)   // normalize vars in case parameter x has type ty of fxty
+let norm x = txt (use N = var.reset_normalization in sprintf "%O" x)   // normalize vars in case parameter x has type ty of fxty
+let fxty (x : fxty) = norm x
+let ty (x : ty) = norm x
+let kind (x : kind) = norm x
 
 let pp_infos l =
     let l = Seq.map (fun (s : string, doc) -> sprintf "%s: " (s.TrimEnd [|':'; ' '|]), doc) l
@@ -124,7 +129,7 @@ let pp_infos l =
 
 let typed_infos (ϕ, t, k) = ["flex type", ϕ; "F-type", t; "kind", k]
 
-let expected_infos (ϕok : fxty) = ["expected", pp_infos <| typed_infos (any ϕok, any ϕok.ftype, any ϕok.kind)]
+let expected_infos (ϕok : fxty) = ["expected", pp_infos <| typed_infos (fxty ϕok, ty ϕok.ftype, kind ϕok.kind)]
 
 let static_error_infos (input : string) (e : static_error) =
     let term =
@@ -133,7 +138,7 @@ let static_error_infos (input : string) (e : static_error) =
         in
             input.Substring (x, y - x)
     in
-        ["raised", txt (e.header.ToUpper ()); "at", any e.location; "term", txt term; "message", txt e.message_body]
+        ["raised", txt (e.header.ToUpper ()); "at", fmt "%O" e.location; "term", txt term; "message", txt e.message_body]
 
 
 // logging and pprint shorcuts
@@ -154,34 +159,7 @@ let testing pri doc = L.pp (L.test pri) doc
 // testers
 //
 
-type var with
-    member this.anonymize =
-        match this with
-        | Va (n, _) -> Va (n, None)
-
-type kind with
-    member this.anonymize_vars =
-        match this with
-        | K_Var α        -> K_Var α.anonymize
-        | K_Cons (x, ks) -> K_Cons (x, List.map (fun (k : kind) -> k.anonymize_vars) ks)
-
-type ty with
-    member this.anonymize_vars =
-        match this with
-        | T_Forall (α, t)        -> T_Forall (α.anonymize, t.anonymize_vars)
-        | T_Cons (x, k)          -> T_Cons (x, k.anonymize_vars)
-        | T_Var (α, k)           -> T_Var (α.anonymize, k.anonymize_vars)
-        | T_HTuple ts            -> T_HTuple (List.map (fun (t : ty) -> t.anonymize_vars) ts)
-        | T_App (t1, t2)         -> T_App (t1.anonymize_vars, t2.anonymize_vars)
-        | T_Closure (x, Δ, τ, k) -> T_Closure (x, Δ, τ, k.anonymize_vars)
-
 type fxty with
-    member this.anonymize_vars =
-        match this with
-        | Fx_Forall ((α, t1), t2) -> Fx_Forall ((α.anonymize, t1.anonymize_vars), t2.anonymize_vars)
-        | Fx_Bottom k             -> Fx_Bottom k.anonymize_vars
-        | Fx_F_Ty t               -> Fx_F_Ty t.anonymize_vars
-
     member this.is_really_flex = this.maybe_ftype.IsNone
 
 
@@ -215,60 +193,88 @@ let decl_dummy_ty = Fx_F_Ty T_Unit
 type entry = string * result
 type section = string * entry list
 
-let test_entry (tchk : typechecker) sec n ((input, res) : entry) =
-    let typecheck1 s =
-        testing Min (txt "input:" </> txt s)
-        let p = parse_expr_or_decl s
-        testing Low (txt "parsed:" </> any p)
-        let ϕ =
-            match p with
-            | parsed.Expr e -> tchk.W_expr e
-            | parsed.Decl d ->
-                tchk.W_decl d
-                match d.value with
-                | D_Bind [{ patt = ULo (P_Var x) }] -> tchk.lookup_var_Γ x
-                | _                                 -> decl_dummy_ty
-        let inf o b = (txt (sprintf "(%s)" (if b then "OK" else "NO"))) <+> any o
-        in
-            ϕ, fun (ϕb, tb, kb) -> [ "entry", txt (sprintf "#%d in section \"%s\"" (n + 1) sec)
-                                     "translated", txt p.pretty_translated
-                                     "inferred", pp_infos <| typed_infos (inf ϕ ϕb, inf ϕ.ftype tb, inf ϕ.kind kb) ]
+let entry_info sec n = "entry", txt (sprintf "#%d in section \"%s\"" (n + 1) sec)
+let ok_or_no_info b doc = (txt (sprintf "(%s)" (if b then "OK" else "NO"))) <+> doc
+                                 
+
+let typecheck_expr_or_decl (tchk : typechecker) sec n input =
+    testing Min (txt "input:" </> txt input)
+    let p = parse_expr_or_decl input
+    testing Low (txt "parsed:" </> fmt "%O" p)
+    let ϕ =
+        match p with
+        | parsed.Expr e -> tchk.W_expr e
+        | parsed.Decl d ->
+            tchk.W_decl d
+            match d.value with
+            | D_Bind [{ patt = ULo (P_Var x) }]
+            | D_Rec [{ par =x, _ }] ->
+                tchk.lookup_var_Γ x
+
+            | _ -> decl_dummy_ty
     in
-        match res with
-        | result.Ok (so, flags) ->
-            let is_enabled flag = List.contains flag flags
-            let ϕok =
-                match so with
-                | Some s -> try tchk.parse_expected_ty_expr s
-                            with e -> unexpected "%s" __SOURCE_FILE__ __LINE__ (pretty_exn_and_inners e)   
-                | None   -> decl_dummy_ty
-            in
-                try
-                    let ϕres, infs1 = typecheck1 input
-                    let compare_test = if is_enabled flag.Verbatim then compare_test_verbatim else compare_test_eq
-                    let b3 = compare_test ϕres ϕok
-                    let infs2 = expected_infos ϕok
-                    let infs1 = infs1 b3
-                    in
-                        match b3 with
-                        | true, true, true  -> test_ok "all ok" infs1
-                        | true, false, true -> test_weak_ok "F-type are different" (infs1 @ infs2)
-                        | false, true, true -> test_weak_ok "flex types are different" (infs1 @ infs2)
-                        | true, false, false
-                        | false, true, false -> test_failed "type is ok but kind is not" (infs1 @ infs2)
-                        | _                  -> test_failed "expected to be ok" (infs1 @ infs2)
-                with :? static_error as e ->
-                    test_failed "unwanted static error" <| static_error_infos input e @ expected_infos ϕok
-                    
-        | result.Wrong T ->
-            assert T.IsSubclassOf typeof<static_error>
+        ϕ, fun (ϕb, tb, kb) -> [ entry_info sec n
+                                 "translated", txt p.pretty_translated
+                                 "inferred", pp_infos <| typed_infos (ok_or_no_info ϕb (fxty ϕ), 
+                                                                      ok_or_no_info tb (ty ϕ.ftype),
+                                                                      ok_or_no_info kb (kind ϕ.kind)) ]
+
+let test_entry (tchk : typechecker) sec n ((s1, res) : entry) =
+    match res with
+    | result.TypeEq (s2, is_eq) ->
+        let ϕ1 =tchk.parse_ty_expr s1
+        let ϕ2 = tchk.parse_ty_expr s2
+        let b1 = ϕ1 = ϕ2
+        let b2 = ϕ1.ftype = ϕ2.ftype
+        let infs1 =
+            [ entry_info sec n 
+              "parsed", fxty ϕ1 <+> txt "=" <+> fxty ϕ2
+              "flex types", ok_or_no_info b1 (txt s1 <+> txt "=" <+> txt s2)
+              "F-types", ok_or_no_info b2 (txt s1 <+> txt "=" <+> txt s2) ]
+        let test_ok' = if is_eq then test_ok else test_failed
+        let test_failed' = if is_eq then test_failed else test_ok
+        in
+            (match b1, b2 with
+            | true, true    -> test_ok' "types are equivalent" 
+            | true, false   -> test_weak_ok "flex types are equivalent but F-types are different"
+            | false, true   -> test_weak_ok "F-types are equivalent but flex types are different"
+            | false, false  -> test_failed' "types are different")
+                infs1
+
+    | result.TypedOk (so, flags) ->
+        let is_enabled flag = List.contains flag flags
+        let ϕok =
+            match so with
+            | Some s -> try tchk.parse_ty_expr_and_auto_gen s
+                        with e -> unexpected "%s" __SOURCE_FILE__ __LINE__ (pretty_exn_and_inners e)   
+            | None   -> decl_dummy_ty
+        in
             try
-               let _, infs1 = typecheck1 input
-               test_failed "expected to be wrong" <| infs1 (false, false, false) @ ["error expected", txt T.Name]
+                let ϕres, infs1 = typecheck_expr_or_decl tchk sec n s1
+                let compare_test = if is_enabled flag.Verbatim then compare_test_verbatim else compare_test_eq
+                let b3 = compare_test ϕres ϕok
+                let infs2 = expected_infos ϕok
+                let infs1 = infs1 b3
+                in
+                    match b3 with
+                    | true, true, true  -> test_ok "all ok" infs1
+                    | true, false, true -> test_weak_ok "F-types are different" (infs1 @ infs2)
+                    | false, true, true -> test_weak_ok "flex types are different" (infs1 @ infs2)
+                    | true, false, false
+                    | false, true, false -> test_failed "type is ok but kind is not" (infs1 @ infs2)
+                    | _                  -> test_failed "expected to be ok" (infs1 @ infs2)
             with :? static_error as e ->
-                if (let t = e.GetType() in t = T || t.IsSubclassOf T) then
-                    test_ok "justly rejected" <| static_error_infos input e
-                else reraise ()
+                test_failed "unwanted static error" <| static_error_infos s1 e @ expected_infos ϕok
+                    
+    | result.TypedWrong T ->
+        assert T.IsSubclassOf typeof<static_error>
+        try
+            let _, infs1 = typecheck_expr_or_decl tchk sec n s1
+            test_failed "expected to be wrong" <| infs1 (false, false, false) @ ["error expected", txt T.Name]
+        with :? static_error as e ->
+            if (let t = e.GetType() in t = T || t.IsSubclassOf T) then
+                test_ok "justly rejected" <| static_error_infos s1 e
+            else reraise ()
 
 
 let score_infos scores =
@@ -300,10 +306,12 @@ let test_sections secs =
 
 module Tests =
 
-    let type_ok s = result.Ok (Some s, [])
-    let type_is s = result.Ok (Some s, [flag.Verbatim])
-    let ok = result.Ok (None, [])
-    let wrong< 'exn when 'exn :> static_error > = result.Wrong typeof<'exn>
+    let type_ok s = result.TypedOk (Some s, [])
+    let type_is s = result.TypedOk (Some s, [flag.Verbatim])
+    let type_eq s = result.TypeEq (s, true)
+    let type_neq s = result.TypeEq (s, false)
+    let ok = result.TypedOk (None, [])
+    let wrong< 'exn when 'exn :> static_error > = result.TypedWrong typeof<'exn>
     let wrong_type = wrong<type_error>
     let wrong_syntax = wrong<syntax_error>
 
@@ -316,6 +324,15 @@ module Tests =
     
     let all : section list =
      [
+      "Type Equality",
+      [
+        "forall 'a 'b. 'a -> 'b",                   type_eq "forall 'a 'b. 'a -> 'b"
+        "forall 'a 'b. 'a -> 'b",                   type_eq "forall 'a 'b. 'b -> 'a"
+        "forall 'a 'b. 'a -> 'b",                   type_eq "forall 'b 'a. 'a -> 'b"
+        "forall 'a 'b. 'a -> 'b",                   type_neq "forall 'a. 'a -> int"
+        "forall 'a 'b. 'a -> 'b",                   type_neq "forall 'a 'b. 'a -> 'c"
+      ]
+
       "Intrinsics",
       [
         "[]",                                       type_ok "list 'a"

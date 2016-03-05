@@ -652,7 +652,10 @@ let T_ForallK ((α, _), t) = T_Forall (α, t)
 let (|T_ForallK|_|) t =
     match t with
     | T_Forall (α, t) ->
-        let k = (t.search_var α).Value
+        let k = 
+            match t.search_var α with
+            | Some k -> k
+            | None   -> kind.fresh_var
         in Some ((α, k), t)
     | _ -> None
 
@@ -662,15 +665,22 @@ let T_ForallsK, (|T_ForallsK0|), (|T_ForallsK|_|) = make_foralls T_ForallK (|T_F
 // pretty printer for types, flex types and schemes
 //
     
-let inline wrap_pretty_with_kind R' t =
+let pretty_kinded_wrapper R' t =
     let R t =
-        let k = (^t : (member kind : kind) t)
+        let k = (t :> kinded).kind
         in
             match k with
             | K_Arrows1 ks when List.forall ((=) K_Star) ks -> R' t
             | _                                             -> sprintf "(%s :: %O)" (R' t) k
     in
         R t
+
+let pretty_forall pretty_item forall (qs, t) =
+    use A = var.add_quantifieds (Seq.map fst qs)
+    let t = sprintf "%O" t
+    let ts = qs |> Seq.sortBy (fst >> sprintf "%O") |> mappen_strings pretty_item Config.Printing.forall_prefix_sep
+    in
+        sprintf "%s %s. %s" forall ts t
 
 type ty with
     override this.ToString () = this.pretty    
@@ -705,22 +715,9 @@ type ty with
             | T_App (App s)          -> s
             | T_Closure (x, _, τ, _) -> sprintf "<[%O]>" (Te_Lambda ((x, None), τ))
 
-            | T_ForallsK (αks, t) ->
-                #if ENABLE_PREFIX_SORTING
-                let αks = List.sortBy (fun (α, _) -> sprintf "%O" α) αks
-                use A = var.add_quantifieds (List.map fst αks)
-                let t = t.pretty
-                let ts = mappen_strings (fun (α, k) -> sprintf "%O" (T_Var (α, k))) Config.Printing.forall_prefix_sep αks
-                #else
-                use A = var.add_quantifieds (List.map fst αks)
-                let ts = mappen_strings (fun (α, k) -> sprintf "%O" (T_Var (α, k))) Config.Printing.forall_prefix_sep αks
-                let t = t.pretty
-                #endif
-                in
-                    sprintf "%s %s. %s" Config.Printing.dynamic.forall ts t
-
+            | T_ForallsK arg  -> pretty_forall (sprintf "%O" << T_Var) Config.Printing.dynamic.forall arg
             | T_Forall _ as t -> unexpected_case __SOURCE_FILE__ __LINE__ t
-        and R = wrap_pretty_with_kind R'
+        and R = pretty_kinded_wrapper R'
         in
             R this
 
@@ -775,27 +772,14 @@ type fxty with
     override this.ToString () = this.pretty    
     member this.pretty =
         let rec R' = function
-            | Fx_Bottom _   -> Config.Printing.dynamic.bottom
-            | Fx_F_Ty t     -> t.pretty
-            | Fx_Foralls (qs, t) ->
-                #if ENABLE_PREFIX_SORTING
-                let qs = List.sortBy (fun (α, _) -> sprintf "%O" α) qs
-                use A = var.add_quantifieds (Seq.map fst qs)
-                let t = t.pretty
-                let ts = mappen_strings prefix.pretty_item Config.Printing.forall_prefix_sep qs
-                #else
-                use A = var.add_quantifieds (Seq.map fst qs)
-                let ts = mappen_strings prefix.pretty_item Config.Printing.forall_prefix_sep qs
-                let t = t.pretty
-                #endif
-                in
-                    sprintf "%s %s. %s" Config.Printing.dynamic.flex_forall ts t
-
+            | Fx_Bottom _      -> Config.Printing.dynamic.bottom
+            | Fx_F_Ty t        -> t.pretty
+            | Fx_Foralls arg   -> pretty_forall prefix.pretty_item Config.Printing.dynamic.flex_forall arg
             | Fx_Forall _ as ϕ -> unexpected_case __SOURCE_FILE__ __LINE__ ϕ
                     
         and R = function
             | Fx_F_Ty _ as ϕ -> R' ϕ    // prevent double-wrapping an F-type
-            | ϕ              -> wrap_pretty_with_kind R' ϕ
+            | ϕ              -> pretty_kinded_wrapper R' ϕ
         in
             R this
 

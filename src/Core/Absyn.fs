@@ -685,7 +685,7 @@ with
 
 type [< NoComparison; NoEquality >] upatt =
     | P_Var of id
-    | P_Cons of id  // internal use only
+    | P_Cons of id
     | P_PolyCons of id
     | P_App of (patt * patt)
     | P_Lit of lit
@@ -698,14 +698,15 @@ type [< NoComparison; NoEquality >] upatt =
 
 and [< NoComparison; NoEquality >] patt = node<upatt, unit>
 
-//module Old =
-//    let P_Apps ps = (Apps (fun (p1, p2) -> Lo p1.loc <| P_App (p1, p2)) ps).value
-//    let (|P_Apps|_|) = (|Apps|_|) (function P_App (ULo p1, ULo p2) -> Some (p1, p2) | _ -> None)
-
 let P_Apps, (|P_Apps1|), (|P_Apps|_|) = nodify make_apps_by P_App (function P_App (τ1, τ2) -> Some (τ1, τ2) | _ -> None)
 
 let P_Tuple = Row_Tuple (fun (bs, _) -> P_Record bs)
 let (|P_Tuple|_|) = (|Row_Tuple|_|) (function P_Record bs -> Some (bs, None) | _ -> None)
+
+let P_ConsApps (x, ps) = P_Apps (ULo (P_Cons x) :: ps)
+let (|P_ConsApps1|_|) = function
+    | P_Apps1 (ULo (P_Cons x) :: ts) -> Some (x, ts)
+    | _ -> None
 
 type upatt with
     override this.ToString () = this.pretty

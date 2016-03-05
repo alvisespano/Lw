@@ -228,14 +228,13 @@ type type_inference_builder (loc) =
             let! t = M.updated t
             let! θ = M.get_θ
             let! Γ = M.get_Γ
-            let! scoped = M.get_scoped_vars
+            let! αs = M.get_ungeneralizable_vars
             #if DEBUG_HML
             let p set = sprintf "{ %s }" <| flatten_stringables ", " set
-            L.debug High "[yield-Q] S.dom = %O\n          Q.dom = %O\n          fv_gamma = %O\n          scoped = %O\n          t = %O" (p θ.dom) (p Q.dom) (p (fv_Γ Γ)) (p scoped) t
+            L.debug High "[yield-Q] S.dom = %O\n          Q.dom = %O\n          fv_gamma = %O\n          ungen = %O\n          t = %O" (p θ.dom) (p Q.dom) (p (fv_Γ Γ)) (p αs) t
             #endif
             assert (Set.intersect Q.dom θ.dom).IsEmpty      // prefix and subst must involve different variables
             assert Q.dom.IsSubsetOf t.fv                    // generalizable vars must be present in t
-            let! αs = M.get_ungeneralizable_vars
             assert (Set.intersect Q.dom αs).IsEmpty         // generalizable vars must not be among ungeneralizable ones
             return Fx_ForallsQ (Q, Fx_F_Ty t)
         }
