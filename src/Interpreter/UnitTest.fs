@@ -24,10 +24,10 @@ open Lw.Core.Typing.StateMonad
 open PPrint
 
 type logger with
-    member this.test pri fmt = this.custom Config.Log.test_color "TEST" Min pri fmt
-    member this.test_ok fmt = this.custom Config.Log.test_ok_color "OK" Min Low fmt
-    member this.test_weak_ok fmt = this.custom Config.Log.test_weak_ok_color "WEAK" Min Low fmt
-    member this.test_failed fmt = this.custom_error Config.Log.test_failed_color "FAIL" fmt
+    member this.test pri fmt = this.log_leveled "TEST" Config.Log.test_color Min pri fmt
+    member this.test_ok fmt = this.log_unleveled "OK" Config.Log.test_ok_color fmt
+    member this.test_weak_ok fmt = this.log_unleveled "WEAK" Config.Log.test_weak_ok_color fmt
+    member this.test_failed fmt = this.log_unleveled "FAIL" Config.Log.test_failed_color fmt
 
 [< RequireQualifiedAccess >]
 type flag =
@@ -315,12 +315,13 @@ module Tests =
     let wrong_type = wrong<type_error>
     let wrong_syntax = wrong<syntax_error>
 
-    let test_in_fsharp () =
-        let rec map f = function
-            | [] -> []
-            | x :: xs -> f x :: map f xs
-        and map2 f (l1, l2) = map f l1, map f l2
-        ()
+    module InFSharp =
+        let recs1 () =
+            let rec map f = function
+                | [] -> []
+                | x :: xs -> f x :: map f xs
+            and map2 f (l1, l2) = map f l1, map f l2
+            ()
     
     let all : section list =
      [
@@ -348,7 +349,6 @@ module Tests =
         "if 1 then () else ()",                     wrong_type
       ]
 
-      // TODO: make a section for testing the implementation of ty.Equals and fxty.Equals
       "Type Annotations",
       [
         "fun f x y -> ((f : 'a -> 'a) x, y) : _ * int",         type_ok "('a -> 'a) -> 'a -> int -> 'a * int"

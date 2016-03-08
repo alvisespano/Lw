@@ -68,20 +68,20 @@ type TimeSpan with
 type logger () =
     inherit Log.console_logger (Config.Log.cfg)
 
-    member this.not_implemented fmt = this.custom_error Config.Log.not_implemented_color "NOT IMPLEMENTED" fmt
-    member this.uni pri fmt = this.custom_debug Config.Log.uni_color "UNI" pri fmt
-    member this.resolve pri fmt = this.custom_debug Config.Log.resolve_color "RESOLVE" pri fmt
+    member this.not_implemented fmt = this.log_unleveled "NOT IMPLEMENTED" Config.Log.not_implemented_color fmt
+    member this.uni pri fmt = this.log_leveled "UNI" Config.Log.uni_color Min pri fmt
+    member this.resolve pri fmt = this.log_leveled "RESOLVE" Config.Log.resolve_color Min pri fmt
 
     member this.nhint n pri fmt =
-        this.cfg.hint_header <- Some (sprintf Config.Log.hint_header_fmt n)
+        this.cfg.hint_header <- sprintf Config.Log.hint_header_fmt n
         this.hint pri fmt
 
     member this.nwarn n pri fmt =
-        this.cfg.warn_header <- Some (sprintf Config.Log.warn_header_fmt n)
+        this.cfg.warn_header <- sprintf Config.Log.warn_header_fmt n
         this.warn pri fmt
     
     member this.nerror n fmt =
-        this.custom_error Config.Log.error_color (sprintf Config.Log.error_header_fmt n) fmt
+        this.log_unleveled (sprintf Config.Log.error_header_fmt n) Config.Log.error_color fmt
 
 
 let L = new logger ()

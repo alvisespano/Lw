@@ -37,13 +37,13 @@ let handle_exn (e : exn) =
 
 let print_env_diffs (Γ1 : jenv) Γ2 (Δ1 : Eval.env) Δ2 =
     for (_, { jenv_value.scheme = σ }), (x, v) in Seq.zip (Γ2 - Γ1) (Δ2 - Δ1) do
-        L.print_line (Config.Interactive.pretty_prompt_decl x σ v)
+        L.log_line (Config.Interactive.pretty_prompt_decl x σ v)
 
 let print_decl_bindings (Γ : jenv) (Δ : Eval.env) d =
     for x in Typing.Ops.vars_in_decl d do
         let σ = Γ.lookup (Jk_Var x)
         let v = Δ.lookup x
-        L.print_line (Config.Interactive.pretty_prompt_decl x σ v)
+        L.log_line (Config.Interactive.pretty_prompt_decl x σ v)
 
 let read_and_interpret_loop (envs : Intrinsic.envs) =
     print_env_diffs Intrinsic.envs.envs0.Γ envs.Γ Intrinsic.envs.envs0.Δ envs.Δ
@@ -90,7 +90,7 @@ let read_and_interpret_loop (envs : Intrinsic.envs) =
 
     while true do
         try
-            L.locked_apply <| fun () ->
+            lock L <| fun () ->
                 printf "\n%s " Config.Interactive.prompt
                 stdout.Flush ()
             let W f e = watchdog (fun c -> cputime (f { Eval.context.cancellation_token = c } !rΔ) e)
@@ -99,7 +99,7 @@ let read_and_interpret_loop (envs : Intrinsic.envs) =
                 | A.Line_Expr e ->
                     let t, tspan = cputime (unM Typing.Inference.W_expr) e
                     let v, vspan = W Eval.eval_expr e
-                    L.print_line (Config.Interactive.pretty_prompt_expr t v)
+                    L.log_line (Config.Interactive.pretty_prompt_expr t v)
                     tspan, vspan
 
                 | A.Line_Decl d ->
@@ -110,7 +110,7 @@ let read_and_interpret_loop (envs : Intrinsic.envs) =
                     print_decl_bindings Γ' Δ' d
                     tspan, vspan
             let s = sprintf "-- typing %s / eval %s --" tspan.pretty vspan.pretty
-            L.print_line (sprintf "%s%s" (spaces (Console.BufferWidth - s.Length)) s)
+            L.log_line (sprintf "%s%s" (spaces (Console.BufferWidth - s.Length)) s)
 
         with :? OperationCanceledException -> ()
            | e                             -> ignore <| handle_exn e
