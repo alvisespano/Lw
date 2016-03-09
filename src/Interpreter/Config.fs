@@ -64,6 +64,7 @@ module Log =
             l.msg_threshold <- High
             l.warn_threshold <- Min
             l.hint_threshold <- Min
+            l.show_header_only_when_changes <- true
 
         let set_thresholds_for_interpreter () =
             #if DEBUG

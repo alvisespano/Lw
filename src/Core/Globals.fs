@@ -69,8 +69,8 @@ type logger () =
     inherit Log.console_logger (Config.Log.cfg)
 
     member this.not_implemented fmt = this.log_unleveled "NOT IMPLEMENTED" Config.Log.not_implemented_color fmt
-    member this.uni pri fmt = this.log_leveled "UNI" Config.Log.uni_color Min pri fmt
-    member this.resolve pri fmt = this.log_leveled "RESOLVE" Config.Log.resolve_color Min pri fmt
+    member this.uni pri fmt = this.log_leveled "UNI" Config.Log.uni_color Config.Log.cfg.debug_threshold pri fmt
+    member this.resolve pri fmt = this.log_leveled "RESOLVE" Config.Log.resolve_color Config.Log.cfg.debug_threshold pri fmt
 
     member this.nhint n pri fmt =
         this.cfg.hint_header <- sprintf Config.Log.hint_header_fmt n
