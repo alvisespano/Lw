@@ -262,7 +262,7 @@ let test_entry (tchk : typechecker) sec n ((s1, res) : entry) =
                     | false, true, true -> test_weak_ok "flex types are different" (infs1 @ infs2)
                     | true, false, false
                     | false, true, false -> test_failed "type is ok but kind is not" (infs1 @ infs2)
-                    | _                  -> test_failed "expected to be ok" (infs1 @ infs2)
+                    | _                  -> test_failed "types expected to be equal" (infs1 @ infs2)
             with :? static_error as e ->
                 test_failed "unwanted static error" <| static_error_infos s1 e @ expected_infos ϕok
                     

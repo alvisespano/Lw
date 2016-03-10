@@ -24,33 +24,44 @@ type kind_error (msg, n, loc) =
 
 let flatten_and_trim_strings sep ss = flatten_strings sep (seq { for s : string in ss do let s = s.Trim () in if not <| String.IsNullOrWhiteSpace s then yield s })
 
-let inline prompt ctx prefixes x (σ : ^s) o =
+let inline prompt ctx prefixes x (t1 : ^t1) t2o =
     let top_level = (^a : (member top_level_decl : bool) ctx)
     let log = if top_level then L.msg High else L.msg Normal
     let prefixes = List.distinct <| if top_level then prefixes else Config.Printing.Prompt.nested_decl_prefix :: prefixes
-    let header = sprintf "%s %s" (flatten_and_trim_strings Config.Printing.Prompt.header_sep (prefixes @ [x])) (^s : (static member binding_separator : string) ())
+    let header = sprintf "%s %s" (flatten_and_trim_strings Config.Printing.Prompt.header_sep (prefixes @ [x])) (^t1 : (static member binding_separator : string) ())
     use N = var.reset_normalization
-    let σ = (^s : (member pretty : string) σ)
+    let t1 = (^t1 : (member pretty : string) t1)
     let reduction = 
-        match o with
-        | None -> ""
-        | Some (sep, x) ->
-            let s = sprintf "%s %O" sep x
+        match t2o with
+        | Some (sep, t2) ->
+            let t2 = sprintf "%O" t2
             in
-                if header.Length + 1 + σ.Length + 1 + s.Length >= Console.BufferWidth / 2 then sprintf "\n%s%s" (spaces (header.Length + 1)) s else s
-    log "%s %s %s" header σ reduction
+                if t1 = t2 then ""
+                else
+                    let s = sprintf "%s %s" sep t2
+                    in
+                        if header.Length + 1 + t1.Length + 1 + s.Length >= Console.BufferWidth / 2 then sprintf "\n%s%s" (spaces (header.Length + 1)) s
+                        else sprintf " %s" s
+        | _ -> ""
+    log "%s %s%s" header t1 reduction
         
 
-let private E' f n loc fmt = let N = var.reset_normalization in throw_formatted (fun msg -> N.Dispose (); f (msg, n, loc)) fmt
-let private E x = E' (fun args -> new type_error (args)) x
-let private Ek x = E' (fun args -> new kind_error (args)) x
+let private E f n loc fmt = let N = var.reset_normalization in throw_formatted (fun msg -> N.Dispose (); f (msg, n, loc)) fmt
+let private Et n loc fmt = E (fun args -> new type_error (args)) n loc fmt
+let private Ek n loc fmt = E (fun args -> new kind_error (args)) n loc fmt
    
-let private mismatch f n what1 what2 loc expected1 got1 expected2 got2 =
+let private mismatch E (n : int) (loc : location) what1 what2 expected1 got1 expected2 got2 =
     use N = var.reset_normalization
     let s = sprintf "%s was expected to have %s %O but got %s %O" what1 what2 expected1 what2 got1
     let s = s + if expected1 <> expected2 && got1 <> got2 then sprintf ", because %s %O is not compatible with %O" what2 expected2 got2 else ""
     in
-        f n loc ("%s" : StringFormat<_, _>) s
+        E n loc ("%s" : StringFormat<_, _>) s
+
+let private circularity E n loc what x1 x2 α x =
+    use N = var.reset_normalization
+    let s = sprintf "unification between %ss %O and %O failed because %s variable %O occurs in %s %O and unification would produce an infinite %s" what x1 x2 what α what x what
+    in
+        E n loc ("%s" : StringFormat<_, _>) s
 
 
 [< RequireQualifiedAccess >]
@@ -58,92 +69,93 @@ module Error =
 
     // kind errors
 
-    let kind_mismatch x = mismatch Ek 1 "type expression" "kind" x
+    let kind_mismatch loc expected1 got1 expected2 got2 =
+        mismatch Ek 1 loc "type expression" "kind" expected1 got1 expected2 got2
 
-    let kind_circularity loc (k1 : kind) (k2 : kind) α (k : kind) =
-        Ek 2 loc "unification between kinds %O and %O failed because kind variable %O occurs in kind %O" k1 k2 α k
+    let kind_circularity loc (k1 : kind) (k2 : kind) kα (k : kind) =
+        circularity Ek 2 loc "kind" k1 k2 kα k
 
     let unbound_type_symbol loc x =
         Ek 3 loc "type variable or constructor %s is undefined" x
 
     // type errors
     
-    let type_mismatch x =
-        mismatch E 4 "expression" "type" x
+    let type_mismatch loc expected1 got1 expected2 got2 =
+        mismatch Et 4 loc "expression" "type" expected1 got1 expected2 got2
 
     let row_tail_circularity loc ρ tθ =
-        E 5 loc "unification fails because row type variable type variable %O occurs in the domain of substituion %O" ρ tθ
+        Et 5 loc "unification fails because row type variable type variable %O occurs in the domain of substituion %O" ρ tθ
 
     let cannot_rewrite_row loc l r1 r2 =
-        E 6 loc "row type %O cannot be rewritten with label %s in order to match row type %O" r1 l r2
+        Et 6 loc "row type %O cannot be rewritten with label %s in order to match row type %O" r1 l r2
 
     let circularity loc (t1 : ty) (t2 : ty) tα (t : ty) =
-        E 7 loc "unification between types %O and %O failed because type variable %O occurs in type %O" t1 t2 tα t
+        circularity Et 7 loc "type" t1 t2 tα t
 
     let variables_already_bound_in_pattern loc xs p =
-        E 8 loc "variables %s are bound multiple times in pattern %O" (flatten_stringables ", " xs) p
+        Et 8 loc "variables %s are bound multiple times in pattern %O" (flatten_stringables ", " xs) p
         
     let value_not_resolved loc cs =
-        E 9 loc "expression will not evaluate to a ground value because some constraints are unresolved: %O" cs
+        Et 9 loc "expression will not evaluate to a ground value because some constraints are unresolved: %O" cs
 
     let duplicate_label loc l what =
-        E 10 loc "multiple occurrences of label %s in %s" l what
+        Et 10 loc "multiple occurrences of label %s in %s" l what
 
     let unbound_symbol loc x =
-        E 11 loc "variable identifier %s is undefined" x
+        Et 11 loc "variable identifier %s is undefined" x
 
     let pattern_in_letrec loc p =
-        E 12 loc "let-rec supports only simple identifier bindings, but a pattern was used: %O" p
+        Et 12 loc "let-rec supports only simple identifier bindings, but a pattern was used: %O" p
 
     let unbound_overloaded_symbol loc x =
-        E 13 loc "overload identifier %s is undefined" x
+        Et 13 loc "overload identifier %s is undefined" x
 
     let instance_not_valid loc x t pt =
-        E 14 loc "overloaded instance `%s : %O` does not respect principal type %O" x t pt
+        Et 14 loc "overloaded instance `%s : %O` does not respect principal type %O" x t pt
 
     let different_vars_in_sides_of_or_pattern loc xs =
-        E 15 loc "sides of or-pattern must match exactly the same variables: %s are missing" (flatten_stringables ", " xs)
+        Et 15 loc "sides of or-pattern must match exactly the same variables: %s are missing" (flatten_stringables ", " xs)
     
     let value_restriction_non_arrow_in_letrec loc t =
-        E 16 loc "value restriction: values bound by let-rec must be arrow types, but got %O" t
+        Et 16 loc "value restriction: values bound by let-rec must be arrow types, but got %O" t
 
     let type_patterns_not_exhaustive loc t =
-        E 17 loc "type patterns did not match input type: %O" t
+        Et 17 loc "type patterns did not match input type: %O" t
 
     let same_vars_in_sides_of_or_pattern loc xs =
-        E 18 loc "sides of or-pattern must match different variables: %s are in common" (flatten_stringables ", " xs)
+        Et 18 loc "sides of or-pattern must match different variables: %s are in common" (flatten_stringables ", " xs)
 
     let data_constructor_codomain_invalid loc x c t =
-        E 19 loc "data constructor %s does not construct datatype %O because its codomain has type %O" x c t
+        Et 19 loc "data constructor %s does not construct datatype %O because its codomain has type %O" x c t
 
     let data_constructor_bound_to_wrong_symbol loc what x t =
-        E 20 loc "data constructor %s in pattern is already bound to %s : %O" x what t
+        Et 20 loc "data constructor %s in pattern is already bound to %s : %O" x what t
 
     let unbound_data_constructor loc x =
-        E 21 loc "data constructor %s is undefined" x
+        Et 21 loc "data constructor %s is undefined" x
 
     let closed_world_overload_constraint_not_resolved loc cx ct x t =
         // TODO: print a better message, just refer to the notion of closed-world overloading, without mentioning constraints
-        E 22 loc "when generalizing symbol `%O : %O` the constraint `%s : %O` has not been resolved and was referring to a closed-world overloaded symbol" x t cx ct
+        Et 22 loc "when generalizing symbol `%O : %O` the constraint `%s : %O` has not been resolved and was referring to a closed-world overloaded symbol" x t cx ct
 
     let inferred_lambda_parameter_is_not_monomorphic loc x t =
-        E 23 loc "function parameter is used polymorphically without an explicit annotation: %s : %O" x t
+        Et 23 loc "function parameter is used polymorphically without an explicit annotation: %s : %O" x t
 
     let skolemized_type_variable_escaped loc tsk =
-        E 24 loc "skolem type variable %O escaped" tsk
+        Et 24 loc "skolem type variable %O escaped" tsk
 
     let inferred_rec_definition_is_not_monomorphic loc x t =
-        E 25 loc "recursive definition is used polymorphically without an explicit annotation: %s : %O" x t
+        Et 25 loc "recursive definition is used polymorphically without an explicit annotation: %s : %O" x t
 
     let invalid_pattern_application loc p =
-        E 26 loc "pattern application must have a data constructor as left-most term, but here is: " p
+        Et 26 loc "pattern application must have a data constructor as left-most term, but here is: " p
         
 
 [< RequireQualifiedAccess >]
 module Warn =
-    let private W n loc pri fmt =
-        if Set.contains n Config.Report.disabled_warnings then null_L.warn Unmaskerable fmt
-        else L.nwarn n pri ("%O: " %+%% fmt) loc
+    let private W n loc pri (fmt : StringFormat<'a, _>) =
+        if Set.contains n Config.Report.disabled_warnings then null_L.warn Min fmt
+        else L.nwarn n pri (StringFormat<location -> 'a, _> ("%O: " + fmt.Value)) loc
 
     let expected_unit_statement loc t =
         W 1 loc High "expected expression of type %O when used as statement, but got type %O" T_Unit t
@@ -194,9 +206,9 @@ module Warn =
 
 [< RequireQualifiedAccess >]
 module Hint =
-    let private H n loc pri fmt =
+    let private H n loc pri (fmt : StringFormat<'a, _>) =
         if Set.contains n Config.Report.disabled_hints then null_L.hint Unmaskerable fmt
-        else L.nhint n pri ("%O: " %+%% fmt) loc
+        else L.nhint n pri (StringFormat<location -> 'a, _> ("%O: " + fmt.Value)) loc
 
     let unsolvable_constraint loc x t cx ct αs = 
         H 1 loc High "constraint `%s : %O` is unsolvable because type variables %s do not appear in %O : %O. This prevents automatic resolution to determine instances, therefore \

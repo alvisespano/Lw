@@ -69,10 +69,11 @@ let interpret (envs : Intrinsic.envs) filename =
 
 let handle_exn = Interactive.handle_exn
 
+
 [<EntryPoint>]
 let main _ =
     let code =      
-        try
+        try            
             Lw.Interpreter.Args.parse ()
             #if RELEASE
             #else

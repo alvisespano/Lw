@@ -21,7 +21,7 @@ open Lw.Core.Absyn
 // types, schemes, constraints, environments, etc.
 //
 
-type [< NoComparison; NoEquality >] kscheme = { forall : Set<var>; kind : kind }
+type [< NoComparison; StructuralEquality >] kscheme = { forall : Set<var>; kind : kind }
 with
     static member binding_separator = "::"
 
@@ -111,12 +111,19 @@ with
         member x.is_equivalent y =
             let M = new TyEq.state_builder<ty> ()
             let (&&&) = M.binop_and
+            let (|T_Foralls|_|) = (|Foralls|_|) (function T_Forall (α, t) -> Some (α, t) | _ -> None)
             M {   
                 match x, y with
                 | T_Cons (x, _), T_Cons (y, _)          -> return x = y
                 | T_Var (α, _), T_Var (β, _)            -> return! M.is_var_equivalent α β
                 | T_App (t1, t2), T_App (t1', t2')      -> return! M.is_equivalent t1 t1' &&& M.is_equivalent t2 t2'
-                | T_Forall (α, t1), T_Forall (β, t2)    -> return! M.is_var_equivalent α β &&& M.is_equivalent t1 t2
+//                | T_Forall (α, t1), T_Forall (β, t2)    -> return! M.is_var_equivalent α β &&& M.is_equivalent t1 t2
+                | T_Foralls (αs, t1), T_Foralls (βs, t2) when αs.Length = βs.Length ->
+                    let! b = M.is_equivalent t1 t2
+                    let rec R α βs =
+                        List.fold (fun b (α, βs) -> if List.contais α βs then 
+                        
+                    return! M.is_var_equivalent α β &&& 
                 | T_HTuple ts, T_HTuple ts'             -> return! M.are_equivalent ts ts'
                 #if DEBUG
                 | T_Closure _, _ | _, T_Closure _       -> L.unexpected_error "comparing type closures: %O = %O" x y
@@ -267,55 +274,14 @@ module constraints =
 
 
 
-// GADTs definitions
-//
-
-//type uvar = Uv of var
-//with
-//    override this.ToString () = this.pretty
-//
-//    member this.pretty =
-//        match this with
-//            | Uv va -> va.pretty
-//
-//type [< NoComparison; NoEquality >] type_constraints = 
-//    | C_Empty
-//    | C_Eq of ty * ty
-//    | C_And of type_constraints * type_constraints
-//with
-//    override this.ToString () = this.pretty
-//
-//    member this.pretty =
-//        match this with
-//            | C_Empty        -> ""
-//            | C_Eq (t1, t2)  -> sprintf "%O ~ %O" t1 t2
-//            | C_And (c1, c2) -> sprintf "%O & %O" c1 c2
-//
-//    member this.is_empty = match this with C_Empty -> true | _ -> false
-//
-//type [< NoComparison; NoEquality >] type_impl_constraints =
-//    | Ic_Constraint of type_constraints
-//    | Ic_Impl of Set<var> * Set<uvar> * type_constraints * type_impl_constraints
-//    | Ic_And of type_impl_constraints * type_impl_constraints
-//with
-//    override this.ToString () = this.pretty
-//
-//    member this.pretty =
-//        match this with
-//            | Ic_Constraint c           -> c.pretty
-//            | Ic_Impl (αs, bs, c, ic)   -> sprintf "[%s] forall %O. %O => %O" (flatten_stringables " " αs) (flatten_stringables " " bs) c ic
-//            | Ic_And (ic1, ic2)         -> sprintf "%O & %O" ic1 ic2
-//
-
-
 // schemes and predicates
 //
     
-type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] scheme =
+type [< NoComparison; StructuralEquality; DebuggerDisplay("{ToString()}") >] scheme =
     {
 //        type_constraints : type_constraints
         constraints      : constraints
-        fxty               : fxty
+        fxty             : fxty
     }
 
 type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] prefix =
@@ -474,21 +440,6 @@ let (|T_NamedVar|_|) = function
     | T_Var (Va (_, Some _) as α, k) -> Some (α, k)
     | _ -> None
 
-//let T_Apps = Apps T_App
-//let (|T_Apps|_|) = (|Apps|_|) (function T_App (t1, t2) -> Some (t1, t2) | _ -> None)
-//let T_Arrow_Cons = T_Cons (N.Type.arrow, K_Arrows [K_Star; K_Star; K_Star])
-//let (|T_Arrow_Cons|_|) = function
-//    | T_Cons (s, K_Arrows [K_Star; K_Star; K_Star]) when s = N.Type.arrow -> Some ()
-//    | _ -> None
-//
-//let T_Arrow (t1, t2) = T_Apps [T_Arrow_Cons; t1; t2]
-//let (|T_Arrow|_|) = function
-//    | T_Apps [T_Arrow_Cons; t1; t2] -> Some (t1, t2)
-//    | _ -> None
-//
-//let T_Arrows = Arrows T_Arrow
-//let (|T_Arrows|_|) = (|Arrows|_|) (|T_Arrow|_|)
-
 let T_Apps, (|T_Apps1|), (|T_Apps|_|) = make_apps (fun (τ1, τ2) -> T_App (τ1, τ2)) (function T_App (τ1, τ2) -> Some (τ1, τ2) | _ -> None)
 let T_Arrow, (|T_Arrow|_|) = make_arrow_by_apps (T_Cons (N.Type.arrow, K_Arrows [K_Star; K_Star; K_Star])) T_Apps (function T_Cons (x, _) when x = N.Type.arrow -> Some () | _ -> None) (|T_Apps|_|)
 let T_Arrows, (|T_Arrows1|), (|T_Arrows|_|) = make_arrows T_Arrow (|T_Arrow|_|)
@@ -547,7 +498,7 @@ let T_Closed_Variant xts = T_Variant (xts, None)
 // substitution types
 //
 
-type [< NoComparison; NoEquality >] subst<'t> (env : Env.t<var, 't>) =
+type [< NoComparison >] subst< [<EqualityConditionalOn>] 't> (env : Env.t<var, 't>) =
     interface IEnumerable<var * 't> with
         member __.GetEnumerator () = (env :> IEnumerable<_>).GetEnumerator ()
 
@@ -587,7 +538,7 @@ type [< NoComparison; NoEquality >] subst<'t> (env : Env.t<var, 't>) =
 type ksubst = subst<kind>
 type tsubst = subst<ty>
 
-type [< NoComparison; NoEquality >] tksubst = { t : tsubst; k : ksubst }
+type [< NoComparison; StructuralEquality >] tksubst = { t : tsubst; k : ksubst }
 with
     static member op_Implicit tθ = { t = tθ; k = ksubst.empty }
     static member op_Implicit kθ = { t = tsubst.empty; k = kθ }
@@ -678,7 +629,7 @@ let pretty_kinded_wrapper R' t =
 let pretty_forall pretty_item forall (qs, t) =
     use A = var.add_quantifieds (Seq.map fst qs)
     let t = sprintf "%O" t
-    let ts = qs |> Seq.sortBy (fst >> sprintf "%O") |> mappen_strings pretty_item Config.Printing.forall_prefix_sep
+    let ts = qs (*|> Seq.sortBy (fst >> sprintf "%O")*) |> mappen_strings pretty_item Config.Printing.forall_prefix_sep
     in
         sprintf "%s %s. %s" forall ts t
 

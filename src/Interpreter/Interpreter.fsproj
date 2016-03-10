@@ -75,27 +75,6 @@
     <OutputPath>bin\UnitTest\</OutputPath>
     <StartWorkingDirectory>..\..</StartWorkingDirectory>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Test Features|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <OutputPath>bin\Test\</OutputPath>
-    <WarningLevel>5</WarningLevel>
-    <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT;TEST_FEATURES</DefineConstants>
-    <Optimize>true</Optimize>
-    <Tailcalls>true</Tailcalls>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Test Performance|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <Tailcalls>true</Tailcalls>
-    <DefineConstants>WAIT_FOR_KEY_AT_EXIT;TEST_PERFORMANCE</DefineConstants>
-    <WarningLevel>5</WarningLevel>
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DocumentationFile />
-    <Prefer32Bit>false</Prefer32Bit>
-    <StartArguments>test\misc.lw</StartArguments>
-    <StartWorkingDirectory>..\..</StartWorkingDirectory>
-    <OutputPath>bin\Profiling\</OutputPath>
-  </PropertyGroup>
   <Choose>
     <When Condition="'$(VisualStudioVersion)' == '11.0'">
       <PropertyGroup Condition="Exists('$(MSBuildExtensionsPath32)\..\Microsoft SDKs\F#\3.0\Framework\v4.0\Microsoft.FSharp.Targets')">
@@ -129,11 +108,11 @@
     <None Include="test\tyvars.lw" />
   </ItemGroup>
   <ItemGroup>
-      <!--Reference Include="FSharp.Core">
+    <!--Reference Include="FSharp.Core">
       <HintPath>..\packages\FSharp.Core.3.1.2.5\lib\net40\FSharp.Core.dll</HintPath>
       <Private>True</Private>
     </Reference-->
-    <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" />
+    <Reference Include="FSharp.Core, Version=4.4.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" />
     <Reference Include="FsLexYacc.Runtime">
       <HintPath>..\packages\FsLexYacc.Runtime.6.1.0\lib\net40\FsLexYacc.Runtime.dll</HintPath>
       <Private>True</Private>

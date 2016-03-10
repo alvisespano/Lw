@@ -22,7 +22,7 @@ open System.Diagnostics
 // unification
 //
 
-exception Mismatch of ty * ty
+//exception Mismatch of ty * ty
 
 let rec rewrite_row loc t1 t2 r0 l =
     let R = rewrite_row loc t1 t2
@@ -131,10 +131,10 @@ module internal Mgu =
             | T_ForallsK0 (αks, t1), FxU0_ForallsQ (Mapped fxty.instantiate_unquantified (Q', t2)) ->
                 assert Q0.is_disjoint Q'
                 let skcs, t1' = skolemize_ty αks t1
-                let Q1, θ1 = mgu_F ctx (Q0 + Q') t1' t2
+                let Q1, θ1 = mgu ctx (Q0 + Q') t1' t2
                 let Q2, Q3 = Q1.split Q0.dom
                 #if DISABLE_HML_FIXES
-                let θ2 = { θ1 with t = θ1.t.remove Q3.dom } 
+                let θ2 = { θ1 with t = θ1.t.remove Q3.dom }
                 let r = Q2, θ2
                 #else
                 let r = Q1, { θ1 with t = θ1.t.remove (Q3.dom + Q'.dom) }   // HACK: Q'.dom contains variables created by the intantiation, and therefore must be removed
@@ -164,7 +164,7 @@ module internal Mgu =
 
             | FxU0_ForallsQ  (Mapped fxty.instantiate_unquantified (Q1, t1)), FxU0_ForallsQ (Mapped fxty.instantiate_unquantified (Q2, t2)) ->
                 assert (let p (a : prefix) b = a.is_disjoint b in p Q Q1 && p Q1 Q2 && p Q Q2)  // instantiating ϕ1 and ϕ2 makes this assert always false
-                let Q3, θ3 = mgu_F ctx (Q + Q1 + Q2) t1 t2
+                let Q3, θ3 = mgu ctx (Q + Q1 + Q2) t1 t2
                 let Q4, Q5 = Q3.split (Q.dom + (fv_Γ (subst_jenv θ3 ctx.Γ)))    // HACK: abstract this code by using get_ungeneralizable_vars
                 in
                     Q4, θ3, FxU_ForallsQ (Q5, S θ3 t1)
@@ -175,7 +175,7 @@ module internal Mgu =
 
 
         // TODOL: rewrite the whole unification with monads?
-        and mgu_F (ctx : uni_context) Q0 t1_ t2_ : prefix * tksubst =
+        and mgu (ctx : uni_context) Q0 t1_ t2_ : prefix * tksubst =
             let loc = ctx.loc
             let rec R (Q0 : prefix) (t1 : ty) (t2 : ty) =
               #if DEBUG_UNI && DEBUG_UNI_DEEP
@@ -242,26 +242,24 @@ module internal Mgu =
                     in
                         Q2, θ2 ** θ1
 
-                | t1, t2 -> raise (Mismatch (t1, t2))
+                | t1, t2 -> Report.Error.type_mismatch loc t1_ t2_ t1 t2
               #if DEBUG_UNI && DEBUG_UNI_DEEP
               L.uni Low "[mgu=] %O == %O\n       %O\n       Q' = %O" t1 t2 θ Q
               r
               #endif
             in
-                try
-                    #if DEBUG_UNI && !DEBUG_UNI_DEEP
-                    L.uni Low "[mgu] %O == %O\n      Q = %O" t1_ t2_ Q0
-                    #endif
-                    let Q, θ as r = R Q0 t1_ t2_
-                    assert (Set.intersect Q.dom θ.dom).IsEmpty
-                    #if DEBUG_UNI && !DEBUG_UNI_DEEP
-                    L.uni Low "[mgu=] %O == %O\n       %O\n       Q' = %O" t1_ t2_ θ Q
-                    #endif                    
-                    r
-                with Mismatch (t1, t2) -> Report.Error.type_mismatch loc t1_ t2_ t1 t2
+                #if DEBUG_UNI && !DEBUG_UNI_DEEP
+                L.uni Low "[mgu] %O == %O\n      Q = %O" t1_ t2_ Q0
+                #endif
+                let Q, θ as r = R Q0 t1_ t2_
+                assert (Set.intersect Q.dom θ.dom).IsEmpty;
+                #if DEBUG_UNI && !DEBUG_UNI_DEEP
+                L.uni Low "[mgu=] %O == %O\n       %O\n       Q' = %O" t1_ t2_ θ Q
+                #endif                    
+                r
 
        
-let mgu = Mgu.Pure.mgu_F
+let mgu = Mgu.Pure.mgu
 let subsume = Mgu.Pure.subsume
 let mgu_fx = Mgu.Pure.mgu_fx
 

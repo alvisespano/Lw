@@ -5,8 +5,6 @@
 
 namespace Test 
 
-
-
 let rec map f = function
     | [] -> []
     | x :: xs -> f x :: map2 f xs

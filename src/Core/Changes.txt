@@ -1,4 +1,17 @@
 ﻿
+10/3/2016:
+* REFACT: Report slightly revamped
+* FIX: Fastprintf discovored being bugged: whenever the result of a printf (or similar function) is unified with a tuple type, Fastprintf implementation crashes. This
+       implies that any formatted use of raise would crash, because the result type of any raise is a type variable that unifies with anything formatted raises using
+       kprintf: after 3 days of debug, I finally came out with a workaround. Anyway in the end Fastprintf does not perform better than F# stdlib one, so it's not worth using
+* UP: Log polished and optimized through a reflection trick: lines that would be masked out due to threshold are now not processed at all
+
+
+7/3/2016:
+* UP: Fastprintf third-part library added to dependencies and in use
+* REFACT: Log refactored heavily and some stuff in FSharp.Common.Prelude too
+
+
 5/3/2016:
 * UP: let rec..and ported to HML and tested briefly. Behaviour is like lambda, i.e. polymorphic uses of rec functions need to be annotated like a lambda parameter
 * FIX: pattern applications not involving a data constructor as left-most term are rejected
