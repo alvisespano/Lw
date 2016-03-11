@@ -46,13 +46,19 @@ module TyEq =
 
         member M.is_var_equivalent (α : var) (β : var) =
             M {
-                if α = β then return true
-                else
-                    let! env = M.get_state
-                    match env.search α with
-                    | Some γ -> return β = γ
-                    | None   -> do! M.lift_state <| fun env -> env.bind α β
-                                return true
+                let! env = M.get_state
+                match env.search α with
+                | Some α' ->
+                    #if DEBUG_TYPE_EQUALITY
+                    L.debug Unmaskerable "%O |-> %O = %O: %b" α α' β (α' = β)
+                    #endif
+                    return α' = β
+                | None ->
+                    do! M.lift_state <| fun env -> env.bind α β
+                    #if DEBUG_TYPE_EQUALITY
+                    L.debug Unmaskerable "%O |-> %O" α β
+                    #endif
+                    return true
             }
 
         member M.is_equivalent (x : 't) y =
@@ -117,13 +123,35 @@ with
                 | T_Cons (x, _), T_Cons (y, _)          -> return x = y
                 | T_Var (α, _), T_Var (β, _)            -> return! M.is_var_equivalent α β
                 | T_App (t1, t2), T_App (t1', t2')      -> return! M.is_equivalent t1 t1' &&& M.is_equivalent t2 t2'
-//                | T_Forall (α, t1), T_Forall (β, t2)    -> return! M.is_var_equivalent α β &&& M.is_equivalent t1 t2
+
                 | T_Foralls (αs, t1), T_Foralls (βs, t2) when αs.Length = βs.Length ->
-                    let! b = M.is_equivalent t1 t2
-                    let rec R α βs =
-                        List.fold (fun b (α, βs) -> if List.contais α βs then 
-                        
-                    return! M.is_var_equivalent α β &&& 
+                    let contains α βs = M {
+                        let! o = M.List.tryFind (fun β -> M { return! M.is_var_equivalent α β }) βs
+                        let! r, βs' = M {
+                            match o with
+                            | Some β' ->
+                                let! βs' = M.List.filter (fun β -> M { return β <> β' }) βs
+                                return true, βs'
+                            | None ->
+                                return false, βs
+                        }
+                        #if DEBUG_TYPE_EQUALITY
+                        L.debug Unmaskerable "%O contained in %O: %b, %O" α βs r βs'
+                        #endif
+                        return r, βs'
+                    }
+                    let rec is_permutation αs βs = M {
+                        match αs with
+                        | [] ->
+                            return true
+
+                        | α :: αs ->
+                            let! a, βs' = contains α βs
+                            let! b = is_permutation αs βs'                                
+                            return a && b
+                    }
+                    return! M.is_equivalent t1 t2 &&& is_permutation αs βs
+
                 | T_HTuple ts, T_HTuple ts'             -> return! M.are_equivalent ts ts'
                 #if DEBUG
                 | T_Closure _, _ | _, T_Closure _       -> L.unexpected_error "comparing type closures: %O = %O" x y

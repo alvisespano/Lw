@@ -322,18 +322,22 @@ module Tests =
                 | x :: xs -> f x :: map f xs
             and map2 f (l1, l2) = map f l1, map f l2
             ()
-    
-    let all : section list =
-     [
+
+    let type_equality =
       "Type Equality",
       [
         "forall 'a 'b. 'a -> 'b",                   type_eq "forall 'a 'b. 'a -> 'b"
         "forall 'a 'b. 'a -> 'b",                   type_eq "forall 'a 'b. 'b -> 'a"
         "forall 'a 'b. 'a -> 'b",                   type_eq "forall 'b 'a. 'a -> 'b"
+        "forall 'a 'b. 'a -> 'b",                   type_eq "forall 'b 'a. 'b -> 'a"
+        "forall 'a 'b. 'a -> 'b -> 'b",             type_neq "forall 'a 'b. 'a -> 'a -> 'b"
+        "forall 'a 'b. 'a -> 'b -> 'b",             type_eq "forall 'b 'a. 'a -> 'b -> 'b"
+        "forall 'a 'b. 'a -> 'b -> 'b",             type_eq "forall 'b 'a. 'b -> 'a -> 'a"
         "forall 'a 'b. 'a -> 'b",                   type_neq "forall 'a. 'a -> int"
         "forall 'a 'b. 'a -> 'b",                   type_neq "forall 'a 'b. 'a -> 'c"
       ]
 
+    let intrinsics =
       "Intrinsics",
       [
         "[]",                                       type_ok "list 'a"
@@ -349,6 +353,7 @@ module Tests =
         "if 1 then () else ()",                     wrong_type
       ]
 
+    let type_annotations =
       "Type Annotations",
       [
         "fun f x y -> ((f : 'a -> 'a) x, y) : _ * int",         type_ok "('a -> 'a) -> 'a -> int -> 'a * int"
@@ -356,6 +361,7 @@ module Tests =
         "fun f (x : 'b) y -> ((f : _ -> 'a) x, y) : 'a * _",    type_ok "('b -> 'a) -> 'b -> 'c -> 'a * 'c"
       ]
 
+    let scoped_type_variables =
       "Scoped Type Variables",
       [
         "let i (x : 'bar) = x in i 1, i true, i",   type_is "int * bool * (forall 'bar. 'bar -> 'bar)"
@@ -365,6 +371,7 @@ module Tests =
                 i 1, i true",                       type_ok "int * bool"    // generalization of scoped vars is valid
       ]
 
+    let lists =
       "Lists",
       [
         "let rec map f = function
@@ -375,7 +382,8 @@ module Tests =
             | x :: xs -> fold f (f z x) xs",        type_ok "('b -> 'a -> 'b) -> 'b -> list 'a -> 'b"
       ]
 
-      "ML Type Inference",
+    let hindley_milner =
+      "Hindley-Milner",
       [
         "fun x -> x",                               type_ok "forall 'a. 'a -> 'a"
         "fun f x -> f x",                           type_ok "forall 'a 'b. ('a -> 'b) -> 'a -> 'b"
@@ -388,6 +396,7 @@ module Tests =
         "let single x = [x]",                       type_ok "forall 'a. 'a -> list 'a"
       ]
 
+    let hml =
       "HML",
       [
         "let i x = x in i 1, i true, i",            type_ok "int * bool * (forall 'a. 'a -> 'a)"
@@ -401,7 +410,18 @@ module Tests =
         "choose id",                                type_ok "forall ('a :> forall 'b. 'b -> 'b). 'a -> 'a"
       ]
 
-     ]
+
+    let all : section list =
+      [
+        type_equality
+        intrinsics
+        type_annotations
+        scoped_type_variables
+        lists
+        hindley_milner
+        hml
+      ]
+
     // impredicative application and higher rank arguments are fully supported    
     (*let HR = 
       [

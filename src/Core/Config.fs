@@ -23,8 +23,9 @@ open Printf
  * DEBUG_HML                // turn on log for functions involved into HML type inference
  * DEBUG_UNI                // turn on log in unification functions
  * DEBUG_UNI_DEEP           // log even recursive calls of unification functions
+ * DEBUG_TYPE_EQUALITY      // turn on log in type equalivalence algorithm
  *
- * DISABLE_VAR_NORM       // turn off variable normalization
+ * DISABLE_VAR_NORM         // turn off variable normalization
  * DISABLE_HML_FIXES        // disable little fixes done by me
  * ENABLE_HML_OPTS          // introduce a number of (hopefully not bugged) optimizations for HML inference
  * ENFORCE_NF_IN_UNI        // force types involved into unification to normal form

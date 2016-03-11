@@ -1,4 +1,10 @@
 ﻿
+11/3/2016:
+* REFACT: unit tests split into sections at code level, so sections can be disabled by commenting the relevant entry in the "all" list
+* TESTS: new unit tests for type equivalence
+* FIX: type equivalence fixed: all unit tests now succeed
+
+
 10/3/2016:
 * REFACT: Report slightly revamped
 * FIX: Fastprintf discovored being bugged: whenever the result of a printf (or similar function) is unified with a tuple type, Fastprintf implementation crashes. This
