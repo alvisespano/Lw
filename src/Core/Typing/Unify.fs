@@ -215,7 +215,7 @@ module internal Mgu =
                     let ϕ1 = Q0.lookup α1
                     let ϕ2 = Q0.lookup α2
                     // occurs check between one tyvar into the other's type bound and the other way round
-                    let check_wrt α t = if check_circularity_wrt α Q0 t then let S = S θ0 in Report.Error.circularity loc (S t1_) (S t2_) (T_Var (α, t.kind)) (S t2_)
+                    let check_wrt α t = if check_circularity_wrt α Q0 t then let S = S θ0 in Report.Error.type_circularity loc (S t1_) (S t2_) (T_Var (α, t.kind)) (S t2_)
                     check_wrt α1 ϕ2
                     check_wrt α2 ϕ1
                     let Q1, θ1, ϕ = let S = subst_fxty in mgu_fx ctx Q0 (S θ0 ϕ1) (S θ0 ϕ2)  // TODO: this θ0 subst should be applied also on the 2 types involved in the 2 updates below?
@@ -229,7 +229,7 @@ module internal Mgu =
                     let ϕ = Q0.lookup α
                     let θ0 = kmgu ctx k t.kind
                     // occurs check
-                    if check_circularity_wrt α Q0 (Fx_F_Ty t) then let S = S θ0 in Report.Error.circularity loc (S t1_) (S t2_) (S (T_Var (α, k))) (S t)
+                    if check_circularity_wrt α Q0 (Fx_F_Ty t) then let S = S θ0 in Report.Error.type_circularity loc (S t1_) (S t2_) (S (T_Var (α, k))) (S t)
                     let Q1, θ1 = subsume ctx Q0 (S θ0 t) (subst_fxty θ0 ϕ)
                     let Q2, θ2 = let S = S <| θ1 ** θ0 in Q1.update_with_subst (α, S t)
                     in

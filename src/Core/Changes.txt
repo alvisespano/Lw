@@ -1,4 +1,12 @@
 ﻿
+14/3/2016:
+* REFACT: static_error exception type now has code and syntax_error is a subtype
+* UP: Report numbering system revamped: different types of errors have been assigned a numeric range, e.g. type errors are in the range 200..299
+* UP: UnitTest module upgraded with better support of wrong tests: now specific error numbers can be detected
+* TESTS: new tests on hml and higher rank arguments
+* BUG: a subtle bug has been discovered: when typing "map poly ids"
+
+
 11/3/2016:
 * REFACT: unit tests split into sections at code level, so sections can be disabled by commenting the relevant entry in the "all" list
 * TESTS: new unit tests for type equivalence

@@ -27,7 +27,7 @@ let handle_exn (e : exn) =
 //        #endif
         code
     match e with
-    | :? static_numeric_error as e  -> L.nerror e.code "%s" e.Message; Config.Exit.error
+    | :? numeric_error as e         -> L.nerror e.code "%s" e.Message; Config.Exit.error
     | :? located_error              -> L.fatal_error "%s" e.Message; Config.Exit.error
     | :? NotImplementedException    -> L.not_implemented "%s" e.Message; r Config.Exit.not_implemented
     | Failure s                         

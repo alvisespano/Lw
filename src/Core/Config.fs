@@ -179,6 +179,7 @@ module Parsing =
     let detailed_error_context = false
 
 module Report = 
+    let syntax_error_code = 1
     let mutable disabled_warnings : int Set = Set.empty
     let mutable disabled_hints : int Set = Set.empty
 

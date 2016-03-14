@@ -31,15 +31,16 @@ type located_error (header, message, loc : location) =
 
     override this.Message = this.message_parts |> Seq.filter (function "" -> false | _ -> true) |> mappen_strings (sprintf "%O") ": " 
 
-
-type static_error (header, msg, loc) =
+type numeric_error (header, msg, code : int, loc) =
     inherit located_error (header, msg, loc)
+    member val code = code
 
-type runtime_error (header, message, loc) =
-    inherit located_error (header, message, loc)
+type static_error (header, msg, n, loc) =
+    inherit numeric_error (header, msg, n, loc)
+    new (msg, n, loc) = new static_error ("static error", msg, n, loc)
 
 type syntax_error (message, loc) =
-    inherit static_error ("syntax error", message, loc)
+    inherit static_error ("syntax error", message, Config.Report.syntax_error_code, loc)
 
     static member internal locate_from_lexbuf (lexbuf : Lexing.LexBuffer<_>) =
         new location (lexbuf.StartPos, lexbuf.EndPos, line_bias = 0, col_bias = 1)
@@ -47,10 +48,8 @@ type syntax_error (message, loc) =
     new (message, lexbuf : Lexing.LexBuffer<char>) =
         new syntax_error (message, syntax_error.locate_from_lexbuf lexbuf)
 
-type static_numeric_error (header, msg, n : int, loc) =
-    inherit static_error (header, msg, loc)
-    member val code = n
-
+type runtime_error (header, message, loc) =
+    inherit located_error (header, message, loc)
 
 
 

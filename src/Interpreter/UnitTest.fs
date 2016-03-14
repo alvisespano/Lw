@@ -36,7 +36,7 @@ type flag =
 [< RequireQualifiedAccess >]
 type [< NoComparison; NoEquality >] result =
     | TypedOk of string option * flag list
-    | TypedWrong of Type
+    | StaticError of Type * int option
     | TypeEq of string * bool
 
 [< RequireQualifiedAccess >]
@@ -138,7 +138,11 @@ let static_error_infos (input : string) (e : static_error) =
         in
             input.Substring (x, y - x)
     in
-        ["raised", txt (e.header.ToUpper ()); "at", fmt "%O" e.location; "term", txt term; "message", txt e.message_body]
+      [ "raised", txt (e.header.ToUpper ())
+        "code", fmt "%d" e.code
+        "at", fmt "%O" e.location
+        "term", txt term
+        "message", txt e.message_body ]
 
 
 // logging and pprint shorcuts
@@ -158,10 +162,6 @@ let testing pri doc = L.pp (L.test pri) doc
 
 // testers
 //
-
-type fxty with
-    member this.is_really_flex = this.maybe_ftype.IsNone
-
 
 let compare_test eq_ty eq_fxty eq_kind (ϕres : fxty) (ϕok : fxty) =
     let tb = eq_ty ϕok.ftype ϕres.ftype
@@ -207,28 +207,28 @@ let typecheck_expr_or_decl (tchk : typechecker) sec n input =
         | parsed.Decl d ->
             tchk.W_decl d
             match d.value with
-            | D_Bind [{ patt = ULo (P_Var x) }]
-            | D_Rec [{ par =x, _ }] ->
+            | D_Bind [{ patt = ULo (P_Var x) | ULo (P_Annot (ULo (P_Var x), _)) }]
+            | D_Rec [{ par = x, _ }] ->
                 tchk.lookup_var_Γ x
 
             | _ -> decl_dummy_ty
     in
-        ϕ, fun (ϕb, tb, kb) -> [ entry_info sec n
-                                 "translated", txt p.pretty_translated
+        ϕ, fun (ϕb, tb, kb) -> [ "translated", txt p.pretty_translated
                                  "inferred", pp_infos <| typed_infos (ok_or_no_info ϕb (fxty ϕ), 
                                                                       ok_or_no_info tb (ty ϕ.ftype),
                                                                       ok_or_no_info kb (kind ϕ.kind)) ]
 
 let test_entry (tchk : typechecker) sec n ((s1, res) : entry) =
+    let infs0 = [ entry_info sec n ]
     match res with
     | result.TypeEq (s2, is_eq) ->
         let ϕ1 =tchk.parse_ty_expr s1
         let ϕ2 = tchk.parse_ty_expr s2
         let b1 = ϕ1 = ϕ2
         let b2 = ϕ1.ftype = ϕ2.ftype
-        let infs1 =
-            [ entry_info sec n 
-              "parsed", fxty ϕ1 <+> txt "=" <+> fxty ϕ2
+        let infs =
+            infs0 @
+            [ "parsed", fxty ϕ1 <+> txt "=" <+> fxty ϕ2
               "flex types", ok_or_no_info b1 (txt s1 <+> txt "=" <+> txt s2)
               "F-types", ok_or_no_info b2 (txt s1 <+> txt "=" <+> txt s2) ]
         let test_ok' = if is_eq then test_ok else test_failed
@@ -239,7 +239,7 @@ let test_entry (tchk : typechecker) sec n ((s1, res) : entry) =
             | true, false   -> test_weak_ok "flex types are equivalent but F-types are different"
             | false, true   -> test_weak_ok "F-types are equivalent but flex types are different"
             | false, false  -> test_failed' "types are different")
-                infs1
+                infs
 
     | result.TypedOk (so, flags) ->
         let is_enabled flag = List.contains flag flags
@@ -253,8 +253,8 @@ let test_entry (tchk : typechecker) sec n ((s1, res) : entry) =
                 let ϕres, infs1 = typecheck_expr_or_decl tchk sec n s1
                 let compare_test = if is_enabled flag.Verbatim then compare_test_verbatim else compare_test_eq
                 let b3 = compare_test ϕres ϕok
+                let infs1 = infs0 @ infs1 b3
                 let infs2 = expected_infos ϕok
-                let infs1 = infs1 b3
                 in
                     match b3 with
                     | true, true, true  -> test_ok "all ok" infs1
@@ -264,17 +264,28 @@ let test_entry (tchk : typechecker) sec n ((s1, res) : entry) =
                     | false, true, false -> test_failed "type is ok but kind is not" (infs1 @ infs2)
                     | _                  -> test_failed "types expected to be equal" (infs1 @ infs2)
             with :? static_error as e ->
-                test_failed "unwanted static error" <| static_error_infos s1 e @ expected_infos ϕok
+                test_failed "unwanted static error" <| infs0 @ static_error_infos s1 e @ expected_infos ϕok
                     
-    | result.TypedWrong T ->
-        assert T.IsSubclassOf typeof<static_error>
+    | result.StaticError (T, codeo) ->
+        assert (let t = typeof<static_error> in t = T || T.IsSubclassOf t)
         try
             let _, infs1 = typecheck_expr_or_decl tchk sec n s1
-            test_failed "expected to be wrong" <| infs1 (false, false, false) @ ["error expected", txt T.Name]
+            in
+                test_failed
+                    (something (sprintf "expected static error %d") "expected a static error" codeo)
+                    (infs0 @ infs1 (false, false, false) @ [something (sprintf "static error %d expected") "any static error expected" codeo, txt T.Name])
         with :? static_error as e ->
-            if (let t = e.GetType() in t = T || t.IsSubclassOf T) then
-                test_ok "justly rejected" <| static_error_infos s1 e
-            else reraise ()
+            let tb = let t = e.GetType() in t = T || t.IsSubclassOf T
+            let cb = match codeo with
+                     | None   -> true
+                     | Some n -> n = e.code
+            in
+                (match tb, cb with
+                | true, true   -> test_ok "justly rejected"
+                | true, false  -> test_weak_ok "static error type is right but error code is wrong"
+                | false, true  -> test_weak_ok "error code is right but static error type is wrong"
+                | false, false -> test_failed "wrong static error type and code")
+                    <| infs0 @ static_error_infos s1 e
 
 
 let score_infos scores =
@@ -311,17 +322,18 @@ module Tests =
     let type_eq s = result.TypeEq (s, true)
     let type_neq s = result.TypeEq (s, false)
     let ok = result.TypedOk (None, [])
-    let wrong< 'exn when 'exn :> static_error > = result.TypedWrong typeof<'exn>
-    let wrong_type = wrong<type_error>
-    let wrong_syntax = wrong<syntax_error>
+    let wrong< 'exn when 'exn :> static_error > codeo = result.StaticError (typeof<'exn>, codeo)
+    let wrong_type = wrong<type_error> None
+    let wrong_syntax = wrong<syntax_error> None
+    let static_errn code = wrong<static_error> (Some code)
+    let type_errn code = wrong<type_error> (Some code)
+    let unbound_error = static_errn 10
 
-    module InFSharp =
-        let recs1 () =
-            let rec map f = function
-                | [] -> []
-                | x :: xs -> f x :: map f xs
-            and map2 f (l1, l2) = map f l1, map f l2
-            ()
+    module private InFSharp =
+        let rec foldr f l z =
+            match l with
+            | [] -> z
+            | x :: xs -> f x (foldr f xs z)
 
     let type_equality =
       "Type Equality",
@@ -353,6 +365,13 @@ module Tests =
         "if 1 then () else ()",                     wrong_type
       ]
 
+    let scoping =
+      "Scoping",
+      [
+        "let id x = x in id true",                  type_ok "bool"
+        "id 1",                                     unbound_error
+      ]
+
     let type_annotations =
       "Type Annotations",
       [
@@ -368,7 +387,7 @@ module Tests =
         "let y =
             let i (x : 'foo) = x
             in
-                i 1, i true",                       type_ok "int * bool"    // generalization of scoped vars is valid
+                i 1, i true",                       type_ok "int * bool"    // generalization of scoped vars is allowed
       ]
 
     let lists =
@@ -380,6 +399,16 @@ module Tests =
         "let rec fold f z = function
             | [] -> z
             | x :: xs -> fold f (f z x) xs",        type_ok "('b -> 'a -> 'b) -> 'b -> list 'a -> 'b"
+        "let rec foldr f l z =
+            match l with
+            | [] -> z
+            | x :: xs -> f x (foldr f xs z)",       type_ok "('a -> 'b -> 'b) -> list 'a -> 'b -> 'b"
+        "let rec append l1 l2 =
+            match l1 with
+            | [] -> l2
+            | x :: xs -> x :: append xs l2",        type_ok "list 'a -> list 'a -> list 'a"
+        "let append1 l x = append l [x]",           type_ok "list 'a -> 'a -> list 'a"
+        "let single x = [x]",                       type_ok "forall 'a. 'a -> list 'a"
       ]
 
     let hindley_milner =
@@ -388,94 +417,131 @@ module Tests =
         "fun x -> x",                               type_ok "forall 'a. 'a -> 'a"
         "fun f x -> f x",                           type_ok "forall 'a 'b. ('a -> 'b) -> 'a -> 'b"
         "fun a, b -> a",                            wrong_syntax
+        "let inc n = n + 1",                        type_ok "int -> int"
         "inc true",                                 wrong_type
         "let i = fun x -> x in i i",                type_ok "forall 'a. 'a -> 'a"
-        "fun i -> i i",                             wrong_type // infinite type
-        "fun i -> (i 1, i true)",                   wrong_type // polymorphic use of unannotated parameter
+        "fun i -> i i",                             type_errn 203
+        "fun i -> (i 1, i true)",                   type_errn 200
         "let id x = x",                             type_ok "forall 'a. 'a -> 'a"
-        "let single x = [x]",                       type_ok "forall 'a. 'a -> list 'a"
+        "let app f x = f x",                        type_ok "('a -> 'b) -> 'a -> 'b"
+        "let revapp x f = f x",                     type_ok "'a -> ('a -> 'b) -> 'b"
+        "let poly f = f 1, f true",                 wrong_type
+        "let rec map f = function
+             | [] -> []
+             | x :: xs -> f x :: map2 f xs
+         and map2 = id map
+         and id x = x
+         in
+             id",                                   type_ok "(('a -> 'b) -> list 'a -> list 'b) -> ('a -> 'b) -> list 'a -> list 'b"
+        "map2",                                     unbound_error        
       ]
+
 
     let hml =
       "HML",
       [
         "let i x = x in i 1, i true, i",            type_ok "int * bool * (forall 'a. 'a -> 'a)"
         "fun (i : forall 'a. 'a -> 'a) ->
-            (i 1, i true)",                         type_ok "(forall 'a. 'a -> 'a) -> int * bool" // polymorphic use of annotated parameter
+            (i 1, i true)",                         type_ok "(forall 'a. 'a -> 'a) -> int * bool"
         "single id",                                type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
+        "[id]",                                     type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
+        "let ids = single id",                      type_ok "forall 'a. list ('a -> 'a)"    // unannotated let-bindings become F-types
+        "let ids : _|_ = single id",                type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"    // annotated let-bindings remain flex types
         "let const x y = x",                        type_ok "forall 'a 'b. 'a -> 'b -> 'a"
         "let const2 x y = y",                       type_ok "forall 'a 'b. 'a -> 'b -> 'b"
         "let choose x y = if x = y then x else y",  type_ok "forall 'a. 'a -> 'a -> 'a"
         "choose (fun x y -> x) (fun x y -> y)",     type_ok "forall 'a. 'a -> 'a -> 'a"
         "choose id",                                type_ok "forall ('a :> forall 'b. 'b -> 'b). 'a -> 'a"
+
+        "let poly (f : forall 'a. 'a -> 'a) =
+            f 1, f true",                           type_ok "(forall 'a. 'a -> 'a) -> int * bool"
+        
+        "app poly",                                 type_ok "(forall 'a. 'a -> 'a) -> int * bool"
+        "app poly id",                              type_ok "int * bool"
+        "map id [id]",                              type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
+        "map poly ids, append (single inc) ids",    type_ok "list (int * bool) * list (int -> int)"
+        "let ids : _|_ = single id
+         in
+            map poly ids, append (single inc) ids", type_ok "list (int * bool) * list (int -> int)" // ids is bound as a flex type
+        "let ids = single id
+         in
+            map poly ids, append (single inc) ids", type_ok "list (int * bool) * list (int -> int)" // ids is bound as an F-type
       ]
 
+    let higher_rank = 
+      "Impredicative Application and Higher Rank Arguments",
+      [
+        "let auto (id : forall 'a. 'a -> 'a) = id",         type_ok "(forall 'a. 'a -> 'a) -> (forall 'a. 'a -> 'a)"
+        "let xauto (id : forall 'a. 'a -> 'a) x = id x",    type_ok "forall 'a. (forall 'b. 'b -> 'b) -> 'a -> 'a"
+        "let takeAuto (auto : (forall 'a. 'a -> 'a) ->
+            (forall 'a. 'a -> 'a)) = auto auto",            type_ok "((forall 'a. 'a -> 'a) -> (forall 'a. 'a -> 'a)) -> (forall 'a. 'a -> 'a)"
+
+        "xauto",                                    type_ok "forall 'a. (forall 'a. 'a -> 'a) -> 'a -> 'a"
+        "takeAuto",                                 type_ok "((forall 'a. 'a -> 'a) -> (forall 'a. 'a -> 'a)) -> (forall 'a. 'a -> 'a)"
+        "auto",                                     type_ok "(forall 'a. 'a -> 'a) -> (forall 'a. 'a -> 'a)"
+        "fun (i : forall 'a. 'a -> 'a) -> i i",     type_ok "forall ('a :> forall 'b. 'b -> 'b). (forall 'b. 'b -> 'b) -> 'a"
+                                                 // type_ok "forall 'a. (forall 'a. 'a -> 'a) -> 'a -> 'a"
+        "auto id",                                  type_ok "forall 'a. 'a -> 'a"
+        "apply auto id",                            type_ok "forall 'a. 'a -> 'a"
+
+        "(single : (forall 'a. 'a -> 'a -> list (forall 'a. 'a -> 'a)) id", type_ok "list (forall 'a. 'a -> 'a)"
+        
+        "runST (returnST 1)",                       type_ok "int"
+        "runST (newRef 1)",                         wrong_type
+        "apply runST (returnST 1)",                 type_ok "int"
+        "map xauto ids",                            type_ok "forall 'a. list ('a -> 'a)"
+        "map xauto (map xauto ids)",                wrong_type
+        "map auto ids",                             type_ok "list (forall 'a. 'a -> 'a)"
+        "map auto (map auto ids)",                  type_ok "list (forall 'a. 'a -> 'a)"
+        "head ids",                                 type_ok "forall 'a. 'a -> 'a"
+        "tail ids",                                 type_ok "list (forall 'a. 'a -> 'a)"
+        "apply tail ids",                           type_ok "list (forall 'a. 'a -> 'a)"
+        "map head (single ids)",                    type_ok "list (forall 'a. 'a -> 'a)"
+        "apply (map head) (single ids)",            type_ok "list (forall 'a. 'a -> 'a)"
+
+        (*-- check infinite poly types
+        "(undefined :: some a. [a -> a] -> Int) (undefined :: some c. [(forall d. d -> c) -> c])", Wrong)
+        "(undefined :: some a. [a -> a] -> Int) (undefined :: [(forall d. d -> d) -> (Int -> Int)])", Wrong)
+        "(undefined :: some a. [a -> (forall b. b -> b)] -> Int) (undefined :: some c. [(forall d. d -> d) -> c])", ok "Int")
+
+        -- these fail horribly in ghc: (choose auto id) is rejected while ((choose auto) id) is accepted -- so much for parenthesis :-)
+        "choose id auto", ok "(forall a. a -> a) -> (forall a. a -> a)")
+        "choose auto id", ok "(forall a. a -> a) -> (forall a. a -> a)")
+        "choose xauto xauto", ok "forall a. (forall b. b -> b) -> a -> a")
+        "choose id xauto", Wrong)
+        "choose xauto id", Wrong)
+
+        -- these fail too in ghc: (choose ids []) is accepted while (choose [] ids) is rejected
+        "choose [] ids", ok "[forall a. a -> a]")
+        "choose ids []", ok "[forall a. a -> a]")
+    
+        -- check escaping skolems
+        "\\x -> auto x", Wrong)                                                                             -- escape in match
+        "let poly (xs :: [forall a. a -> a]) = 1 in (\\x -> poly x)", Wrong)                              -- escape in apply
+        "\\x -> (x :: [forall a. a -> a])", Wrong)                                                          -- escape in apply
+        "\\x -> let polys (xs :: [forall a . a -> a]) = 1; f y = x in polys [f::some a. forall b. b -> a]",Wrong)  -- escape in unify (with rigid annotations, otherwise we get a skolem mismatch)
+        "ids :: forall b. [forall a. a -> b]", Wrong)                                                       -- unify different skolems
+
+        -- co/contra variance
+        "let g (x::(forall a. a -> a) -> Int) = x id; f (x :: Int -> Int) = x 1 in g f", Wrong)                                      -- HMF is invariant
+        "let g (x::(forall a. a -> a) -> Int) = x id; f (x :: Int -> Int) = x 1 in g (\\(x :: forall a. a -> a) -> f x)", ok "Int")  -- but we can always use explicit annotations to type such examples
+
+        -- shared polymorphism
+        "let f (x :: [forall a.a -> a]) = x in let g (x :: [Int -> Int]) = x in let ids = [id] in (f ids, g ids)", ok "([forall a. a -> a],[Int -> Int])")*)
+      ]
 
     let all : section list =
       [
         type_equality
         intrinsics
+        scoping
         type_annotations
         scoped_type_variables
         lists
         hindley_milner
         hml
+//        higher_rank
       ]
-
-    // impredicative application and higher rank arguments are fully supported    
-    (*let HR = 
-      [
-        "xauto",    ok "forall a. (forall a. a -> a) -> a -> a"
-        ,("auto", ok "(forall a. a -> a) -> (forall a. a -> a)")
-        ,("\\(i :: forall a. a -> a) -> i i", ok "forall (a >= forall b. b -> b). (forall b. b -> b) -> a") -- ok "forall a. (forall a. a -> a) -> a -> a")
-        ,("auto id", ok "forall a. a -> a")
-        ,("apply auto id", ok "forall a. a -> a")
-        ,("(single :: (forall a. a -> a) -> [forall a. a->a]) id", ok "[forall a. a-> a]")
-        ,("runST (returnST 1)", ok "Int")
-        ,("runST (newRef 1)", Wrong)
-        ,("apply runST (returnST 1)", ok "Int")
-        ,("map xauto ids", ok "forall a. [a -> a]")
-        ,("map xauto (map xauto ids)", Wrong)
-        ,("map auto ids", ok "[forall a. a -> a]")
-        ,("map auto (map auto ids)", ok "[forall a. a -> a]")
-        ,("head ids", ok "forall a. a -> a")
-        ,("tail ids", ok "[forall a. a -> a]")
-        ,("apply tail ids", ok "[forall a. a -> a]")
-        ,("map head (single ids)", ok "[forall a. a -> a]")
-        ,("apply (map head) (single ids)", ok "[forall a. a -> a]")
-
-        -- check infinite poly types
-        ,("(undefined :: some a. [a -> a] -> Int) (undefined :: some c. [(forall d. d -> c) -> c])", Wrong)
-        ,("(undefined :: some a. [a -> a] -> Int) (undefined :: [(forall d. d -> d) -> (Int -> Int)])", Wrong)
-        ,("(undefined :: some a. [a -> (forall b. b -> b)] -> Int) (undefined :: some c. [(forall d. d -> d) -> c])", ok "Int")
-
-        -- these fail horribly in ghc: (choose auto id) is rejected while ((choose auto) id) is accepted -- so much for parenthesis :-)
-        ,("choose id auto", ok "(forall a. a -> a) -> (forall a. a -> a)")
-        ,("choose auto id", ok "(forall a. a -> a) -> (forall a. a -> a)")
-        ,("choose xauto xauto", ok "forall a. (forall b. b -> b) -> a -> a")
-        ,("choose id xauto", Wrong)
-        ,("choose xauto id", Wrong)
-
-        -- these fail too in ghc: (choose ids []) is accepted while (choose [] ids) is rejected
-        ,("choose [] ids", ok "[forall a. a -> a]")
-        ,("choose ids []", ok "[forall a. a -> a]")
-    
-        -- check escaping skolems
-        ,("\\x -> auto x", Wrong)                                                                             -- escape in match
-        ,("let poly (xs :: [forall a. a -> a]) = 1 in (\\x -> poly x)", Wrong)                              -- escape in apply
-        ,("\\x -> (x :: [forall a. a -> a])", Wrong)                                                          -- escape in apply
-        ,("\\x -> let polys (xs :: [forall a . a -> a]) = 1; f y = x in polys [f::some a. forall b. b -> a]",Wrong)  -- escape in unify (with rigid annotations, otherwise we get a skolem mismatch)
-        ,("ids :: forall b. [forall a. a -> b]", Wrong)                                                       -- unify different skolems
-
-        -- co/contra variance
-        ,("let g (x::(forall a. a -> a) -> Int) = x id; f (x :: Int -> Int) = x 1 in g f", Wrong)                                      -- HMF is invariant
-        ,("let g (x::(forall a. a -> a) -> Int) = x id; f (x :: Int -> Int) = x 1 in g (\\(x :: forall a. a -> a) -> f x)", ok "Int")  -- but we can always use explicit annotations to type such examples
-
-        -- shared polymorphism
-        ,("let f (x :: [forall a.a -> a]) = x in let g (x :: [Int -> Int]) = x in let ids = [id] in (f ids, g ids)", ok "([forall a. a -> a],[Int -> Int])")
-      ]*)
-
-
     
 let main () =
     test_sections Tests.all
@@ -663,52 +729,6 @@ testsEtaPoly
     ,("\\x -> (auto x, (x :: forall a. a -> a) 1)", ok "forall a. (forall a. a -> a) -> (a -> a, Int)")
     ,("\\x -> (auto x, (x :: Int -> Int) 1)", Wrong)
     ]
-
---------------------------------------------------------------------------
--- Test framework
---------------------------------------------------------------------------
-type Test = (String,TestResult)
-data TestResult  = Ok Type
-                 | Wrong
-
-ok :: String -> TestResult
-ok stringType 
-  = Ok (readType stringType)
-
-
-test :: [Test] -> IO ()
-test ts
-  = do xs <- mapM test1 ts
-       putStrLn ("\ntested: " ++ show (length ts))
-       putStrLn ("failed: " ++ show (sum xs) ++ "\n")
-
-test1 :: Test -> IO Int
-test1 (input,Ok resultTp)
-  = do tp <- inference input
-       if (show tp == show resultTp) 
-        then testOk ""
-        else testFailed (": test was expected to have type: " ++ show resultTp)
-    `Exn.catch` \err ->
-      do putStrLn (show err)
-         testFailed (": test should be accepted with type: " ++ show resultTp)
-       
-test1 (input, Wrong)
-  = do inference input
-       testFailed ": a type error was expected"
-    `Exn.catch` \err ->
-      do putStrLn (show err)
-         testOk " (the input was justly rejected)"
-
-testFailed msg
-  = do putStrLn (header ++ "\ntest failed" ++ msg ++ "\n" ++ header ++ "\n")
-       return 1
-  where
-    header = replicate 40 '*'
-
-testOk msg
-  = do putStrLn ("ok " ++ msg)
-       putStrLn ""
-       return 0
 
 *)
 

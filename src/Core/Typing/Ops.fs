@@ -303,6 +303,9 @@ type fxty with
         | FxU_Unquantified t -> Some t
         | _ -> None
 
+    member this.is_really_flex = this.maybe_ftype.IsNone
+
+
 
 // TODO: is this representation ok for ungeneralized bindings?
 //let Ungeneralized ϕ = { constraints = constraints.empty; fxty = ϕ }

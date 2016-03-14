@@ -17,10 +17,10 @@ open Printf
 open System
 
 type type_error (msg, n, loc) =
-    inherit static_numeric_error ("type error", msg, n, loc)
+    inherit static_error ("type error", msg, n, loc)
 
 type kind_error (msg, n, loc) =
-    inherit static_numeric_error ("kind error", msg, n, loc)
+    inherit static_error ("kind error", msg, n, loc)
 
 let flatten_and_trim_strings sep ss = flatten_strings sep (seq { for s : string in ss do let s = s.Trim () in if not <| String.IsNullOrWhiteSpace s then yield s })
 
@@ -47,6 +47,7 @@ let inline prompt ctx prefixes x (t1 : ^t1) t2o =
         
 
 let private E f n loc fmt = let N = var.reset_normalization in throw_formatted (fun msg -> N.Dispose (); f (msg, n, loc)) fmt
+let private Es n loc fmt = E (fun (a, b, c) -> new static_error (a, b, c)) n loc fmt
 let private Et n loc fmt = E (fun args -> new type_error (args)) n loc fmt
 let private Ek n loc fmt = E (fun args -> new kind_error (args)) n loc fmt
    
@@ -67,89 +68,100 @@ let private circularity E n loc what x1 x2 α x =
 [< RequireQualifiedAccess >]
 module Error =            
 
-    // kind errors
+    // unbound symbol errors
 
-    let kind_mismatch loc expected1 got1 expected2 got2 =
-        mismatch Ek 1 loc "type expression" "kind" expected1 got1 expected2 got2
-
-    let kind_circularity loc (k1 : kind) (k2 : kind) kα (k : kind) =
-        circularity Ek 2 loc "kind" k1 k2 kα k
+    let unbound_symbol loc x =
+        Es 10 loc "variable identifier %s is undefined" x
 
     let unbound_type_symbol loc x =
-        Ek 3 loc "type variable or constructor %s is undefined" x
+        Es 11 loc "type variable or constructor %s is undefined" x
+
+    let unbound_data_constructor loc x =
+        Es 12 loc "data constructor %s is undefined" x
+
+
+    // misc errors 
+
+    let duplicate_label loc l what =
+        Es 100 loc "multiple occurrences of label %s in %s" l what  // this is gonna be removed when overloading of record labels will be implemented
+
 
     // type errors
     
     let type_mismatch loc expected1 got1 expected2 got2 =
-        mismatch Et 4 loc "expression" "type" expected1 got1 expected2 got2
+        mismatch Et 200 loc "expression" "type" expected1 got1 expected2 got2
 
     let row_tail_circularity loc ρ tθ =
-        Et 5 loc "unification fails because row type variable type variable %O occurs in the domain of substituion %O" ρ tθ
+        Et 201 loc "unification fails because row type variable type variable %O occurs in the domain of substituion %O" ρ tθ
 
     let cannot_rewrite_row loc l r1 r2 =
-        Et 6 loc "row type %O cannot be rewritten with label %s in order to match row type %O" r1 l r2
+        Et 202 loc "row type %O cannot be rewritten with label %s in order to match row type %O" r1 l r2
 
-    let circularity loc (t1 : ty) (t2 : ty) tα (t : ty) =
-        circularity Et 7 loc "type" t1 t2 tα t
-
-    let variables_already_bound_in_pattern loc xs p =
-        Et 8 loc "variables %s are bound multiple times in pattern %O" (flatten_stringables ", " xs) p
+    let type_circularity loc (t1 : ty) (t2 : ty) tα (t : ty) =
+        circularity Et 203 loc "type" t1 t2 tα t
         
     let value_not_resolved loc cs =
-        Et 9 loc "expression will not evaluate to a ground value because some constraints are unresolved: %O" cs
-
-    let duplicate_label loc l what =
-        Et 10 loc "multiple occurrences of label %s in %s" l what
-
-    let unbound_symbol loc x =
-        Et 11 loc "variable identifier %s is undefined" x
-
-    let pattern_in_letrec loc p =
-        Et 12 loc "let-rec supports only simple identifier bindings, but a pattern was used: %O" p
-
-    let unbound_overloaded_symbol loc x =
-        Et 13 loc "overload identifier %s is undefined" x
+        Et 204 loc "expression will not evaluate to a ground value because some constraints are unresolved: %O" cs
 
     let instance_not_valid loc x t pt =
-        Et 14 loc "overloaded instance `%s : %O` does not respect principal type %O" x t pt
-
-    let different_vars_in_sides_of_or_pattern loc xs =
-        Et 15 loc "sides of or-pattern must match exactly the same variables: %s are missing" (flatten_stringables ", " xs)
+        Et 205 loc "overloaded instance `%s : %O` does not respect principal type %O" x t pt
     
     let value_restriction_non_arrow_in_letrec loc t =
-        Et 16 loc "value restriction: values bound by let-rec must be arrow types, but got %O" t
-
-    let type_patterns_not_exhaustive loc t =
-        Et 17 loc "type patterns did not match input type: %O" t
-
-    let same_vars_in_sides_of_or_pattern loc xs =
-        Et 18 loc "sides of or-pattern must match different variables: %s are in common" (flatten_stringables ", " xs)
+        Et 206 loc "value restriction: values bound by let-rec must be arrow types, but got %O" t
 
     let data_constructor_codomain_invalid loc x c t =
-        Et 19 loc "data constructor %s does not construct datatype %O because its codomain has type %O" x c t
-
-    let data_constructor_bound_to_wrong_symbol loc what x t =
-        Et 20 loc "data constructor %s in pattern is already bound to %s : %O" x what t
-
-    let unbound_data_constructor loc x =
-        Et 21 loc "data constructor %s is undefined" x
+        Et 207 loc "data constructor %s does not construct datatype %O because its codomain has type %O" x c t
 
     let closed_world_overload_constraint_not_resolved loc cx ct x t =
         // TODO: print a better message, just refer to the notion of closed-world overloading, without mentioning constraints
-        Et 22 loc "when generalizing symbol `%O : %O` the constraint `%s : %O` has not been resolved and was referring to a closed-world overloaded symbol" x t cx ct
+        Et 208 loc "when generalizing symbol `%O : %O` the constraint `%s : %O` has not been resolved and was referring to a closed-world overloaded symbol" x t cx ct
 
     let inferred_lambda_parameter_is_not_monomorphic loc x t =
-        Et 23 loc "function parameter is used polymorphically without an explicit annotation: %s : %O" x t
+        Et 209 loc "function parameter is used polymorphically without an explicit annotation: %s : %O" x t
 
     let skolemized_type_variable_escaped loc tsk =
-        Et 24 loc "skolem type variable %O escaped" tsk
+        Et 210 loc "skolem type variable %O escaped" tsk
 
     let inferred_rec_definition_is_not_monomorphic loc x t =
-        Et 25 loc "recursive definition is used polymorphically without an explicit annotation: %s : %O" x t
+        Et 211 loc "recursive definition is used polymorphically without an explicit annotation: %s : %O" x t
+
+
+    // pattern-related errors
+
+    let variables_already_bound_in_pattern loc xs p =
+        Es 300 loc "variables %s are bound multiple times in pattern %O" (flatten_stringables ", " xs) p
+
+    let pattern_in_letrec loc p =
+        Es 301 loc "let-rec supports only simple identifier bindings, but a pattern was used: %O" p
+
+    let unbound_overloaded_symbol loc x =
+        Es 302 loc "overload identifier %s is undefined" x
+
+    let different_vars_in_sides_of_or_pattern loc xs =
+        Es 303 loc "sides of or-pattern must match exactly the same variables: %s are missing" (flatten_stringables ", " xs)
+
+    let type_patterns_not_exhaustive loc t =
+        Es 304 loc "type patterns did not match input type: %O" t
+    
+    let same_vars_in_sides_of_or_pattern loc xs =
+        Es 305 loc "sides of or-pattern must match different variables: %s are in common" (flatten_stringables ", " xs)
+
+    let data_constructor_bound_to_wrong_symbol loc what x t =
+        Es 306 loc "data constructor %s in pattern is already bound to %s : %O" x what t
 
     let invalid_pattern_application loc p =
-        Et 26 loc "pattern application must have a data constructor as left-most term, but here is: " p
-        
+        Et 307 loc "pattern application must have a data constructor as left-most term, but here is: " p
+
+
+    // kind errors
+
+    let kind_mismatch loc expected1 got1 expected2 got2 =
+        mismatch Ek 400 loc "type expression" "kind" expected1 got1 expected2 got2
+
+    let kind_circularity (loc : location) (k1 : kind) (k2 : kind) kα (k : kind) =
+        circularity Ek 401 loc "kind" k1 k2 kα k
+
+
 
 [< RequireQualifiedAccess >]
 module Warn =
