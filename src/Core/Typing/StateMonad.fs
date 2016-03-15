@@ -114,8 +114,10 @@ type basic_builder (loc : location) =
             do! M.lift_θ (compose_tksubst θ1)
             // TMP: state update disabled
             do! M.update_state
+            #if DEBUG_SUBST
             let! θ' = M.get_θ
             L.debug Normal "[S+] %O\n     = %O" θ1 θ'
+            #endif
         }
 
     member internal __.lookup report (env : Env.t<_, _>) x =
@@ -227,12 +229,12 @@ type type_inference_builder (loc) =
         M {
             let! t = M.updated t
             let! θ = M.get_θ
-            let! Γ = M.get_Γ
             let! αs = M.get_ungeneralizable_vars
-            #if DEBUG_HML
-            let p set = sprintf "{ %s }" <| flatten_stringables ", " set
-            L.debug High "[yield-Q] S.dom = %O\n          Q.dom = %O\n          fv_gamma = %O\n          ungen = %O\n          t = %O" (p θ.dom) (p Q.dom) (p (fv_Γ Γ)) (p αs) t
-            #endif
+//            let! Γ = M.get_Γ
+//            #if DEBUG_HML
+//            let p set = sprintf "{ %s }" <| flatten_stringables ", " set
+//            L.debug High "[yield-Q] S.dom = %O\n          Q.dom = %O\n          fv_gamma = %O\n          ungen = %O\n          t = %O" (p θ.dom) (p Q.dom) (p (fv_Γ Γ)) (p αs) t
+//            #endif
             assert (Set.intersect Q.dom θ.dom).IsEmpty      // prefix and subst must involve different variables
             assert Q.dom.IsSubsetOf t.fv                    // generalizable vars must be present in t
             assert (Set.intersect Q.dom αs).IsEmpty         // generalizable vars must not be among ungeneralizable ones

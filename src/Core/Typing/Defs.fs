@@ -64,12 +64,30 @@ module TyEq =
         member M.is_equivalent (x : 't) y =
             M {
                 let! r = x.is_equivalent y
-                return x.kind = y.kind && r
+                #if DEBUG_TYPE_EQUALITY
+                L.debug Unmaskerable "%O is equivalent to %O: %b" x y (r && x.kind = y.kind)
+                #endif
+                return r && x.kind = y.kind
             }
 
         member M.are_equivalent l1 l2 =
             M {
                 return! M.List.fold (fun b (t1, t2) -> M { let! b' = M.is_equivalent t1 t2 in return b' && b }) true (List.zip l1 l2)
+            }
+
+        member M.binop_and_with_undo x y =
+            M {
+                let! st = M.get_state
+                let! a = x
+                if a then
+                    let! b = y
+                    if b then return true
+                    else
+                        do! M.set_state st
+                        return false
+                else 
+                    do! M.set_state st
+                    return false
             }
 
 
@@ -116,7 +134,7 @@ with
 
         member x.is_equivalent y =
             let M = new TyEq.state_builder<ty> ()
-            let (&&&) = M.binop_and
+            let (&&&) = M.binop_and_with_undo
             let (|T_Foralls|_|) = (|Foralls|_|) (function T_Forall (α, t) -> Some (α, t) | _ -> None)
             M {   
                 match x, y with
@@ -152,7 +170,9 @@ with
                     }
                     return! M.is_equivalent t1 t2 &&& is_permutation αs βs
 
-                | T_HTuple ts, T_HTuple ts'             -> return! M.are_equivalent ts ts'
+                | T_HTuple ts, T_HTuple ts' when ts.Length = ts'.Length ->
+                    return! M.are_equivalent ts ts'
+
                 #if DEBUG
                 | T_Closure _, _ | _, T_Closure _       -> L.unexpected_error "comparing type closures: %O = %O" x y
                                                            return false
@@ -161,7 +181,7 @@ with
             }
 
     interface IEquatable<ty> with
-        member x.Equals y = (x :> TyEq.equivalent<_>).is_equivalent y TyEq.state.empty |> fst
+        member x.Equals y = (x :> TyEq.equivalent<ty>).is_equivalent y TyEq.state.empty |> fst
 
 
 // flexible types
@@ -194,23 +214,76 @@ with
 
         member x.is_equivalent y =
             let M = new TyEq.state_builder<fxty> ()
-            let (&&&) = M.binop_and
+            let (&&&) = M.binop_and_with_undo
+            let (|Fx_Foralls|_|) = (|Foralls|_|) (function Fx_Forall ((α, t1), t2) -> Some ((α, t1), t2) | _ -> None)
             M {
                 match x, y with
-                | Fx_Forall ((α, ϕ1), ϕ2), Fx_Forall ((α', ϕ1'), ϕ2') ->
-                    return! M.is_var_equivalent α α' &&& M.is_equivalent ϕ1 ϕ1' &&& M.is_equivalent ϕ2 ϕ2'
+                | Fx_Foralls (αs, ϕ1), Fx_Foralls (βs, ϕ2) ->
+                    let contains (α, αϕ) βs = M {
+//                        let! o = M.List.tryFind (fun (β, βϕ) -> M {
+//                                    let! st = M.get_state
+//                                    let! a = M.is_equivalent αϕ βϕ
+//                                    let! b = M.is_var_equivalent α β
+//                                    if a && b then return true
+//                                    else
+//                                        do! M.set_state st  // restore state when false, otherwise variable bindings created while comparing bounds may be kept
+//                                        return false
+//                                }) βs
+//                        let! r, βs' = M {
+//                            match o with
+//                            | Some (β', _) ->
+//                                let! βs' = M.List.filter (fun (β, _) -> M { return β <> β' }) βs
+//                                return true, βs'
+//                            | None ->
+//                                return false, βs
+//                        }
+                        let rec R βs' βs = M {
+                            match βs with
+                            | [] ->
+                                return false, βs'
+
+                            | (β, βϕ) :: βs ->
+                                let! st = M.get_state
+                                let! a = M.is_equivalent αϕ βϕ
+                                let! b = M.is_var_equivalent α β
+                                if a && b then return true, βs' @ βs
+                                else
+                                    do! M.set_state st  // restore state when false, otherwise variable bindings created while comparing bounds may be kept
+                                    return! R (βs' @ [β, βϕ]) βs
+                        }
+                        let! r, βs' = R [] βs
+                        #if DEBUG_TYPE_EQUALITY
+                        L.debug Unmaskerable "%O contained in %O: %b, %O" α βs r βs'
+                        #endif
+                        return r, βs'
+                    }
+                    let rec is_permutation αs βs = M {
+                        match αs with
+                        | [] ->
+                            return true
+
+                        | α :: αs ->
+                            let! a, βs' = contains α βs
+                            let! b = is_permutation αs βs'                                
+                            #if DEBUG_TYPE_EQUALITY
+                            L.debug Unmaskerable "%O is permutation of %O: %b" αs βs (a && b)
+                            #endif
+                            return a && b
+                    }
+                    return! M.is_equivalent ϕ1 ϕ2 &&& is_permutation αs βs
+
 
                 | Fx_F_Ty t1, Fx_F_Ty t2 ->
-                    return! (t1 :> TyEq.equivalent<_>).is_equivalent t2
+                    return! (t1 :> TyEq.equivalent<ty>).is_equivalent t2
 
-                | Fx_Bottom _, Fx_Bottom _ ->
-                    return true
+                | Fx_Bottom k1, Fx_Bottom k2 ->
+                    return k1 = k2
 
                 | _ -> return false
             }
 
     interface IEquatable<fxty> with
-        member x.Equals y = (x :> TyEq.equivalent<_>).is_equivalent y TyEq.state.empty |> fst
+        member x.Equals y = (x :> TyEq.equivalent<fxty>).is_equivalent y TyEq.state.empty |> fst
 
 
 

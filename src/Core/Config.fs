@@ -99,7 +99,7 @@ module Printing =
                 
         member this.forall = if this.unicode then "\u2200\b" else "forall"
         member this.flex_forall =
-            #if DEBUG_HML
+            #if DEBUG
             "Forall"
             #else
             this.forall
@@ -161,6 +161,7 @@ module Log =
         l.show_datetime <- false
         l.show_urgency <- false
         l.show_thread <- true
+        l.show_header_only_when_changes <- true
         l
 
     let verbose_pretty_location = false

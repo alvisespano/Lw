@@ -108,7 +108,8 @@ let gen_bind ctx prefixes ({ id = x; qual = dq; expr = e0; to_bind = ϕ } as gb)
     }
 
 
-let W_flex_annot loc (ϕx : fxty) (ϕe : fxty) =
+// use for unifying annotation on bindings
+let W_binding_annot loc (ϕx : fxty) (ϕe : fxty) =
     let M = new type_inference_builder (loc)
     M {
         let! ϕ = M {
@@ -116,9 +117,9 @@ let W_flex_annot loc (ϕx : fxty) (ϕe : fxty) =
             | Some tx ->
                 let te = ϕe.ftype
                 do! M.unify loc tx te
-                yield te                        // bind as an F-type when the annotation is an F-type
+                yield te                      // return an F-type when the annotation is an F-type
             | None ->
-                yield! M.unify_fx loc ϕx ϕe   // bind the flex unification result when annotation is a flex type instead
+                yield! M.unify_fx loc ϕx ϕe   // return the flex unification result when annotation is a flex type instead
         }
         return ϕ
     }
@@ -158,10 +159,14 @@ let rec W_expr (ctx : context) (e0 : expr) =
             // TODOH: insert automatic generalization here, besides automatic resolution
             #if DEBUG_INFERENCE
             let! Q' = M.get_Q
-            let! θ' = M.get_θ
             let! cs' = M.get_constraints
             // TODOL: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)
-            L.debug Low "%-5s %O\n[:t]  %O\n[nf]  %O\n[F-t] %O\n[e*]  %O\n[C]   %O\n[Q]   %O\n[S]   %O\n[C']  %O\n[Q']  %O\n[S']  %O" rule e0 ϕ ϕ.nf ϕ.ftype e0.translated cs Q θ cs' Q' θ'
+            #if DEBUG_SUBST
+            let! θ' = M.get_θ
+            L.debug Low "%-5s %O\n[:t]  %O\n[F-t] %O\n[e*]  %O\n[C]   %O\n[Q]   %O\n[S]   %O\n[C']  %O\n[Q']  %O\n[S']  %O" rule e0 ϕ ϕ.ftype e0.translated cs Q θ cs' Q' θ'
+            #else
+            L.debug Low "%-5s %O\n[:t]  %O\n[F-t] %O\n[e*]  %O\n[C]   %O\n[Q]   %O\n[C']  %O\n[Q']  %O\n" rule e0 ϕ ϕ.ftype e0.translated cs Q cs' Q'
+            #endif
             #endif
             return ϕ
         finally
@@ -207,9 +212,13 @@ and W_patt ctx (p0 : patt) =
             // TODOH: insert automatic generalization here, besides automatic resolution
             #if DEBUG_INFERENCE
             let! Q' = M.get_Q
-            let! θ' = M.get_θ
             // TODOL: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)
-            L.debug Low "%s %O\n[:t]  %O\n[nf]  %O\n[F-t] %O\n[e*]  %O\n[Q]   %O\n[S]   %O\n[Q']  %O\n[S']  %O" rule p0 ϕ ϕ.nf ϕ.ftype p0.translated Q θ Q' θ'
+            #if DEBUG_SUBST
+            let! θ' = M.get_θ
+            L.debug Low "%s %O\n[:t]  %O\n[F-t] %O\n[e*]  %O\n[Q]   %O\n[S]   %O\n[Q']  %O\n[S']  %O" rule p0 ϕ ϕ.ftype p0.translated Q θ Q' θ'
+            #else
+            L.debug Low "%s %O\n[:t]  %O\n[F-t] %O\n[e*]  %O\n[Q]   %O\n[Q']  %O" rule p0 ϕ ϕ.ftype p0.translated Q Q'
+            #endif
             #endif
             return ϕ
         finally
@@ -547,12 +556,12 @@ and W_decl' (ctx : context) (d0 : decl) =
                                 | B_Unannot x ->
                                     do! resolve_constraints ctx e
                                     let! cs = M.get_constraints
-                                    return [{ expr = b.expr; qual = b.qual; id = x; constraints = cs; to_bind = Fx_F_Ty ϕe.ftype; inferred = ϕe }]     // by default bind the inferred type as an F-type
+                                    return [{ expr = b.expr; qual = b.qual; id = x; constraints = cs; to_bind = ϕe; inferred = ϕe }]     // by default bind the inferred type as a flex type
 
                                 | B_Annot (x, τ) ->
                                     let! ϕx, k = Wk_and_eval_ty_expr_fx ctx τ
                                     do! M.kunify τ.loc K_Star k
-                                    let! ϕe' = W_flex_annot τ.loc ϕx ϕe
+                                    let! ϕe' = W_binding_annot τ.loc ϕx ϕe
                                     do! resolve_constraints ctx e
                                     let! cs = M.get_constraints
                                     return [{ expr = b.expr; qual = b.qual; id = x; constraints = cs; to_bind = ϕe'; inferred = ϕe }]
@@ -710,12 +719,12 @@ and W_patt' ctx (p0 : patt) : M<fxty> =
         | P_Wildcard ->
             yield! W_patt ctx (Lo0 <| P_Var (fresh_reserved_id ()))
 
-        // HACK: this does not use the Lambda-App trick used in Annot nor 
+        // HACK: this does not use the Lambda-App trick used in Annot rule in W_expr 
         | P_Annot (p, τ) ->
             let! ϕτ, k = Wk_and_eval_ty_expr_fx ctx τ
-            do! M.kunify τ.loc K_Star k             // any pattern is a value, so it has kind star
+            do! M.kunify τ.loc K_Star k
             let! ϕp = W_patt ctx p
-            yield! W_flex_annot τ.loc ϕτ ϕp
+            yield! W_binding_annot τ.loc ϕτ ϕp
 
         | P_Lit lit ->
             yield W_lit lit

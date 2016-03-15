@@ -1,4 +1,13 @@
 ﻿
+15/3/2016:
+* FIX: HML is working as intended: the bug seen yesterday is actually not a bug
+* UP: now let bindings do not reduce to F-types by default anymore
+* BUG: Fx_Foralls equivalence has a subtle bug: part of the prefix may be actually an F-type, so comparison must be performed more smartly
+* TESTS: new tests for type equivalence
+* REFACT: subst_ty rewritten: now it first applied tθ to the type and then it applied kθ to the result
+* REFACT: some debug messages have been polished
+
+
 14/3/2016:
 * REFACT: static_error exception type now has code and syntax_error is a subtype
 * UP: Report numbering system revamped: different types of errors have been assigned a numeric range, e.g. type errors are in the range 200..299

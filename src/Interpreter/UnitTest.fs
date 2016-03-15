@@ -163,14 +163,14 @@ let testing pri doc = L.pp (L.test pri) doc
 // testers
 //
 
-let compare_test eq_ty eq_fxty eq_kind (ϕres : fxty) (ϕok : fxty) =
+let compare_test eq_fxty eq_ty eq_kind (ϕres : fxty) (ϕok : fxty) =
     let tb = eq_ty ϕok.ftype ϕres.ftype
     let kb = eq_kind ϕok.kind ϕres.kind
-    let ϕb =
+    let ϕb = //eq_fxty ϕok ϕres
         match ϕres.is_really_flex, ϕok.is_really_flex with
         | true, true   -> eq_fxty ϕres ϕok
         | false, true  -> false
-        | true, false 
+        | true, false
         | false, false -> tb
     in
         ϕb, tb, kb
@@ -224,13 +224,15 @@ let test_entry (tchk : typechecker) sec n ((s1, res) : entry) =
     | result.TypeEq (s2, is_eq) ->
         let ϕ1 =tchk.parse_ty_expr s1
         let ϕ2 = tchk.parse_ty_expr s2
+        let t1 = ϕ1.ftype
+        let t2 = ϕ2.ftype
         let b1 = ϕ1 = ϕ2
-        let b2 = ϕ1.ftype = ϕ2.ftype
+        let b2 = t1 = t2
         let infs =
             infs0 @
-            [ "parsed", fxty ϕ1 <+> txt "=" <+> fxty ϕ2
-              "flex types", ok_or_no_info b1 (txt s1 <+> txt "=" <+> txt s2)
-              "F-types", ok_or_no_info b2 (txt s1 <+> txt "=" <+> txt s2) ]
+            [ "parsed", txt s1 <+> txt "=" <+> txt s2
+              "flex types", ok_or_no_info b1 (fxty ϕ1 <+> txt "=" <+> fxty ϕ2)
+              "F-types", ok_or_no_info b2 (ty t1 <+> txt "=" <+> ty t2) ]
         let test_ok' = if is_eq then test_ok else test_failed
         let test_failed' = if is_eq then test_failed else test_ok
         in
@@ -347,6 +349,12 @@ module Tests =
         "forall 'a 'b. 'a -> 'b -> 'b",             type_eq "forall 'b 'a. 'b -> 'a -> 'a"
         "forall 'a 'b. 'a -> 'b",                   type_neq "forall 'a. 'a -> int"
         "forall 'a 'b. 'a -> 'b",                   type_neq "forall 'a 'b. 'a -> 'c"
+
+        "forall ('a :> forall 'b. 'b -> 'b). list 'a",  type_eq "forall ('f :> forall 'f. 'f -> 'f). list 'f"
+        "forall ('a :> forall 'b. 'b -> 'b). list 'a",  type_eq "forall ('a :> forall 'b. 'b -> 'b). list 'a"
+        "forall ('a :> forall 'b. 'b -> 'b) 'c. list ('a * 'c)",  type_eq "forall 'c ('a :> forall 'b. 'b -> 'b). list ('a * 'c)"
+        "forall ('a :> forall 'b. 'b -> 'b) 'c 'd. list ('a * 'c * 'd)",  type_eq "forall 'd ('a :> forall 'b. 'b -> 'b) 'c. list ('a * 'c * 'd)"
+        "forall ('a :> forall 'b. 'b -> 'b) 'b. list ('a * 'b)",  type_eq "forall 'b ('a :> forall 'b. 'b -> 'b). list ('a * 'b)"
       ]
 
     let intrinsics =
@@ -445,8 +453,7 @@ module Tests =
             (i 1, i true)",                         type_ok "(forall 'a. 'a -> 'a) -> int * bool"
         "single id",                                type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
         "[id]",                                     type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
-        "let ids = single id",                      type_ok "forall 'a. list ('a -> 'a)"    // unannotated let-bindings become F-types
-        "let ids : _|_ = single id",                type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"    // annotated let-bindings remain flex types
+        "let ids = single id",                      type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
         "let const x y = x",                        type_ok "forall 'a 'b. 'a -> 'b -> 'a"
         "let const2 x y = y",                       type_ok "forall 'a 'b. 'a -> 'b -> 'b"
         "let choose x y = if x = y then x else y",  type_ok "forall 'a. 'a -> 'a -> 'a"
@@ -459,11 +466,18 @@ module Tests =
         "app poly",                                 type_ok "(forall 'a. 'a -> 'a) -> int * bool"
         "app poly id",                              type_ok "int * bool"
         "map id [id]",                              type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
+
+        "map poly ids",                             type_ok "list (int * bool)"
+        "append (single inc) ids",                  type_ok "list (int -> int)"
         "map poly ids, append (single inc) ids",    type_ok "list (int * bool) * list (int -> int)"
-        "let ids : _|_ = single id
+
+        "let ids : list (forall 'a. 'a -> 'a) = ids
          in
-            map poly ids, append (single inc) ids", type_ok "list (int * bool) * list (int -> int)" // ids is bound as a flex type
-        "let ids = single id
+            map poly ids",                          type_ok "list (int * bool)"
+        "let ids : forall 'a. list ('a -> 'a) = ids
+         in
+            map poly ids",                          type_ok "list (int * bool)"
+        "let ids : forall 'a. list ('a -> 'a) = ids
          in
             map poly ids, append (single inc) ids", type_ok "list (int * bool) * list (int -> int)" // ids is bound as an F-type
       ]
@@ -533,13 +547,13 @@ module Tests =
     let all : section list =
       [
         type_equality
-        intrinsics
-        scoping
-        type_annotations
-        scoped_type_variables
-        lists
-        hindley_milner
-        hml
+//        intrinsics
+//        scoping
+//        type_annotations
+//        scoped_type_variables
+//        lists
+//        hindley_milner
+//        hml
 //        higher_rank
       ]
     

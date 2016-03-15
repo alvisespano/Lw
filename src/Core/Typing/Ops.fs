@@ -103,7 +103,7 @@ let possibly_tuple L0 e tuple cs =
 //
 
 let rec subst_kind (kθ : ksubst) =
-    let S x = subst_kind kθ x
+    let S k = subst_kind kθ k
     in function
     | K_Cons (x, ks) -> K_Cons (x, List.map S ks)
     | K_Var α as k ->
@@ -116,31 +116,39 @@ let subst_var (tθ : tsubst) α =
     #if DEBUG
     | Some (T_Var (β, _)) -> β
     | None                -> α
-    | t                   -> unexpected "substituting var to non-var type: %s" __SOURCE_FILE__ __LINE__ (subst<_>.pretty_item (α, t))
+    | t                   -> unexpected "substituting type variable with non-variable type: %s" __SOURCE_FILE__ __LINE__ (subst<_>.pretty_item (α, t))
     #else
     | Some (T_Var (β, _)) -> β
     | _                   -> α
     #endif
 
-let rec subst_ty θ =
-    let S x = subst_ty θ x
-    let Sk = subst_kind θ.k
-    in function
-    | T_Var (α, k) ->
-        match θ.t.search α with
-        | Some t' -> S t'               // reapply substitution to the resulting tyvar, which actually is not needed except for substituting kinds
-        | None    -> T_Var (α, Sk k)    // substitute kinds also in the resulting tyvar
-
-    | T_Forall (α, t)           -> T_Forall (subst_var θ.t α, S t)
-    | T_Cons (x, k)             -> T_Cons (x, Sk k)
-    | T_App (t1, t2)            -> T_App (S t1, S t2)
-    | T_HTuple ts               -> T_HTuple (List.map S ts)
-    | T_Closure (x, Δ, τ, k)    -> T_Closure (x, Δ, τ, Sk k)
+let rec subst_ty =
+    let rec subst_ty_in_ty (tθ : tsubst) =
+        let S t = subst_ty_in_ty tθ t
+        in function
+        | T_Var (α, _) as t         -> either t (tθ.search α)
+        | T_Forall (α, t)           -> T_Forall (subst_var tθ α, S t)
+        | T_App (t1, t2)            -> T_App (S t1, S t2)
+        | T_HTuple ts               -> T_HTuple (List.map S ts)
+        | T_Cons _
+        | T_Closure _ as t          -> t
+    let rec subst_kind_in_ty kθ =
+        let S t = subst_kind_in_ty kθ t
+        let Sk k = subst_kind kθ k
+        function
+        | T_Var (α, k)              -> T_Var (α, Sk k)
+        | T_Forall (α, t)           -> T_Forall (α, S t)
+        | T_Cons (x, k)             -> T_Cons (x, Sk k)
+        | T_App (t1, t2)            -> T_App (S t1, S t2)
+        | T_HTuple ts               -> T_HTuple (List.map S ts)
+        | T_Closure (x, Δ, τ, k)    -> T_Closure (x, Δ, τ, Sk k)
+    in
+        fun θ t -> t |> subst_ty_in_ty θ.t |> subst_kind_in_ty θ.k
 
 let rec subst_fxty θ =
     let S x = subst_fxty θ x
-    let St = subst_ty θ
-    let Sk = subst_kind θ.k
+    let St t = subst_ty θ t
+    let Sk k = subst_kind θ.k k
     in function
     | Fx_Bottom k             -> Fx_Bottom (Sk k)
     | Fx_F_Ty t               -> Fx_F_Ty (St t)
