@@ -29,8 +29,8 @@ let rec kmgu (ctx : uni_context) k1_ k2_ =
       let θ as r =
       #endif
         match k1, k2 with
-        | k1, k2 when k1 = k2 ->
-            ksubst.empty
+//        | k1, k2 when k1 = k2 ->
+//            ksubst.empty
                                      
         | K_Cons (x1, ks1), K_Cons (x2, ks2) when x1 = x2 && ks1.Length = ks2.Length ->
             List.fold2 (fun tθ t t' -> let tθ' = R t t' in tθ' ** tθ) ksubst.empty ks1 ks2

@@ -82,18 +82,18 @@ let rec resolve_constraints (ctx : context) e0 =
                     if not (Seq.isEmpty jkσs) then
                         match search_best_candidate uctx (fun cand -> if strict then cand.δ = 0 else true) x t jkσs with
                         | None -> ()
-                        | Some cand ->
-                            L.resolve Normal "%s : %O\n ~~> %O" x t cand
+                        | Some candidate ->
+                            L.resolve Normal "%s : %O\n ~~> %O" x t candidate
                             do! M.remove_constraint c
-                            do! M.update_θ cand.θ
+                            do! M.update_θ candidate.θ
                             let p = P_CId c
-                            let e1 = E_Jk cand.jk
+                            let e1 = E_Jk candidate.jk
                             let e2 = e0.value
                             M.translate <- Let (L0 (D_Bind [{ qual = decl_qual.none; patt = L0 p; expr = L0 e1 }]), L0 e2)
-                            do! M.add_constraints cand.constraints
-                            if cand.constraints.exists (fun c' -> x = c'.name && t = c'.ty) then
+                            do! M.add_constraints candidate.constraints
+                            if candidate.constraints.exists (fun c' -> x = c'.name && t.is_equivalent c'.ty) then
                                 return Report.Warn.cyclic_constraint loc c t
                 let! cs' = M.get_constraints
-                if not (cs.forall (fun c -> cs'.exists (fun c' -> c.name = c'.name && c.ty = c'.ty))) then
+                if not (cs.forall (fun c -> cs'.exists (fun c' -> c.name = c'.name && c.ty.is_equivalent c'.ty))) then
                     do! resolve_constraints ctx e0
     }

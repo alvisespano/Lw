@@ -334,27 +334,27 @@ type var with
 // kinds
 //
 
-type [< NoComparison; CustomEquality; Diagnostics.DebuggerDisplay("{ToString()}") >] kind =
+type [< NoComparison; NoEquality; Diagnostics.DebuggerDisplay("{ToString()}") >] kind =
     | K_Var of var
     | K_Cons of id * kind list
 with
     interface annotable with
         member __.annot_sep = Config.Printing.kind_annotation_sep
 
-    override x.Equals y = CustomCompare.equals_with (fun x y -> (x :> IEquatable<kind>).Equals y) x y
-
-    override this.GetHashCode () =
-        match this with
-        | K_Cons (x, ks)    -> (x, ks).GetHashCode ()
-        | K_Var α           -> α.GetHashCode ()
-
-    interface IEquatable<kind> with
-        member x.Equals y =
-            match x, y with
-            | K_Cons (x1, ks1), K_Cons (x2, ks2)
-                when ks1.Length = ks2.Length     -> x1 = x2 && List.forall2 (=) ks1 ks2
-            | K_Var α, K_Var β                   -> α = β
-            | _                                  -> false
+//    override x.Equals y = CustomCompare.equals_with (fun x y -> (x :> IEquatable<kind>).Equals y) x y
+//
+//    override this.GetHashCode () =
+//        match this with
+//        | K_Cons (x, ks)    -> (x, ks).GetHashCode ()
+//        | K_Var α           -> α.GetHashCode ()
+//
+//    interface IEquatable<kind> with
+//        member x.Equals y =
+//            match x, y with
+//            | K_Cons (x1, ks1), K_Cons (x2, ks2)
+//                when ks1.Length = ks2.Length     -> x1 = x2 && List.forall2 (=) ks1 ks2
+//            | K_Var α, K_Var β                   -> α = β
+//            | _                                  -> false
 
 
 let K_Id x = K_Cons (x, [])
@@ -386,6 +386,12 @@ let K_Star = K_Id Config.Typing.Names.Kind.star
 let (|K_Star|_|) = function
     | K_Id s when s = Config.Typing.Names.Kind.star -> Some ()
     | _ -> None
+
+type kind with
+    member this.is_star =
+        match this with
+        | K_Star -> true
+        | _ -> false
 
 let K_Row = K_Cons (Config.Typing.Names.Kind.row, [])
 let (|K_Row|_|) = function

@@ -55,7 +55,7 @@ let W_lit = function
     | Char _      -> T_Char
     | Unit        -> T_Unit
 
-let auto_jk decl_qual x t = if decl_qual.over then Jk_Inst (x, t.GetHashCode ()) else Jk_Var x
+let auto_jk decl_qual x (ϕ : fxty) = if decl_qual.over then Jk_Inst (x, ϕ.pretty.GetHashCode ()) else Jk_Var x
 
 let gen_bind ctx prefixes ({ id = x; qual = dq; expr = e0; to_bind = ϕ } as gb) =
     let M = new translatable_type_inference_builder<_> (e0)
@@ -714,7 +714,7 @@ and W_patt' ctx (p0 : patt) : M<fxty> =
             yield tα
 
         | P_As (p, x) ->
-            yield! W_patt ctx (Lo0 <| P_And (p, Lo0 (P_Var x)) )
+            yield! W_patt ctx (Lo0 <| P_And (p, Lo0 (P_Var x)))
 
         | P_Wildcard ->
             yield! W_patt ctx (Lo0 <| P_Var (fresh_reserved_id ()))

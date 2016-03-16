@@ -53,7 +53,8 @@ with
 
 // TODO: reuse this for interactive as well
 type typechecker () =
-    let mutable st = { state.empty with Γ = Intrinsic.envs.envs0.Γ; γ = Intrinsic.envs.envs0.γ }
+    let st0 = { state.empty with Γ = Intrinsic.envs.envs0.Γ; γ = Intrinsic.envs.envs0.γ }
+    let mutable st = st0
 
     member private __.unM f x =
         let ctx0 = context.top_level
@@ -61,6 +62,8 @@ type typechecker () =
         st <- st1
         r
                 
+    member __.reset_state = st <- st0
+
     member this.W_expr e = this.unM W_expr e
     member this.W_decl d = this.unM W_decl d
     member this.Wk_and_eval_ty_expr_fx τ = this.unM Wk_and_eval_ty_expr_fx τ
@@ -72,8 +75,9 @@ type typechecker () =
         let τ =
             try parse_ty_expr s
             with :? syntax_error as e -> unexpected "syntax error while parsing type expression: %s\n%O" __SOURCE_FILE__ __LINE__ s e
-        let ϕ, k = this.Wk_and_eval_ty_expr_fx τ
-        assert (ϕ.kind = k)
+        this.reset_state
+        let ϕ, _ = this.Wk_and_eval_ty_expr_fx τ
+        this.reset_state
         ϕ
 
     member this.parse_ty_expr_and_auto_gen s =
@@ -166,7 +170,7 @@ let testing pri doc = L.pp (L.test pri) doc
 let compare_test eq_fxty eq_ty eq_kind (ϕres : fxty) (ϕok : fxty) =
     let tb = eq_ty ϕok.ftype ϕres.ftype
     let kb = eq_kind ϕok.kind ϕres.kind
-    let ϕb = //eq_fxty ϕok ϕres
+    let ϕb =
         match ϕres.is_really_flex, ϕok.is_really_flex with
         | true, true   -> eq_fxty ϕres ϕok
         | false, true  -> false
@@ -175,7 +179,7 @@ let compare_test eq_fxty eq_ty eq_kind (ϕres : fxty) (ϕok : fxty) =
     in
         ϕb, tb, kb
 
-let compare_test_eq = compare_test (=) (=) (=)
+let compare_test_eq = compare_test (fun (x : fxty) y -> x.is_equivalent y) (fun (x : ty) y -> x.is_equivalent y) (fun (x : kind) y -> x.is_equivalent y)   
 
 let compare_test_verbatim =
     let p x =
@@ -222,25 +226,30 @@ let test_entry (tchk : typechecker) sec n ((s1, res) : entry) =
     let infs0 = [ entry_info sec n ]
     match res with
     | result.TypeEq (s2, is_eq) ->
-        let ϕ1 =tchk.parse_ty_expr s1
+        let ϕ1 = tchk.parse_ty_expr s1
         let ϕ2 = tchk.parse_ty_expr s2
         let t1 = ϕ1.ftype
         let t2 = ϕ2.ftype
-        let b1 = ϕ1 = ϕ2
-        let b2 = t1 = t2
+        let k1 = ϕ1.kind
+        let k2 = ϕ2.kind
+        let b1 = ϕ1.is_equivalent ϕ2
+        let b2 = t1.is_equivalent t2
+        let b3 = k1.is_equivalent k2
         let infs =
             infs0 @
             [ "parsed", txt s1 <+> txt "=" <+> txt s2
               "flex types", ok_or_no_info b1 (fxty ϕ1 <+> txt "=" <+> fxty ϕ2)
-              "F-types", ok_or_no_info b2 (ty t1 <+> txt "=" <+> ty t2) ]
+              "F-types", ok_or_no_info b2 (ty t1 <+> txt "=" <+> ty t2)
+              "kinds", ok_or_no_info b3 (kind k1 <+> txt "=" <+> kind k2) ]
         let test_ok' = if is_eq then test_ok else test_failed
         let test_failed' = if is_eq then test_failed else test_ok
         in
-            (match b1, b2 with
-            | true, true    -> test_ok' "types are equivalent" 
-            | true, false   -> test_weak_ok "flex types are equivalent but F-types are different"
-            | false, true   -> test_weak_ok "F-types are equivalent but flex types are different"
-            | false, false  -> test_failed' "types are different")
+            (match b1, b2, b3 with
+            | true, true, true  -> test_ok' "types are equivalent" 
+            | true, true, false -> test_weak_ok "types are equivalent but kinds are different" 
+            | true, false, _    -> test_weak_ok "flex types are equivalent but F-types are different"
+            | false, true, _    -> test_weak_ok "F-types are equivalent but flex types are different"
+            | false, false, _   -> test_failed' "types are different")
                 infs
 
     | result.TypedOk (so, flags) ->
@@ -340,6 +349,13 @@ module Tests =
     let type_equality =
       "Type Equality",
       [
+        "int",                                      type_eq "int"
+        "'a",                                       type_eq "'a"
+        "'a",                                       type_eq "'b"
+        "'e",                                       type_eq "'q"
+        "'a * int",                                 type_eq "'a * int"
+        "'a -> 'b",                                 type_eq "'a * 'b"
+        "'c -> 'e",                                 type_eq "'a -> 'b"
         "forall 'a 'b. 'a -> 'b",                   type_eq "forall 'a 'b. 'a -> 'b"
         "forall 'a 'b. 'a -> 'b",                   type_eq "forall 'a 'b. 'b -> 'a"
         "forall 'a 'b. 'a -> 'b",                   type_eq "forall 'b 'a. 'a -> 'b"

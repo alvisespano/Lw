@@ -21,7 +21,7 @@ open Lw.Core.Absyn
 // types, schemes, constraints, environments, etc.
 //
 
-type [< NoComparison; StructuralEquality >] kscheme = { forall : Set<var>; kind : kind }
+type [< NoComparison; NoEquality >] kscheme = { forall : Set<var>; kind : kind }
 with
     static member binding_separator = "::"
 
@@ -32,64 +32,6 @@ type kconsenv = Env.t<id, var list * kind>
 type kinded =
     abstract kind : kind
 
-module TyEq =
-    type state = Env.t<var, var>
-
-    type M<'a> = Monad.M<'a, state>
-
-    type equivalent<'t> =
-        inherit kinded
-        abstract is_equivalent : 't -> M<bool>
-
-    type state_builder<'t when 't :> equivalent<'t>> () =
-        inherit Monad.state_builder<state> ()
-
-        member M.is_var_equivalent (α : var) (β : var) =
-            M {
-                let! env = M.get_state
-                match env.search α with
-                | Some α' ->
-                    #if DEBUG_TYPE_EQUALITY
-                    L.debug Unmaskerable "%O |-> %O = %O: %b" α α' β (α' = β)
-                    #endif
-                    return α' = β
-                | None ->
-                    do! M.lift_state <| fun env -> env.bind α β
-                    #if DEBUG_TYPE_EQUALITY
-                    L.debug Unmaskerable "%O |-> %O" α β
-                    #endif
-                    return true
-            }
-
-        member M.is_equivalent (x : 't) y =
-            M {
-                let! r = x.is_equivalent y
-                #if DEBUG_TYPE_EQUALITY
-                L.debug Unmaskerable "%O is equivalent to %O: %b" x y (r && x.kind = y.kind)
-                #endif
-                return r && x.kind = y.kind
-            }
-
-        member M.are_equivalent l1 l2 =
-            M {
-                return! M.List.fold (fun b (t1, t2) -> M { let! b' = M.is_equivalent t1 t2 in return b' && b }) true (List.zip l1 l2)
-            }
-
-        member M.binop_and_with_undo x y =
-            M {
-                let! st = M.get_state
-                let! a = x
-                if a then
-                    let! b = y
-                    if b then return true
-                    else
-                        do! M.set_state st
-                        return false
-                else 
-                    do! M.set_state st
-                    return false
-            }
-
 
 
 // System-F types
@@ -97,7 +39,7 @@ module TyEq =
 
 type tenv = Env.t<id, ty>   // type constructor environment (namely, δ, analogous to the value environment Δ)
 
-and [< NoComparison; CustomEquality; DebuggerDisplay("{ToString()}") >] ty =
+and [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] ty =
     | T_Cons of id * kind
     | T_Var of var * kind    
     | T_HTuple of ty list   // TODOL: try to design a more general Rowed type which does not expect star on fields, and encode htuples with it
@@ -107,20 +49,38 @@ and [< NoComparison; CustomEquality; DebuggerDisplay("{ToString()}") >] ty =
 with
     static member binding_separator = Config.Printing.type_annotation_sep
 
-    override x.Equals y = CustomCompare.equals_with (fun x y -> (x :> IEquatable<ty>).Equals y) x y
-
-    override this.GetHashCode () =
-        match this with
-        | T_Cons (x, k)             -> (x, k).GetHashCode ()
-        | T_Var (α, k)              -> (α, k).GetHashCode ()
-        | T_HTuple ts               -> ts.GetHashCode ()
-        | T_App (t1, t2)            -> (t1, t2).GetHashCode ()
-        | T_Forall (α, t)           -> (α, t).GetHashCode ()
-        | T_Closure (_, _, _, _)    -> unexpected "hashing type closure: %O" __SOURCE_FILE__ __LINE__ this   
-
     member this.kind = (this :> kinded).kind
 
-    interface TyEq.equivalent<ty> with
+//    override x.Equals y = CustomCompare.equals_with (fun x y -> (x :> IEquatable<ty>).Equals y) x y
+//
+//    override this.GetHashCode () =
+//        match this with
+//        | T_Cons (x, k)             -> (x, k).GetHashCode ()
+//        | T_Var (α, k)              -> (α, k).GetHashCode ()
+//        | T_HTuple ts               -> ts.GetHashCode ()
+//        | T_App (t1, t2)            -> (t1, t2).GetHashCode ()
+//        | T_Forall (α, t)           -> (α, t).GetHashCode ()
+//        | T_Closure (_, _, _, _)    -> unexpected "hashing type closure: %O" __SOURCE_FILE__ __LINE__ this   
+//
+////
+//    interface IEquatable<ty> with
+//        member x.Equals y = (x :> TyEq.equivalent<ty>).is_equivalent y TyEq.state.empty |> fst
+//
+//    interface IEquatable<ty> with
+//        member x.Equals y =
+//            x.kind = y.kind
+//                 && match x, y with
+//                    | T_Cons (x, _), T_Cons (y, _)          -> x = y
+//                    | T_Var (α, _), T_Var (β, _)            -> α = β
+//                    | T_App (t1, t2), T_App (t1', t2')      -> t1 = t1' && t2 = t2'
+//                    | T_Forall (α, t1), T_Forall (β, t2)    -> α = β && t1 = t2
+//                    | T_HTuple ts, T_HTuple ts'
+//                        when ts.Length = ts'.Length         -> List.fold2 (fun b t t' -> b && t = t') true ts ts'
+//                    | T_Closure _, _
+//                    | _, T_Closure _                        -> L.unexpected_error "comparing type closures: %O = %O" x y; false
+//                    | _                                     -> false
+
+    interface kinded with
         member this.kind =
             match this with
             | T_Cons (_, k)
@@ -132,62 +92,11 @@ with
                                         | K_Arrow (_, k) -> k
                                         | k              -> unexpected "non-arrow kind %O in left hand of type application: %O" __SOURCE_FILE__ __LINE__ k this
 
-        member x.is_equivalent y =
-            let M = new TyEq.state_builder<ty> ()
-            let (&&&) = M.binop_and_with_undo
-            let (|T_Foralls|_|) = (|Foralls|_|) (function T_Forall (α, t) -> Some (α, t) | _ -> None)
-            M {   
-                match x, y with
-                | T_Cons (x, _), T_Cons (y, _)          -> return x = y
-                | T_Var (α, _), T_Var (β, _)            -> return! M.is_var_equivalent α β
-                | T_App (t1, t2), T_App (t1', t2')      -> return! M.is_equivalent t1 t1' &&& M.is_equivalent t2 t2'
-
-                | T_Foralls (αs, t1), T_Foralls (βs, t2) when αs.Length = βs.Length ->
-                    let contains α βs = M {
-                        let! o = M.List.tryFind (fun β -> M { return! M.is_var_equivalent α β }) βs
-                        let! r, βs' = M {
-                            match o with
-                            | Some β' ->
-                                let! βs' = M.List.filter (fun β -> M { return β <> β' }) βs
-                                return true, βs'
-                            | None ->
-                                return false, βs
-                        }
-                        #if DEBUG_TYPE_EQUALITY
-                        L.debug Unmaskerable "%O contained in %O: %b, %O" α βs r βs'
-                        #endif
-                        return r, βs'
-                    }
-                    let rec is_permutation αs βs = M {
-                        match αs with
-                        | [] ->
-                            return true
-
-                        | α :: αs ->
-                            let! a, βs' = contains α βs
-                            let! b = is_permutation αs βs'                                
-                            return a && b
-                    }
-                    return! M.is_equivalent t1 t2 &&& is_permutation αs βs
-
-                | T_HTuple ts, T_HTuple ts' when ts.Length = ts'.Length ->
-                    return! M.are_equivalent ts ts'
-
-                #if DEBUG
-                | T_Closure _, _ | _, T_Closure _       -> L.unexpected_error "comparing type closures: %O = %O" x y
-                                                           return false
-                #endif
-                | _                                     -> return false
-            }
-
-    interface IEquatable<ty> with
-        member x.Equals y = (x :> TyEq.equivalent<ty>).is_equivalent y TyEq.state.empty |> fst
-
 
 // flexible types
 //
 
-type [< NoComparison; CustomEquality; DebuggerDisplay("{ToString()}") >] fxty =
+type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] fxty =
     | Fx_Forall of (var * fxty) * fxty
     | Fx_Bottom of kind
     | Fx_F_Ty of ty
@@ -195,95 +104,25 @@ with
     static member binding_separator = Config.Printing.type_annotation_sep
     static member reduction_separator = Config.Printing.ftype_instance_of_fxty_sep
 
-    override x.Equals y = CustomCompare.equals_with (fun x y -> (x :> IEquatable<fxty>).Equals y) x y
-
-    override this.GetHashCode () =
-        match this with
-        | Fx_Bottom k                -> k.GetHashCode ()
-        | Fx_Forall ((α, ϕ1), ϕ2)    -> (α, ϕ1, ϕ2).GetHashCode ()
-        | Fx_F_Ty t                  -> t.GetHashCode ()
-
     member this.kind = (this :> kinded).kind
 
-    interface TyEq.equivalent<fxty> with
+    interface kinded with
         member this.kind =
             match this with
             | Fx_Bottom k             -> k
             | Fx_Forall (_, ϕ)        -> ϕ.kind
             | Fx_F_Ty t               -> t.kind
 
-        member x.is_equivalent y =
-            let M = new TyEq.state_builder<fxty> ()
-            let (&&&) = M.binop_and_with_undo
-            let (|Fx_Foralls|_|) = (|Foralls|_|) (function Fx_Forall ((α, t1), t2) -> Some ((α, t1), t2) | _ -> None)
-            M {
-                match x, y with
-                | Fx_Foralls (αs, ϕ1), Fx_Foralls (βs, ϕ2) ->
-                    let contains (α, αϕ) βs = M {
-//                        let! o = M.List.tryFind (fun (β, βϕ) -> M {
-//                                    let! st = M.get_state
-//                                    let! a = M.is_equivalent αϕ βϕ
-//                                    let! b = M.is_var_equivalent α β
-//                                    if a && b then return true
-//                                    else
-//                                        do! M.set_state st  // restore state when false, otherwise variable bindings created while comparing bounds may be kept
-//                                        return false
-//                                }) βs
-//                        let! r, βs' = M {
-//                            match o with
-//                            | Some (β', _) ->
-//                                let! βs' = M.List.filter (fun (β, _) -> M { return β <> β' }) βs
-//                                return true, βs'
-//                            | None ->
-//                                return false, βs
-//                        }
-                        let rec R βs' βs = M {
-                            match βs with
-                            | [] ->
-                                return false, βs'
-
-                            | (β, βϕ) :: βs ->
-                                let! st = M.get_state
-                                let! a = M.is_equivalent αϕ βϕ
-                                let! b = M.is_var_equivalent α β
-                                if a && b then return true, βs' @ βs
-                                else
-                                    do! M.set_state st  // restore state when false, otherwise variable bindings created while comparing bounds may be kept
-                                    return! R (βs' @ [β, βϕ]) βs
-                        }
-                        let! r, βs' = R [] βs
-                        #if DEBUG_TYPE_EQUALITY
-                        L.debug Unmaskerable "%O contained in %O: %b, %O" α βs r βs'
-                        #endif
-                        return r, βs'
-                    }
-                    let rec is_permutation αs βs = M {
-                        match αs with
-                        | [] ->
-                            return true
-
-                        | α :: αs ->
-                            let! a, βs' = contains α βs
-                            let! b = is_permutation αs βs'                                
-                            #if DEBUG_TYPE_EQUALITY
-                            L.debug Unmaskerable "%O is permutation of %O: %b" αs βs (a && b)
-                            #endif
-                            return a && b
-                    }
-                    return! M.is_equivalent ϕ1 ϕ2 &&& is_permutation αs βs
-
-
-                | Fx_F_Ty t1, Fx_F_Ty t2 ->
-                    return! (t1 :> TyEq.equivalent<ty>).is_equivalent t2
-
-                | Fx_Bottom k1, Fx_Bottom k2 ->
-                    return k1 = k2
-
-                | _ -> return false
-            }
-
-    interface IEquatable<fxty> with
-        member x.Equals y = (x :> TyEq.equivalent<fxty>).is_equivalent y TyEq.state.empty |> fst
+//    override x.Equals y = CustomCompare.equals_with (fun x y -> (x :> IEquatable<fxty>).Equals y) x y
+//
+//    override this.GetHashCode () =
+//        match this with
+//        | Fx_Bottom k                -> k.GetHashCode ()
+//        | Fx_Forall ((α, ϕ1), ϕ2)    -> (α, ϕ1, ϕ2).GetHashCode ()
+//        | Fx_F_Ty t                  -> t.GetHashCode ()
+//
+//    interface IEquatable<fxty> with
+//        member x.Equals y = (x :> TyEq.equivalent<fxty>).is_equivalent y TyEq.state.empty |> fst
 
 
 
@@ -378,7 +217,7 @@ module constraints =
 // schemes and predicates
 //
     
-type [< NoComparison; StructuralEquality; DebuggerDisplay("{ToString()}") >] scheme =
+type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] scheme =
     {
 //        type_constraints : type_constraints
         constraints      : constraints
@@ -413,7 +252,7 @@ type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] prefix =
     static member pretty_item = function
         | α, Fx_Bottom K_Star        -> sprintf "%O" α
         | α, Fx_Bottom k             -> sprintf "(%O :: %O)" α k
-        | α, t when t.kind = K_Star  -> sprintf "(%O %s %O)" α Config.Printing.var_bound_sep t
+        | α, t when t.kind.is_star   -> sprintf "(%O %s %O)" α Config.Printing.var_bound_sep t
         | α, t                       -> sprintf "((%O :: %O) %s %O)" α t.kind Config.Printing.var_bound_sep t
 
     static member pretty_as_prefix Q = mappen_strings_or_nothing prefix.pretty_item Config.Printing.empty_prefix Config.Printing.forall_prefix_sep Q
@@ -424,6 +263,13 @@ type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] prefix =
         match this with
         | Q_Nil         -> z
         | Q_Cons (Q, i) -> f (Q.fold f z) i
+    
+    member Q.insert i =
+        let rec R = function
+            | Q_Nil          -> Q_Cons (Q_Nil, i)
+            | Q_Cons (Q, i') -> Q_Cons (R Q, i')
+        in
+            R Q
 
     static member (+) (Q : prefix, (α, t : fxty)) = Q_Cons (Q, (α, t))
     static member (+) (Q1 : prefix, Q2 : prefix) = Q2.fold (fun (Q : prefix) (α, t) -> Q + (α, t)) Q1
@@ -639,7 +485,7 @@ type [< NoComparison >] subst< [<EqualityConditionalOn>] 't> (env : Env.t<var, '
 type ksubst = subst<kind>
 type tsubst = subst<ty>
 
-type [< NoComparison; StructuralEquality >] tksubst = { t : tsubst; k : ksubst }
+type [< NoComparison; NoEquality >] tksubst = { t : tsubst; k : ksubst }
 with
     static member op_Implicit tθ = { t = tθ; k = ksubst.empty }
     static member op_Implicit kθ = { t = tsubst.empty; k = kθ }
@@ -722,8 +568,8 @@ let pretty_kinded_wrapper R' t =
         let k = (t :> kinded).kind
         in
             match k with
-            | K_Arrows1 ks when List.forall ((=) K_Star) ks -> R' t
-            | _                                             -> sprintf "(%s :: %O)" (R' t) k
+            | K_Arrows1 ks when List.forall (fun (k : kind) -> k.is_star) ks -> R' t
+            | _                                                              -> sprintf "(%s :: %O)" (R' t) k
     in
         R t
 

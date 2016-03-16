@@ -1,4 +1,11 @@
 ﻿
+16/3/2016:
+* REFACT: types, kinds and all relevant data structures are not comparable nor equatable anymore
+* REFACT: type equivalence redesigned: now equivalence function for kinds, tys and fxtys are monadic and in mutual letrec and each 'is_equivalent' member is just an unmonadization
+* BUG: type equivalence is still bugged: probably there's something wrong with the monad state being dirty across multiple type equivalence tests
+* UP: UnitTest typechecker state can be reset explicity now; parse_ty_expr also resets the state everytime
+
+
 15/3/2016:
 * FIX: HML is working as intended: the bug seen yesterday is actually not a bug
 * UP: now let bindings do not reduce to F-types by default anymore

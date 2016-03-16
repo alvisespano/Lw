@@ -52,9 +52,13 @@ let private Et n loc fmt = E (fun args -> new type_error (args)) n loc fmt
 let private Ek n loc fmt = E (fun args -> new kind_error (args)) n loc fmt
    
 let private mismatch E (n : int) (loc : location) what1 what2 expected1 got1 expected2 got2 =
+    let expected1 = sprintf "%O" expected1
+    let expected2 = sprintf "%O" expected2
+    let got1 = sprintf "%O" got1
+    let got2 = sprintf "%O" got2
     use N = var.reset_normalization
-    let s = sprintf "%s was expected to have %s %O but got %s %O" what1 what2 expected1 what2 got1
-    let s = s + if expected1 <> expected2 && got1 <> got2 then sprintf ", because %s %O is not compatible with %O" what2 expected2 got2 else ""
+    let s = sprintf "%s was expected to have %s %s but got %s %s" what1 what2 expected1 what2 got1
+    let s = s + if expected1 <> expected2 && got1 <> got2 then sprintf ", because %s %s is not compatible with %s" what2 expected2 got2 else ""
     in
         E n loc ("%s" : StringFormat<_, _>) s
 
