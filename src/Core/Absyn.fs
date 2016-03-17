@@ -273,10 +273,10 @@ type var with
         }
 
     member __.is_quantification_enabled = not (!var.forall).IsEmpty
-    member private __.has_normalization_enabled = if var.ctx_stack.Count > 0 then Some (var.ctx_stack.Peek ()) else None
+    member __.is_normalization_enabled = if var.ctx_stack.Count > 0 then Some (var.ctx_stack.Peek ()) else None
     
     member this.pretty =
-        match this.has_normalization_enabled with
+        match this.is_normalization_enabled with
         | None     -> this.pretty_unnormalized
         | Some ctx -> this.pretty_normalized ctx
 
@@ -314,7 +314,7 @@ type var with
                     in
                         R s 0
         ctx.env <- env.bind this.uid name
-        name |> this.pretty_with_quantification
+        this.pretty_with_quantification name
 
     member this.pretty_with_quantification name =
         #if DEBUG_VAR_NAMES
@@ -514,9 +514,8 @@ with
         member __.annot_sep = Config.Printing.kind_annotation_sep
 
 and [< NoComparison; NoEquality >] ty_uexpr =
-    | Te_PolyVar of id      // TODOL: this could be renamed as Te_Var simply
-    | Te_Id of id
-    | Te_Bottom
+    | Te_Var of id
+    | Te_Cons of id
     | Te_Lambda of kinded_param * ty_expr
     | Te_HTuple of ty_expr list
     | Te_App of (ty_expr * ty_expr)
@@ -524,7 +523,15 @@ and [< NoComparison; NoEquality >] ty_uexpr =
     | Te_Match of ty_expr * ty_case list
     | Te_Annot of ty_expr * kind
     | Te_Row of (id * ty_expr) list * ty_expr option
-    | Te_Forall of (kinded_param * ty_expr option) * ty_expr
+    | Te_Forall of kinded_param * ty_expr
+with
+    interface annotable with
+        member __.annot_sep = Config.Printing.kind_annotation_sep
+
+and [< NoComparison; NoEquality >] fxty_uexpr =
+    | Fxe_Bottom
+    | Fxe_Forall of (kinded_param * fxty_expr option) * fxty_expr
+    | Fxe_F_Ty of ty_expr
 with
     interface annotable with
         member __.annot_sep = Config.Printing.kind_annotation_sep
@@ -538,13 +545,14 @@ and ty_binding = qbinding<ty_decl_qual, ty_upatt, ty_uexpr, kind>
 and ty_rec_binding = rec_qbinding<ty_decl_qual, kind, ty_uexpr, kind>
 
 and ty_expr = node<ty_uexpr, kind>
+and fxty_expr = node<fxty_uexpr, kind>
 and ty_patt = node<ty_upatt, kind>
 and ty_decl = node<ty_udecl, kind>
 and ty_case = case<ty_upatt, ty_uexpr, kind>
 
 and typed_param = ty_expr id_param
 
-let private Te_Primitive name = Te_Id name
+let private Te_Primitive name = Te_Cons name
 let Te_Unit = Te_Primitive Config.Typing.Names.Type.unit
 
 // special patterns for type expressions and type patterns
@@ -561,13 +569,14 @@ let nodify make app (|App|_|) =
         Apps >> snd, l (|Apps1|), l (|Apps|_|) 
 
 let Te_Apps, (|Te_Apps1|), (|Te_Apps|_|) = nodify make_apps_by Te_App (function Te_App (τ1, τ2) -> Some (τ1, τ2) | _ -> None)
-let Te_Arrow, (|Te_Arrow|_|) = let A = Config.Typing.Names.Type.arrow in make_arrow_by_apps (ULo (Te_Id A)) Te_Apps (function ULo (Te_Id x) when x = A -> Some () | _ -> None) (|Te_Apps|_|)
+let Te_Arrow, (|Te_Arrow|_|) = let A = Config.Typing.Names.Type.arrow in make_arrow_by_apps (ULo (Te_Cons A)) Te_Apps (function ULo (Te_Cons x) when x = A -> Some () | _ -> None) (|Te_Apps|_|)
 let Te_Arrows, (|Te_Arrows1|), (|Te_Arrows|_|) = nodify make_arrows_by Te_Arrow (|Te_Arrow|_|)
 let Te_Foralls, (|Te_Foralls0|), (|Te_Foralls|_|) = make_foralls (fun (α, τ) -> Lo τ.loc <| Te_Forall (α, τ)) (function ULo (Te_Forall (α, τ)) -> Some (α, τ) | _ -> None)
+let Fxe_Foralls, (|Fxe_Foralls0|), (|Fxe_Foralls|_|) = make_foralls (fun (α, τ) -> Lo τ.loc <| Fxe_Forall (α, τ)) (function ULo (Fxe_Forall (α, τ)) -> Some (α, τ) | _ -> None)
 
-let private Te_Rowed name r = Te_App (ULo <| Te_Id name, ULo <| Te_Row r)
+let private Te_Rowed name r = Te_App (ULo <| Te_Cons name, ULo <| Te_Row r)
 let private (|Te_Rowed|_|) name = function
-    | Te_App (ULo (Te_Id name'), ULo (Te_Row (xes, xo))) when name = name' -> Some (xes, xo)
+    | Te_App (ULo (Te_Cons name'), ULo (Te_Row (xes, xo))) when name = name' -> Some (xes, xo)
     | _ -> None
 
 let Te_Record, Te_Variant, Te_Tuple, (|Te_Record|_|), (|Te_Variant|_|), (|Te_Tuple|_|) = make_rows Te_Rowed (|Te_Rowed|_|)
@@ -620,15 +629,15 @@ type ty_uexpr with
     member this.pretty =
         let (|App|) =
             let (|R|_|) = function
-                | ULo (Te_PolyVar _ | Te_Record _ | Te_Variant _ | Te_Id _) as e -> Some e
+                | ULo (Te_Var _ | Te_Record _ | Te_Variant _ | Te_Cons _) as e -> Some e
                 | _ -> None
             in
                 (|Application|) (function ULo (Te_App (e1, e2)) -> Some (e1, e2) | _ -> None) (|R|_|)
-        let (|Te_Sym|_|) = (|Sym|_|) (function Te_Id x -> Some (x, x) | _ -> None)
+        let (|Te_Sym|_|) = (|Sym|_|) (function Te_Cons x -> Some (x, x) | _ -> None)
         match this with
             | Te_Sym x                 -> sprintf "(%O)" x
-            | Te_PolyVar x             -> sprintf Config.Printing.dynamic.tyvar_quantified_fmt x
-            | Te_Id x                  -> x
+            | Te_Var x             -> sprintf Config.Printing.dynamic.tyvar_quantified_fmt x
+            | Te_Cons x                  -> x
             | Te_Tuple ([] | [_])      -> unexpected "empty or unary tuple type expression" __SOURCE_FILE__ __LINE__
             | Te_Tuple es              -> sprintf "(%s)" (flatten_stringables " * " es)
             | Te_Record row            -> sprintf "{ %s }" (pretty_row "; " Config.Printing.type_annotation_sep row)
@@ -640,15 +649,23 @@ type ty_uexpr with
             | Te_Arrow (ULo (Te_Arrow _ as t1), t2) -> sprintf "(%O) -> %Os" t1 t2
             | Te_Arrow (t1, t2)               -> sprintf "%O -> %O" t1 t2
 
-            | Te_Bottom                -> Config.Printing.dynamic.bottom
             | Te_App (App s)           -> s
             | Te_Lambda (kpar, τ)      -> sprintf "fun %s -> %O" (pretty_param Config.Printing.kind_annotation_sep kpar) τ
             | Te_Annot (e, ty)         -> sprintf "(%O : %O)" e ty
             | Te_Let (d, e)            -> sprintf "let %O in %O" d e
             | Te_Match (e, cases)      -> sprintf "match %O with\n| %s" e (pretty_cases cases)
             | Te_Row (bs, o)           -> sprintf "(| %s |)" (pretty_row " | " Config.Printing.type_annotation_sep (bs, o))
-            | Te_Forall (((x, ko), None), τ2)    -> sprintf "forall %s. %O" (pretty_param Config.Printing.kind_annotation_sep (var.fresh_named x, ko)) τ2
-            | Te_Forall (((x, ko), Some τ1), τ2) -> sprintf "forall (%s >= %O). %O" (pretty_param Config.Printing.kind_annotation_sep (var.fresh_named x, ko)) τ1 τ2
+            | Te_Forall ((x, ko), τ2)  -> sprintf "forall %s. %O" (pretty_param Config.Printing.kind_annotation_sep (var.fresh_named x, ko)) τ2
+
+type fxty_uexpr with
+    override this.ToString () = this.pretty
+
+    member this.pretty =
+        match this with
+            | Fxe_Bottom -> Config.Printing.dynamic.bottom
+            | Fxe_F_Ty τ -> τ.pretty
+            | Fxe_Forall (((x, ko), None), τ2)    -> sprintf "forall %s. %O" (pretty_param Config.Printing.kind_annotation_sep (var.fresh_named x, ko)) τ2
+            | Fxe_Forall (((x, ko), Some τ1), τ2) -> sprintf "forall (%s >= %O). %O" (pretty_param Config.Printing.kind_annotation_sep (var.fresh_named x, ko)) τ1 τ2
 
 type ty_udecl with       
     override this.ToString () = this.pretty
@@ -957,7 +974,7 @@ let lambda_function lambda matchh id (cases : case<_, _, _> list) =
         L <| lambda ((x, None), (L <| matchh (L <| id x, cases)))
 
 let LambdaFunction = lambda_function Lambda Match Id
-let Te_LambdaFunction = lambda_function Te_Lambda Te_Match Te_Id
+let Te_LambdaFunction = lambda_function Te_Lambda Te_Match Te_Cons
 
 let lambda_fun (|P_Annot|_|) (|P_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) lambda lambda_function = function
     | [], _ -> unexpected "empty lambda parameter list" __SOURCE_FILE__ __LINE__
@@ -1029,7 +1046,7 @@ let lambda_cases lambdafun p_var var matchh tuple p_tuple =
     | l -> unexpected "ill-formed lambda case list: %O" __SOURCE_FILE__ __LINE__ l
     
 let LambdaCases x = lambda_cases LambdaFun P_Var Id Match Tuple P_Tuple x
-let Te_LambdaCases x = lambda_cases Te_LambdaFun Tp_Var Te_Id Te_Match Te_Tuple Tp_Tuple  x
+let Te_LambdaCases x = lambda_cases Te_LambdaFun Tp_Var Te_Cons Te_Match Te_Tuple Tp_Tuple  x
             
 let RecLambda ((x, t), cases) =
     let e = LambdaCases cases

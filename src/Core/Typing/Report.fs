@@ -165,6 +165,9 @@ module Error =
     let kind_circularity (loc : location) (k1 : kind) (k2 : kind) kα (k : kind) =
         circularity Ek 401 loc "kind" k1 k2 kα k
 
+    let type_variable_bound_to_generalized_kscheme loc x k =
+        let α = var.fresh_named x
+        Ek 402 loc "type variable %O used in place of type constructor %s :: %O" α x k
 
 
 [< RequireQualifiedAccess >]

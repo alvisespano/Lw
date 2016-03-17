@@ -267,16 +267,25 @@ kinded_param:
     id                                 { ($1, None) }
   | id COLON2 kind_annotation          { ($1, Some $3) }
   
-ty_forall_param:
+/* unused until flex types can be annotated
+fxty_forall_param:
   | TICK_ID                                             { ($1, None), None }
   | BRA TICK_ID COLON2 kind_annotation KET              { ($2, Some $4), None }
   | BRA TICK_ID COLONGT ty_expr KET                     { ($2, None), Some $4 }
   | BRA TICK_ID COLON2 kind_annotation GEQ ty_expr KET  { ($2, Some $4), Some $6 }
 
-ty_forall_params:
-    ty_forall_param                    { [$1] }
-  | ty_forall_param ty_forall_params   { $1 :: $2 }
+fxty_forall_params:
+    ty_forall_param                                     { [$1] }
+  | ty_forall_param ty_forall_params                    { $1 :: $2 }
+*/
 
+ty_forall_param:
+  | TICK_ID                                             { $1, None }
+  | BRA TICK_ID COLON2 kind_annotation KET              { $2, Some $4 }
+
+ty_forall_params:
+    ty_forall_param                                     { [$1] }
+  | ty_forall_param ty_forall_params                    { $1 :: $2 }
 
   
 /*
@@ -364,14 +373,14 @@ ty_expr_tuple_atom_:
   | ty_expr_tuple_atom COLON2 kind_annotation       { Te_Annot ($1, $3) }
 
 ty_expr_app_atom_:
-  | id                                              { Te_Id $1 }
-  | TICK_ID                                         { Te_PolyVar $1 }
-  | UNDERSCORE                                      { Te_PolyVar (fresh_reserved_id ()) }
-  | BOTTOM                                          { Te_Bottom }
+  | id                                              { Te_Cons $1 }
+  | TICK_ID                                         { Te_Var $1 }
+  | UNDERSCORE                                      { Te_Var (fresh_reserved_id ()) }
+/*  | BOTTOM                                          { Te_Bottom }*/
   | BRA ty_expr KET                                 { $2.value }
   | CURBRA ty_expr_record CURKET                    { Te_Record ($2, None) }
   | CURBRA ty_expr_record PIPE ty_expr CURKET       { Te_Record ($2, Some $4) }
-  | BRA symbol KET                                  { Te_Id $2 }
+  | BRA symbol KET                                  { Te_Cons $2 }
 
 ty_expr_record:
     id COLON ty_expr_annotation                     { [$1, $3] }

@@ -78,14 +78,14 @@ let private prompt_inferred_kind, prompt_evaluated_type =
 //
 
 [< RequireQualifiedAccess >]
-module private Eval =
+module internal Eval =
 
     let rec ty_expr (ctx : context) (τ0 : ty_expr) =
         let M = new type_eval_builder<_> (τ0)
         M {            
             let rule =
                     match τ0.value with
-                    | Te_PolyVar _  -> "(E-VAR)"
+                    | Te_Var _  -> "(E-VAR)"
                     | Te_App _      -> "(E-APP)"
                     | _             -> "[T]"
             let! θ = M.get_θ
@@ -95,24 +95,20 @@ module private Eval =
             return ϕ
         } 
 
-    and ty_expr' (ctx : context) (τ0 : ty_expr) =
+    and ty_expr' (ctx : context) (τ0 : ty_expr) : M<ty> =
         let M = new type_eval_builder<_> (τ0)
-        let E = ty_expr ctx
-        let E_F τ = M { let! (ϕ : fxty) = E τ in return ϕ.ftype }
+        let R = ty_expr ctx
         M {
             let k0 = τ0.typed       // this is the kind of the current ty_expr node being evaluated (annotated by previous Wk kind inference algorithm)
             match τ0.value with
-            | Te_Bottom ->
-                yield Fx_Bottom k0
-
-            | Te_PolyVar x ->
-                let! α = M.add_scoped_var x
+            | Te_Var x ->
+                let! α = M.search_or_add_scoped_var x
                 yield T_Var (α, k0)
 
-            | Te_Id x ->
+            | Te_Cons x ->
                 let! too = M.search_δ x
                 match too with
-                | None   -> yield T_Cons (x, k0)
+                | None   -> return Report.Error.unbound_type_symbol τ0.loc   yield T_Cons (x, k0)
                 | Some t -> yield t
 
             | Te_Lambda ((x, _), τ) ->
@@ -120,52 +116,38 @@ module private Eval =
                 yield T_Closure (x, ref Δ, τ, k0)
 
             | Te_App (τ1, τ2) ->
-                let! t1 = E_F τ1
-                let! t2 = E_F τ2
+                let! t1 = R τ1
+                let! t2 = R τ2
                 match t1 with
                 | T_Closure (x, Δr, τ, _) ->
                     return! M.undo_δ <| M {
                         do! M.set_δ !Δr
                         do! M.bind_δ x t2
-                        yield! E τ
+                        yield! R τ
                     }
 
                 | _ ->
                     yield T_App (t1, t2)
                         
             | Te_Annot (τ, _) ->
-                yield! E τ
+                yield! R τ
 
-            | Te_Forall (((x, _), τo1), τ2) ->
-                let! α = M.add_scoped_var x
-                let! ϕ2 = E τ2                
-                let! ϕ1 = M {
-                    match τo1 with
-                    | None ->
-                        // check for unused quantified variable: because it's done on types rather than on type expressions, which would not allows for easy controlling scoping of the var itself
-                        let k =
-                            match ϕ2.ftype.search_var α with
-                            | Some k -> k
-                            | None   -> Report.Warn.unused_quantified_type_variable τ2.loc α ϕ2
-                                        kind.fresh_var
-                        in
-                            return Fx_Bottom k
-
-                    | Some τ1 -> return! E τ1
-                }
-                match ϕ1, ϕ2 with
-                | Fx_Bottom _, Fx_F_Ty t -> yield T_Forall (α, t) 
-                | _                      -> yield Fx_Forall ((α, ϕ1), ϕ2)
+            | Te_Forall ((x, _), τ) ->
+                let! α = M.bind_scoped_var x
+                let! t = R τ
+                // check if quantified var is unused
+                if t.search_var(α).IsNone then Report.Warn.unused_quantified_type_variable τ.loc α t
+                yield T_Forall (α, t) 
 
             | Te_Let (d, τ1) ->
                 yield! M.undo_δ <| M {
                     do! ty_decl ctx d
-                    yield! E τ1
+                    yield! R τ1
                 }
 
             | Te_Row (xτs, τo) ->
-                let! xts = M.List.map (fun (x : id, τ) -> M { let! ϕ = E τ in return x, ϕ.ftype }) xτs
-                let! too = M.Option.map E_F τo
+                let! xts = M.List.map (fun (x : id, τ) -> M { let! t = R τ in return x, t }) xτs
+                let! too = M.Option.map R τo
                 match too with
                 | Some (T_Row_Var α)        -> yield T_Row (xts, Some α)
                 | Some (T_Row (xts', o))    -> yield T_Row (xts @ xts', o)
@@ -174,16 +156,16 @@ module private Eval =
 
             | Te_HTuple ([] | [_]) -> return unexpected "empty or unary htuple type expression" __SOURCE_FILE__ __LINE__
             | Te_HTuple τs ->
-                let! ts = M.List.map E_F τs
+                let! ts = M.List.map R τs
                 yield T_HTuple ts
 
             | Te_Match (τ1, cases) ->
-                let! t1 = E_F τ1
+                let! t1 = R τ1
                 yield! M.undo_δ <| M {
                     let! τo = M.List.tryPick (fun (p, _, τ) -> M { let! b = ty_patt ctx p t1 in if b then return Some τ else return None }) cases
                     match τo with
                     | None   -> return Report.Error.type_patterns_not_exhaustive τ1.loc t1
-                    | Some τ -> yield! E τ
+                    | Some τ -> yield! R τ
                 }
         }
 
@@ -191,8 +173,8 @@ module private Eval =
         let M = new type_eval_builder<_> (d)
         M {
             for { patt = p; expr = τ } in bs do
-                let! ϕ = ty_expr ctx τ
-                do! M.ignore <| ty_patt ctx p ϕ.ftype
+                let! t = ty_expr ctx τ
+                do! M.ignore <| ty_patt ctx p t
                 // prompt evaluated types
                 let! Δ = M.get_δ
                 for x in vars_in_ty_patt p do
@@ -285,17 +267,63 @@ module private Eval =
                 return false 
         }
 
+    let rec fxty_expr (ctx : context) (ϕτ0 : fxty_expr) =
+        let M = new type_eval_builder<_> (ϕτ0)
+        M {            
+            let rule = "[Fx]"
+            let! θ = M.get_θ
+            ϕτ0.typed <- subst_kind θ.k ϕτ0.typed // apply latest subst to each typed node
+            let! ϕ = fxty_expr' ctx ϕτ0
+            L.debug Min "%-7s %O\n[::k]   %O\n[T*]    %O" rule ϕτ0 ϕτ0.typed ϕ
+            return ϕ
+        } 
 
+    and fxty_expr' ctx ϕτ0 =
+        let M = new type_eval_builder<_> (ϕτ0)
+        let R = fxty_expr ctx
+        let k0 = ϕτ0.typed       // this is the kind of the current ty_expr node being evaluated (annotated by previous Wk kind inference algorithm)
+        M {
+            match ϕτ0.value with
+            | Fxe_Bottom ->
+                return Fx_Bottom k0
+
+            | Fxe_F_Ty τ ->
+                let! t = ty_expr ctx τ
+                return Fx_F_Ty t
+
+            | Fxe_Forall (((x, ko), τo1), τ2) ->
+                let! α = M.search_or_add_scoped_var x
+                let! ϕ2 = E τ2                
+                let! ϕ1 = M {
+                    match τo1 with
+                    | None ->
+                        // check for unused quantified variable: because it's done on types rather than on type expressions, which would not allows for easy controlling scoping of the var itself
+                        let k =
+                            match ϕ2.ftype.search_var α with
+                            | Some k -> k
+                            | None   -> Report.Warn.unused_quantified_type_variable τ2.loc α ϕ2
+                                        kind.fresh_var
+                        in
+                            return Fx_Bottom k
+
+                    | Some τ1 -> return! E τ1
+                }
+                match ϕ1, ϕ2 with
+                | Fx_Bottom _, Fx_F_Ty t -> yield T_Forall (α, t) 
+                | _                      -> yield Fx_Forall ((α, ϕ1), ϕ2)
+                
+               
+        }
 
 // kind inference
 //
 
 let rec Wk_ty_expr (ctx : context) (τ0 : ty_expr) =
-    let K = new kind_inference_builder<_> (τ0)
-    K {
+    let M = new kind_inference_builder<_> (τ0)
+    M {
         let rule =
                 match τ0.value with
-                | Te_PolyVar _  -> "(T-VAR)"
+                | Te_Var _  -> "(T-VAR)"
                 | Te_App _      -> "(T-APP)"
                 | _             -> "[T]"
         let! k = Wk_ty_expr' ctx τ0
@@ -304,67 +332,66 @@ let rec Wk_ty_expr (ctx : context) (τ0 : ty_expr) =
     }
 
 and Wk_ty_expr' (ctx : context) (τ0 : ty_expr) =
-    let K = new kind_inference_builder<_> (τ0)
+    let M = new kind_inference_builder<_> (τ0)
     let R = Wk_ty_expr ctx
-    K {
+    M {
         match τ0.value with
-        | Te_Bottom ->
-            yield kind.fresh_var
-
-        | Te_PolyVar x ->
-            let! o = K.search_γ x
-            match o with
-            | Some (KUngeneralized k) ->
+        | Te_Var x ->
+            let! o1 = M.search_γ x
+            let! o2 = M.search_scoped_var x
+            match o1, o2 with
+            | Some (KUngeneralized k), Some α ->
                 yield k
 
-            | None ->
-                let α = K_Var var.fresh
-                let! _ = K.bind_γ x (KUngeneralized α)
+            | None, None ->
+                let α = kind.fresh_var
+                let! _ = M.bind_γ x (KUngeneralized α)
                 yield α
 
-        | Te_Id x ->
-            let! kσ = K.lookup_γ x
+            | Some k, None ->
+                return Report.Error.type_variable_bound_to_generalized_kscheme τ0.loc x k
+
+            | x -> return unexpected_case __SOURCE_FILE__ __LINE__ x
+                
+
+        | Te_Cons x ->
+            let! kσ = M.lookup_γ x
             yield kσ.instantiate
 
         | Te_Lambda ((x, ko), τ) ->
             let kx = either kind.fresh_var ko
-            return! K.undo_γ <| K {
-                let! _ = K.bind_γ x (KUngeneralized kx)
+            return! M.undo_γ <| M {
+                let! _ = M.bind_γ x (KUngeneralized kx)
                 let! k = R τ
                 yield K_Arrow (kx, k)
             }
 
         | Te_HTuple ([] | [_]) -> return unexpected "empty or unary tupled type expression" __SOURCE_FILE__ __LINE__
         | Te_HTuple τs ->
-            let! ks = K.List.map (fun τ -> K { yield! R τ }) τs
+            let! ks = M.List.map (fun τ -> M { yield! R τ }) τs
             yield K_HTuple ks
                                 
         | Te_App (τ1, τ2) ->
             let! k1 = R τ1
             let! k2 = R τ2
             let α = kind.fresh_var
-            do! K.kunify τ1.loc (K_Arrow (k2, α)) k1
+            do! M.kunify τ1.loc (K_Arrow (k2, α)) k1
             yield α
 
-        | Te_Forall (((x, ko), τo1), τ2) ->
+        | Te_Forall ((x, ko), τ) ->
             let kx = either kind.fresh_var ko
-            match τo1 with
-            | None    -> ()
-            | Some τ1 ->
-                let! k1 = R τ1
-                do! K.kunify τ1.loc k1 kx
-            return! K.undo_γ <| K {
-                let! _ = K.bind_γ x (KUngeneralized kx)
-                yield! R τ2
+            return! M.undo_scoped_vars <| M {
+                let! _ = M.bind_scoped_var x kx
+                yield! R τ
             }
 
         | Te_Annot (τ, k) ->
             let! kτ = R τ
-            do! K.kunify τ.loc k kτ
+            do! M.kunify τ.loc k kτ
             yield k
 
         | Te_Let (d, τ) ->
-            yield! K.undo_γ <| K {
+            yield! M.undo_γ <| M {
                 do! Wk_ty_decl { ctx with top_level_decl = false } d
                 yield! R τ
             }                 
@@ -374,21 +401,21 @@ and Wk_ty_expr' (ctx : context) (τ0 : ty_expr) =
             let! k1 = R τ1
             let kr0 = kind.fresh_var
             for p, _, τ in cases do
-                do! K.undo_γ <| K {
+                do! M.undo_γ <| M {
                     let! kp = Wk_ty_patt ctx p
-                    do! K.kunify p.loc k1 kp
+                    do! M.kunify p.loc k1 kp
                     let! tr = Wk_ty_expr ctx τ
-                    do! K.kunify τ.loc kr0 tr
+                    do! M.kunify τ.loc kr0 tr
                 }
             yield kr0
 
         | Te_Row (xτs, τo) ->
             for _, τ in xτs do
                 let! k = R τ
-                do! K.kunify τ.loc K_Star k
-            do! K.Option.iter (fun τ -> K {
+                do! M.kunify τ.loc K_Star k
+            do! M.Option.iter (fun τ -> M {
                         let! k = R τ
-                        do! K.kunify τ.loc K_Row k
+                        do! M.kunify τ.loc K_Row k
                     }) τo
             yield K_Row
     }
@@ -402,7 +429,7 @@ and Wk_ty_bindings (ctx : context) d bs =
                     return! M.undo_γ <| M {
                         let! kp = Wk_ty_patt ctx p
                         do! M.kunify p.loc kp ke
-                        return! M.List.map (fun x -> M { let! (KUngeneralized k) = M.lookup_γ x in return x, k }) (vars_in_ty_patt p |> Set.toList)
+                        return! M.List.map (fun x -> M { let! KUngeneralized k = M.lookup_γ x in return x, k }) (vars_in_ty_patt p |> Set.toList)
                     }
                 }) bs
         for x, k in l do
@@ -426,7 +453,7 @@ and Wk_ty_rec_bindings<'e> (ctx : context) (d : node<'e, kind>) bs =
             }
         for x, kx in bs do
             let! kσ = M.gen_and_bind_γ x kx
-            // TODO: all type definitions should be implicitly recursive
+            // TODO: all type definitions should be implicitly recursive?
             prompt_inferred_kind ctx Config.Printing.Prompt.rec_type_decl_prefixes x kσ
     }
 
@@ -512,17 +539,41 @@ and Wk_ty_patt ctx (p0 : ty_patt) =
             yield k         
     }
 
-//#endregion
+let rec Wk_fxty_expr ctx ϕτ =
+    let M = new kind_inference_builder<_> (ϕτ)
+    let R = Wk_fxty_expr ctx
+    M {
+        match ϕτ.value with
+        | Fxe_Bottom ->
+            return kind.fresh_var
+
+        | Fxe_F_Ty τ ->
+            return! Wk_ty_expr ctx τ
+
+        | Fxe_Forall (((x, ko), τo1), τ2) ->
+            let kx = either kind.fresh_var ko
+            match τo1 with
+            | None    -> ()
+            | Some τ1 ->
+                let! k1 = R τ1
+                do! M.kunify τ1.loc k1 kx
+            return! M.undo_γ << M.undo_scoped_vars <| M {
+                let! _ = M.bind_γ x (KUngeneralized kx)
+                let! _ = M.search_or_add_scoped_var x
+                yield! R τ2
+            }
+    }
+        
 
 // kind inference and type evaluation in one shot
 //
 
-let Wk_and_eval_ty_expr_fx (ctx : context) τ =
+let Wk_and_eval_ty_expr (ctx : context) τ =
     let M = new kind_inference_builder<_> (τ)
     M {
         let! k = Wk_ty_expr ctx τ
-        let! ϕ = Eval.ty_expr ctx τ
-        return ϕ.nf, k                  // evaluated flex type is normalized            
+        let! t = Eval.ty_expr ctx τ
+        return t.nf, k                  // evaluated flex type is normalized            
     }
 
 let Wk_and_eval_ty_bindings (ctx : context) d bs =
@@ -539,7 +590,7 @@ let Wk_and_eval_ty_rec_bindings (ctx : context) d bs =
         do! Eval.ty_rec_bindings ctx d bs
     }
 
-let Wk_and_eval_ty_expr_F (ctx : context) τ =
+let Wk_and_eval_fxty_expr (ctx : context) τ =
     let M = new kind_inference_builder<_> (τ)
     M {
         let! ϕ, k = Wk_and_eval_ty_expr_fx ctx τ

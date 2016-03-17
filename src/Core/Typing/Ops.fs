@@ -235,11 +235,14 @@ module TyEq =
                     #endif
                     return α' = β
                 | None ->
-                    do! M.lift_state <| fun env -> env.bind α β
-                    #if DEBUG_TYPE_EQUALITY
-                    L.debug Unmaskerable "%O |-> %O" α β
-                    #endif
-                    return true
+                    let! env = M.get_state
+                    if env.exists (fun _ β' -> β' = β) then return false
+                    else
+                        do! M.lift_state <| fun env -> env.bind α β
+                        #if DEBUG_TYPE_EQUALITY
+                        L.debug Unmaskerable "%O |-> %O" α β
+                        #endif
+                        return true
             }
 
         member M.binop_and_with_undo x y =
@@ -277,7 +280,7 @@ module TyEq =
                 return false
         }
 
-    let rec is_prefix_and_unquantified_ty_equivalent (Q1, t1 : ty) (Q2, t2 : ty) =
+    let rec private is_prefix_and_unquantified_ty_equivalent (Q1, t1 : ty) (Q2, t2 : ty) =
         let M = new builder<fxty> (is_fxty_equivalent)
         let (&&&) = M.binop_and_with_undo
         M {
@@ -322,126 +325,57 @@ module TyEq =
             return! is_ty_equivalent t1 t2 &&& is_permutation Q1 Q2
         }
 
-    and is_ty_equivalent (x : ty) (y : ty) =
-            let M = new builder<ty> (is_ty_equivalent)
-            let (&&&) = M.binop_and_with_undo
-            M {   
-                let! r = M {
-                    match x, y with
-                    | T_Cons (x, _), T_Cons (y, _)          -> return x = y
-                    | T_Var (α, _), T_Var (β, _)            -> return! M.is_var_equivalent α β
-                    | T_App (t1, t2), T_App (t1', t2')      -> return! M.are_equivalent [t1; t1'] [t2; t2']
+    and private is_ty_equivalent' (x : ty) (y : ty) =
+        let M = new builder<ty> (is_ty_equivalent)
+        M {   
+            match x, y with
+            | T_Cons (x, _), T_Cons (y, _)          -> return x = y
+            | T_Var (α, _), T_Var (β, _)            -> return! M.is_var_equivalent α β
+            | T_App (t1, t2), T_App (t1', t2')      -> return! M.are_equivalent [t1; t1'] [t2; t2']
 
-                    | T_ForallsK (αs, t1), T_ForallsK (βs, t2) when αs.Length = βs.Length ->
-                        let Q1 = prefix.of_bottoms αs
-                        let Q2 = prefix.of_bottoms βs
-                        return! is_prefix_and_unquantified_ty_equivalent (Q1, t1) (Q2, t2)
+            | T_ForallsK (αs, t1), T_ForallsK (βs, t2) when αs.Length = βs.Length ->
+                let Q1 = prefix.of_bottoms αs
+                let Q2 = prefix.of_bottoms βs
+                return! is_prefix_and_unquantified_ty_equivalent (Q1, t1) (Q2, t2)
 
-                    | T_HTuple ts, T_HTuple ts' when ts.Length = ts'.Length ->
-                        return! M.are_equivalent ts ts'
+            | T_HTuple ts, T_HTuple ts' when ts.Length = ts'.Length ->
+                return! M.are_equivalent ts ts'
 
-                    #if DEBUG
-                    | T_Closure _, _ | _, T_Closure _ ->
-                        L.unexpected_error "comparing type closures: %O = %O" x y
-                        return false
-                    #endif
-                    | _ ->
-                        return false
-                }
-                return! M { return r } &&& is_kind_equivalent x.kind y.kind
-            }
+            #if DEBUG
+            | T_Closure _, _ | _, T_Closure _ ->
+                L.unexpected_error "comparing type closures: %O = %O" x y
+                return false
+            #endif
+            | _ ->
+                return false
+        }
 
-    //                let contains α βs = M {
-    //                    let rec R βs' βs = M {
-    //                        match βs with
-    //                        | [] ->
-    //                            return false, βs'
-    //
-    //                        | β :: βs ->
-    //                            let! st = M.get_state
-    //                            let! b = M.is_var_equivalent α β
-    //                            if b then return true, βs' @ βs
-    //                            else
-    //                                do! M.set_state st  // restore state when false, otherwise variable bindings created while comparing bounds may be kept
-    //                                return! R (βs' @ [β]) βs
-    //                    }
-    //                    let! r, βs' = R [] βs
-    //                    #if DEBUG_TYPE_EQUALITY
-    //                    L.debug Unmaskerable "%O contained in %O: %b, %O" α βs r βs'
-    //                    #endif
-    //                    return r, βs'
-    //                }
-    //                let rec is_permutation αs βs = M {
-    //                    match αs with
-    //                    | [] ->
-    //                        return true
-    //
-    //                    | α :: αs ->
-    //                        let! a, βs' = contains α βs
-    //                        let! b = is_permutation αs βs'                                
-    //                        return a && b
-    //                }
-    //                return! M.is_equivalent t1 t2 &&& is_permutation αs βs
+    and private is_fxty_equivalent' (x : fxty) (y : fxty) =
+        let M = new builder<fxty> (is_fxty_equivalent)
+        M {   
+            match x, y with
+            | FxU_ForallsQ (Q1, t1), FxU_ForallsQ (Q2, t2) ->
+                return! is_prefix_and_unquantified_ty_equivalent (Q1, t1) (Q2, t2)
 
-    and is_fxty_equivalent (x : fxty) (y : fxty) =
-            let M = new builder<fxty> (is_fxty_equivalent)
-            let (&&&) = M.binop_and_with_undo
-            M {   
-                let! r = M {
-                    match x, y with
-                    | FxU_ForallsQ (Q1, t1), FxU_ForallsQ (Q2, t2) ->
-                        return! is_prefix_and_unquantified_ty_equivalent (Q1, t1) (Q2, t2)
+            | Fx_F_Ty t1, Fx_F_Ty t2 ->
+                return! is_ty_equivalent t1 t2
 
-                    | Fx_F_Ty t1, Fx_F_Ty t2 ->
-                        return! is_ty_equivalent t1 t2
+            | Fx_Bottom _, Fx_Bottom _ ->
+                return true // kinds will be compared later
 
-                    | Fx_Bottom _, Fx_Bottom _ ->
-                        return true // kinds will be compared later
+            | _ -> return false
+        }
 
-                    | _ -> return false
-                }
-                return! M { return r } &&& is_kind_equivalent x.kind y.kind
-            }
+    and private is_kinded_equivalent f x y =
+        let M = new builder<fxty> (is_fxty_equivalent)
+        let (&&&) = M.binop_and_with_undo
+        M {
+            let! r = f x y
+            return! M { return r } &&& is_kind_equivalent (x :> kinded).kind (y :> kinded).kind
+        }
 
-    //                let contains (α, αϕ) =
-    //                    let rec R q Q =
-    //                        M {
-    //                            match Q with
-    //                            | Q_Nil ->
-    //                                return false, q
-    //
-    //                            | Q_Cons (q1, (β, βϕ)) ->
-    //                                let! st = M.get_state
-    //                                let! a = M.is_equivalent αϕ βϕ
-    //                                let! b = M.is_var_equivalent α β
-    //                                if a && b then return true, q1 + q
-    //                                else
-    //                                    do! M.set_state st
-    //                                    return! R (q.insert (β, βϕ)) q1
-    //                        }
-    //                    in
-    //                        fun Q ->
-    //                            M {
-    //                                let! r, q = R Q_Nil Q
-    //                                #if DEBUG_TYPE_EQUALITY
-    //                                L.debug Unmaskerable "%O contained in %O: %b, %O" α Q2 r q2
-    //                                #endif
-    //                                return r, q
-    //                            }
-    //                let rec is_permutation Q1 Q2 = M {
-    //                    match Q1 with
-    //                    | Q_Nil ->
-    //                        return true
-    //
-    //                    | Q_Cons (q1, α) ->
-    //                        let! a, q2 = contains α Q2
-    //                        let! b = is_permutation q1 q2  
-    //                        #if DEBUG_TYPE_EQUALITY
-    //                        L.debug Unmaskerable "%O is permutation of %O: %b" Q1 Q2 (a && b)
-    //                        #endif
-    //                        return a && b
-    //                }
-    //                return! t1.is_equivalent t2 &&& is_permutation Q1 Q2
+    and is_fxty_equivalent = is_kinded_equivalent is_fxty_equivalent'
+    and is_ty_equivalent = is_kinded_equivalent is_ty_equivalent'
 
     let unM f = f state.empty |> fst
 

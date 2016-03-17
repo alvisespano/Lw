@@ -1,4 +1,12 @@
 ﻿
+17/3/2016:
+* FIX: type equivalence fixed
+* UP: kind inference and type evaluation revamped and polished: scoping of quantified variables is supported
+* UP: ty_expr now evaluates to ty and not fxty anymore
+* UP: fxty_expr introduced for evaluation of flex types
+* UNDONE: management of scoped vars need to be completed
+
+
 16/3/2016:
 * REFACT: types, kinds and all relevant data structures are not comparable nor equatable anymore
 * REFACT: type equivalence redesigned: now equivalence function for kinds, tys and fxtys are monadic and in mutual letrec and each 'is_equivalent' member is just an unmonadization

@@ -349,13 +349,15 @@ module Tests =
     let type_equality =
       "Type Equality",
       [
-        "int",                                      type_eq "int"
         "'a",                                       type_eq "'a"
         "'a",                                       type_eq "'b"
         "'e",                                       type_eq "'q"
         "'a * int",                                 type_eq "'a * int"
-        "'a -> 'b",                                 type_eq "'a * 'b"
+        "'a -> 'b",                                 type_neq "'a * 'b"
+        "'a -> 'b",                                 type_neq "'a -> 'a"
         "'c -> 'e",                                 type_eq "'a -> 'b"
+
+        "int",                                      type_eq "int"
         "forall 'a 'b. 'a -> 'b",                   type_eq "forall 'a 'b. 'a -> 'b"
         "forall 'a 'b. 'a -> 'b",                   type_eq "forall 'a 'b. 'b -> 'a"
         "forall 'a 'b. 'a -> 'b",                   type_eq "forall 'b 'a. 'a -> 'b"
@@ -366,11 +368,11 @@ module Tests =
         "forall 'a 'b. 'a -> 'b",                   type_neq "forall 'a. 'a -> int"
         "forall 'a 'b. 'a -> 'b",                   type_neq "forall 'a 'b. 'a -> 'c"
 
-        "forall ('a :> forall 'b. 'b -> 'b). list 'a",  type_eq "forall ('f :> forall 'f. 'f -> 'f). list 'f"
-        "forall ('a :> forall 'b. 'b -> 'b). list 'a",  type_eq "forall ('a :> forall 'b. 'b -> 'b). list 'a"
-        "forall ('a :> forall 'b. 'b -> 'b) 'c. list ('a * 'c)",  type_eq "forall 'c ('a :> forall 'b. 'b -> 'b). list ('a * 'c)"
-        "forall ('a :> forall 'b. 'b -> 'b) 'c 'd. list ('a * 'c * 'd)",  type_eq "forall 'd ('a :> forall 'b. 'b -> 'b) 'c. list ('a * 'c * 'd)"
-        "forall ('a :> forall 'b. 'b -> 'b) 'b. list ('a * 'b)",  type_eq "forall 'b ('a :> forall 'b. 'b -> 'b). list ('a * 'b)"
+        "forall ('a :> forall 'b. 'b -> 'b). list 'a",                      type_eq "forall ('f :> forall 'f. 'f -> 'f). list 'f"
+        "forall ('a :> forall 'b. 'b -> 'b). list 'a",                      type_eq "forall ('a :> forall 'b. 'b -> 'b). list 'a"
+        "forall ('a :> forall 'b. 'b -> 'b) 'c. list ('a * 'c)",            type_eq "forall 'c ('a :> forall 'b. 'b -> 'b). list ('a * 'c)"
+        "forall ('a :> forall 'b. 'b -> 'b) 'c 'd. list ('a * 'c * 'd)",    type_eq "forall 'd ('a :> forall 'b. 'b -> 'b) 'c. list ('a * 'c * 'd)"
+        "forall ('a :> forall 'b. 'b -> 'b) 'b. list ('a * 'b)",            type_eq "forall 'b ('a :> forall 'b. 'b -> 'b). list ('a * 'b)"
       ]
 
     let intrinsics =

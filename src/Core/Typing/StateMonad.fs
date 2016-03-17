@@ -112,7 +112,6 @@ type basic_builder (loc : location) =
     member M.update_θ θ1 =
         M {
             do! M.lift_θ (compose_tksubst θ1)
-            // TMP: state update disabled
             do! M.update_state
             #if DEBUG_SUBST
             let! θ' = M.get_θ
@@ -124,14 +123,28 @@ type basic_builder (loc : location) =
         try env.lookup x
         with Env.UnboundSymbol x -> report loc x
 
-    member M.add_scoped_var x =
+    member M.search_scoped_var x =
         M {
             let! αs = M.get_scoped_vars
-            match Set.toList αs |> List.tryFind (function Va (_, Some s) -> s = x | _ -> false) with
+            return Set.toList αs |> List.tryFind (function Va (_, Some s) -> s = x | _ -> false)
+        }
+
+    member M.search_or_add_scoped_var x =
+        M {
+            let! o = M.search_scoped_var x
+            match o with
             | Some α -> return α
             | None   -> let α = var.fresh_named x
                         do! M.lift_scoped_vars (Set.add α)
                         return α
+        }
+
+    member M.bind_scoped_var x k =
+        M {
+            let! θ = M.get_θ
+            let kσ = subst_kscheme θ.k kσ
+            do! M.lift_γ (fun γ -> γ.bind x kσ)
+            return kσ
         }
 
     member M.undo_scoped_vars f =
@@ -144,8 +157,7 @@ type basic_builder (loc : location) =
 
     member M.bind_γ x kσ =
         M {
-            let! θ = M.get_θ
-            let kσ = subst_kscheme θ.k kσ
+            let kσ = M.updated kσ
             do! M.lift_γ (fun γ -> γ.bind x kσ)
             return kσ
         }
@@ -430,11 +442,11 @@ type translatable_type_inference_builder<'e> (e : node<'e, unit>) =
 type type_eval_builder<'e> (τ : node<'e, kind>) =
     inherit basic_builder (τ.loc)
 
-    member M.Yield (ϕ : fxty) = M { return ϕ }
-    member M.Yield (t : ty) = M { yield Fx_F_Ty t }
+//    member M.Yield (ϕ : fxty) = M { return ϕ }
+    member M.Yield (t : ty) = M { yield t }
 
     member M.YieldFrom f = M { let! (r : ty) = f in yield r }
-    member M.YieldFrom f = M { let! (r : fxty) = f in yield r }
+//    member M.YieldFrom f = M { let! (r : fxty) = f in yield r }
 
     member M.search_δ x =
         M {
@@ -466,7 +478,7 @@ type type_eval_builder<'e> (τ : node<'e, kind>) =
 // specialized monad kind inference
 //
 
-// yield operations do decorate nodes
+// yield decorates node
 type kind_inference_builder<'e> (τ : node<'e, kind>) =
     inherit basic_builder (τ.loc)
 
