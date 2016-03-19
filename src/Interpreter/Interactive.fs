@@ -41,7 +41,7 @@ let print_env_diffs (Γ1 : jenv) Γ2 (Δ1 : Eval.env) Δ2 =
 
 let print_decl_bindings (Γ : jenv) (Δ : Eval.env) d =
     for x in Typing.Ops.vars_in_decl d do
-        let σ = Γ.lookup (Jk_Var x)
+        let σ = Γ.lookup (jenv_key.Var x)
         let v = Δ.lookup x
         L.log_line (Config.Interactive.pretty_prompt_decl x σ v)
 
@@ -57,7 +57,7 @@ let read_and_interpret_loop (envs : Intrinsic.envs) =
     let rΔ = ref envs.Δ
     let st = ref { Typing.StateMonad.state.empty with Γ = envs.Γ; γ = envs.γ }
     let unM f x =
-        let ctx = Typing.Defs.context.top_level
+        let ctx = Typing.Defs.context.as_top_level_decl
         let r, st' = f ctx x !st
         st := st'
         r

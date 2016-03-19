@@ -46,12 +46,14 @@ let parse_error_rich = Some (fun ctx -> raise (ParseErrorContextException ctx))
 
 %type < Lw.Core.Absyn.ty_patt > ty_patt
 %type < Lw.Core.Absyn.ty_expr > ty_expr
+%type < Lw.Core.Absyn.fxty_expr > fxty_expr
 %type < Lw.Core.Absyn.expr > expr
 %type < Lw.Core.Absyn.decl > top_decl
 %type < Lw.Core.Absyn.program > program
 %type < Lw.Core.Absyn.interactive_line > interactive_line
 
 %start ty_expr
+%start fxty_expr
 %start top_decl
 %start program
 %start expr
@@ -267,26 +269,6 @@ kinded_param:
     id                                 { ($1, None) }
   | id COLON2 kind_annotation          { ($1, Some $3) }
   
-/* unused until flex types can be annotated
-fxty_forall_param:
-  | TICK_ID                                             { ($1, None), None }
-  | BRA TICK_ID COLON2 kind_annotation KET              { ($2, Some $4), None }
-  | BRA TICK_ID COLONGT ty_expr KET                     { ($2, None), Some $4 }
-  | BRA TICK_ID COLON2 kind_annotation GEQ ty_expr KET  { ($2, Some $4), Some $6 }
-
-fxty_forall_params:
-    ty_forall_param                                     { [$1] }
-  | ty_forall_param ty_forall_params                    { $1 :: $2 }
-*/
-
-ty_forall_param:
-  | TICK_ID                                             { $1, None }
-  | BRA TICK_ID COLON2 kind_annotation KET              { $2, Some $4 }
-
-ty_forall_params:
-    ty_forall_param                                     { [$1] }
-  | ty_forall_param ty_forall_params                    { $1 :: $2 }
-
   
 /*
  * kinds
@@ -326,7 +308,38 @@ kind_args:
 
 
 /*
- * type expressions
+ * flex type expressions
+ */
+
+ fxty_forall_param:
+  | TICK_ID                                             { ($1, None), None }        /* TODO: this rule and the other one without bound produce a reduce/reduce conflics */
+  | BRA TICK_ID COLON2 kind_annotation KET              { ($2, Some $4), None }
+  | BRA TICK_ID COLONGT fxty_expr KET                   { ($2, None), Some $4 }
+  | BRA TICK_ID COLON2 kind_annotation GEQ fxty_expr KET  { ($2, Some $4), Some $6 }
+
+fxty_forall_params:
+    fxty_forall_param                                   { [$1] }
+  | fxty_forall_param fxty_forall_params                { $1 :: $2 }
+
+ty_forall_param:
+  | TICK_ID                                             { $1, None }
+  | BRA TICK_ID COLON2 kind_annotation KET              { $2, Some $4 }
+  
+ty_forall_params:
+    ty_forall_param                                     { [$1] }
+  | ty_forall_param ty_forall_params                    { $1 :: $2 }
+
+fxty_expr: 
+    fxty_expr_                                          { pos parseState 1 $1 }
+
+fxty_expr_:
+  | FORALL fxty_forall_params DOT fxty_expr             { (Fxe_Foralls ($2, $4)).value }
+  | BOTTOM                                              { Fxe_Bottom }
+  | ty_expr                                             { Fxe_F_Ty $1 }
+
+
+/*
+ * F-type expressions
  */
 
 // TODO: how can this not produce reduce/reduce conflict? annotation should be arrow atom or something
@@ -376,7 +389,6 @@ ty_expr_app_atom_:
   | id                                              { Te_Cons $1 }
   | TICK_ID                                         { Te_Var $1 }
   | UNDERSCORE                                      { Te_Var (fresh_reserved_id ()) }
-/*  | BOTTOM                                          { Te_Bottom }*/
   | BRA ty_expr KET                                 { $2.value }
   | CURBRA ty_expr_record CURKET                    { Te_Record ($2, None) }
   | CURBRA ty_expr_record PIPE ty_expr CURKET       { Te_Record ($2, Some $4) }

@@ -21,6 +21,7 @@ type [< NoComparison; NoEquality; System.Diagnostics.DebuggerDisplayAttribute("{
         // environments
         Γ   : jenv              // type judices
         γ   : kjenv             // kind judices
+        γα  : var_kjenv         // kind judices for vars
         δ   : tenv              // evaluated types
 
         // substitutions
@@ -43,6 +44,7 @@ with
         {
             Γ   = Env.empty
             γ   = Env.empty
+            γα  = Env.empty
             θ   = tksubst.empty
             δ   = tenv.empty
             Q   = Q_Nil
@@ -55,10 +57,10 @@ with
 type M<'a> = Monad.M<'a, state>
 
 let (|Jb_Overload|Jb_Var|Jb_Data|Jb_OverVar|Jb_Unbound|) = function
-    | Some (Jk_Var _, { mode = Jm_Overload; scheme = Ungeneralized ϕ }) -> Jb_Overload ϕ    // HACK: flex types are bound to oveloaded symbols
-    | Some (Jk_Var _, { mode = Jm_Normal; scheme = σ })                 -> Jb_Var σ
-    | Some (Jk_Inst _, { mode = Jm_Overload; scheme = _ })              -> Jb_OverVar
-    | Some (Jk_Data _, { mode = Jm_Normal; scheme = σ })                -> Jb_Data σ
+    | Some (jenv_key.Var _, { mode = jenv_mode.Overload; scheme = Ungeneralized ϕ }) -> Jb_Overload ϕ    // HACK: flex types are bound to oveloaded symbols
+    | Some (jenv_key.Var _, { mode = jenv_mode.Normal; scheme = σ })                 -> Jb_Var σ
+    | Some (jenv_key.Inst _, { mode = jenv_mode.Overload; scheme = _ })              -> Jb_OverVar
+    | Some (jenv_key.Data _, { mode = jenv_mode.Normal; scheme = σ })                -> Jb_Data σ
     | None                                                              -> Jb_Unbound
     | Some (jk, jv)                                                     -> unexpected "ill-formed jenv binding: %O = %O" __SOURCE_FILE__ __LINE__ jk jv
 
@@ -69,6 +71,7 @@ type basic_builder (loc : location) =
     member __.get_Γ st = st.Γ, st
     member __.get_δ st = st.δ, st
     member __.get_γ st = st.γ, st
+    member __.get_γα st = st.γα, st
     member __.get_Q st = st.Q, st
     member __.get_constraints st = st.constraints, st
     member __M.get_θ st = st.θ, st
@@ -77,6 +80,7 @@ type basic_builder (loc : location) =
     member __.lift_Γ f st = (), { st with state.Γ = f st.Γ }
     member __.lift_δ f st = (), { st with δ = f st.δ }
     member __.lift_γ f st = (), { st with state.γ = f st.γ }
+    member __.lift_γα f st = (), { st with state.γα = f st.γα }
     member __.lift_Q f st = (), { st with Q = f st.Q }
     member __.lift_θ f st = (), { st with θ = f st.θ }
     member __.lift_constraints f (st : state) = (), { st with constraints = f st.constraints }
@@ -85,6 +89,7 @@ type basic_builder (loc : location) =
     member M.set_Γ x = M.lift_Γ (fun _ -> x)
     member M.set_δ x = M.lift_δ (fun _ -> x)
     member M.set_γ x = M.lift_γ (fun _ -> x)
+    member M.set_γα x = M.lift_γα (fun _ -> x)
     member M.set_Q x = M.lift_Q (fun _ -> x)
     [< System.Obsolete("Global substitution should never be set explicitly: use update_θ method instead.") >]
     member M.set_θ x = M.lift_θ (fun _ -> x)
@@ -139,14 +144,6 @@ type basic_builder (loc : location) =
                         return α
         }
 
-    member M.bind_scoped_var x k =
-        M {
-            let! θ = M.get_θ
-            let kσ = subst_kscheme θ.k kσ
-            do! M.lift_γ (fun γ -> γ.bind x kσ)
-            return kσ
-        }
-
     member M.undo_scoped_vars f =
         M {
             let! Γ = M.get_scoped_vars
@@ -155,40 +152,16 @@ type basic_builder (loc : location) =
             return r
         }
 
-    member M.bind_γ x kσ =
+    member M.updated (k : kind) =
         M {
-            let kσ = M.updated kσ
-            do! M.lift_γ (fun γ -> γ.bind x kσ)
-            return kσ
-        }
-        
-    member M.gen_and_bind_γ x k =
-        M {
-            let! { γ = γ; θ = θ } = M.get_state
-            let! αs = M.get_scoped_vars
-            let kσ = (subst_kind θ.k k).generalize γ αs
-            return! M.bind_γ x kσ
+            let! θ = M.get_θ
+            return subst_kind θ.k k
         }
 
-    member M.search_γ x =
+    member M.updated (kσ : kscheme) =
         M {
-            let! γ = M.get_γ
-            return γ.search x
-        }
-
-    member M.lookup_γ x =
-        M {
-            let! γ = M.get_γ
-            return M.lookup Report.Error.unbound_type_symbol γ x
-        }
-
-    member M.undo_γ f =
-        M {
-            let! γ = M.get_γ
-            let! r = f
-            let! γ = M.updated γ
-            do! M.set_γ γ
-            return r
+            let! θ = M.get_θ
+            return subst_kscheme θ.k kσ
         }
 
     member M.updated (γ : kjenv) =
@@ -205,14 +178,54 @@ type basic_builder (loc : location) =
             return { uni_context.Γ = Γ; γ = γ; loc = loc; scoped_vars = αs }
         }
 
+    member M.undoable_bind lift x v =
+        M {
+            do! lift (fun (env : Env.t<_, _>) -> env.bind x v)
+            return v, M { do! lift (fun (env : Env.t<_, _>) -> env.remove x) }
+        }
 
-// specialized monad for type inference and translation
+
+// monad supertype for inference
 //
 
-type type_inference_builder (loc) =
+type inference_builder (loc, ctx) =
     inherit basic_builder (loc)
 
-    new () = new type_inference_builder (new location ())
+    new (ctx) = new inference_builder (new location (), ctx)
+
+    // this method abstracts the computation of ungeneralizable variables (both type and kind variables together)
+    member M.get_ungeneralizable_vars =
+        M {
+            let! Γ = M.get_Γ            
+            let! αs = M.get_scoped_vars
+            return fv_Γ Γ + if ctx.is_top_level then Set.empty else αs
+        }
+
+    // bind methods for γ are in this superclass because they are used by both type inference and kind inference
+    member M.bind_γ x (kσ : kscheme) =
+        M {
+            let! kσ = M.updated kσ
+            return! M.undoable_bind M.lift_γ x kσ
+        }
+        
+    member M.gen_and_bind_γ x (k : kind) =
+        M {
+            let! αs = M.get_ungeneralizable_vars
+            let! γ = M.get_γ
+            let! k = M.updated k
+            let kσ = k.generalize γ αs
+            assert (Set.intersect kσ.fv αs).IsEmpty
+            return! M.bind_γ x kσ
+        }
+
+
+// specialized monad for type inference
+//
+
+type type_inference_builder (loc, ctx) =
+    inherit inference_builder (loc, ctx)
+
+    new (is_top_level) = new type_inference_builder (new location (), is_top_level)
 
     member M.Yield (ϕ : fxty) =
         M {
@@ -229,12 +242,6 @@ type type_inference_builder (loc) =
             return subst_ty θ t
         }
 
-    // abstract the computation of ungeneralizable vars, making code relying on it independant from the implementation
-    member M.get_ungeneralizable_vars =
-        M {
-            let! Γ = M.get_Γ
-            return fv_Γ Γ   // TODOL: currently scoped vars are not considered ungeneralizable, thus behave like anonymous vars
-        }
 
     // used by some HML rules inferring foralls where the type part have been substituted
     member M.Yield ((Q : prefix, t : ty)) =
@@ -242,8 +249,8 @@ type type_inference_builder (loc) =
             let! t = M.updated t
             let! θ = M.get_θ
             let! αs = M.get_ungeneralizable_vars
-//            let! Γ = M.get_Γ
 //            #if DEBUG_HML
+//            let! Γ = M.get_Γ
 //            let p set = sprintf "{ %s }" <| flatten_stringables ", " set
 //            L.debug High "[yield-Q] S.dom = %O\n          Q.dom = %O\n          fv_gamma = %O\n          ungen = %O\n          t = %O" (p θ.dom) (p Q.dom) (p (fv_Γ Γ)) (p αs) t
 //            #endif
@@ -290,6 +297,12 @@ type type_inference_builder (loc) =
             return subst_constraints θ cs
         }
 
+    member M.updated (σ : scheme) =
+        M {
+            let! θ = M.get_θ
+            return subst_scheme θ σ
+        }
+
     member M.split_for_gen (Q0 : prefix) =
         M {
             let! αs = M.get_ungeneralizable_vars
@@ -329,10 +342,10 @@ type type_inference_builder (loc) =
             let! Γ = M.get_Γ
             return Γ.search_by (fun jk { mode = jm } ->
                     match jk, jm with
-                    | Jk_Var y, _
-                    | Jk_Data y, _
-                    | Jk_Inst (y, _), Jm_Overload -> x = y      // TODO: this is not really elegant: combinations may vary and this does not scale
-                    | _                           -> false)
+                    | jenv_key.Var y, _
+                    | jenv_key.Data y, _
+                    | jenv_key.Inst (y, _), jenv_mode.Overload -> x = y      // TODO: this is not elegant: combinations may vary and this does not scale
+                    | _ -> false)
         }
 
     member M.lookup_Γ jk =
@@ -343,20 +356,18 @@ type type_inference_builder (loc) =
 
     member M.bind_Γ jk ({ scheme = σ } as jv) =
         M {
-            let! θ = M.get_θ
-            let σ = subst_scheme θ σ
-            do! M.lift_Γ (fun Γ -> Γ.bind jk jv)
-            return σ
+            let! σ = M.updated σ
+            return! M.undoable_bind M.lift_Γ jk jv
         }
 
     member M.bind_ungeneralized_var_Γ x t =
         M {
-            return! M.bind_ungeneralized_Γ (Jk_Var x) Jm_Normal t
+            return! M.bind_ungeneralized_Γ (jenv_key.Var x) jenv_mode.Normal t
         }
 
     member M.bind_generalized_var_Γ x ϕ =
         M {
-            return! M.bind_generalized_Γ (Jk_Var x) Jm_Normal ϕ
+            return! M.bind_generalized_Γ (jenv_key.Var x) jenv_mode.Normal ϕ
         }
 
     member M.bind_ungeneralized_Γ jk jm (t : ty) =
@@ -380,16 +391,11 @@ type type_inference_builder (loc) =
             let! Γ = M.get_Γ
             return t.auto_generalize loc Γ
         }
-        
-    member M.add_prefix α t =
-        M {
-            do! M.lift_Q (fun Q -> Q + (α, t))
-        }
 
-    member M.add_fresh_star_to_prefix =
+    member M.extend_fresh_star =
         M {
             let α, tα = ty.fresh_star_var_and_ty
-            do! M.add_prefix α (Fx_Bottom K_Star)
+            do! M.extend (α, Fx_Bottom K_Star)
             return tα
         }
 
@@ -424,9 +430,11 @@ type type_inference_builder (loc) =
         }
 
 
+// specialized monad for translation while inferring types
+//
 
-type translatable_type_inference_builder<'e> (e : node<'e, unit>) =
-    inherit type_inference_builder (e.loc)
+type translatable_type_inference_builder<'e> (e : node<'e, unit>, ctx) =
+    inherit type_inference_builder (e.loc, ctx)
     member val current_node = e
     member __.translate
         //with get () = e.translated
@@ -442,12 +450,6 @@ type translatable_type_inference_builder<'e> (e : node<'e, unit>) =
 type type_eval_builder<'e> (τ : node<'e, kind>) =
     inherit basic_builder (τ.loc)
 
-//    member M.Yield (ϕ : fxty) = M { return ϕ }
-    member M.Yield (t : ty) = M { yield t }
-
-    member M.YieldFrom f = M { let! (r : ty) = f in yield r }
-//    member M.YieldFrom f = M { let! (r : fxty) = f in yield r }
-
     member M.search_δ x =
         M {
             let! Δ = M.get_δ
@@ -456,7 +458,7 @@ type type_eval_builder<'e> (τ : node<'e, kind>) =
 
     member M.bind_δ x t =
         M {
-            do! M.lift_δ (fun Δ -> Δ.bind x t)
+            return! M.undoable_bind M.lift_δ x t
         }
     
     member M.undo_δ f =
@@ -479,8 +481,8 @@ type type_eval_builder<'e> (τ : node<'e, kind>) =
 //
 
 // yield decorates node
-type kind_inference_builder<'e> (τ : node<'e, kind>) =
-    inherit basic_builder (τ.loc)
+type kind_inference_builder<'e> (τ : node<'e, kind>, ctx) =
+    inherit inference_builder (τ.loc, ctx)
 
     member M.Yield (k : kind) =
         M {
@@ -499,9 +501,46 @@ type kind_inference_builder<'e> (τ : node<'e, kind>) =
     
     member M.YieldFrom f = M { let! (r : kind) = f in yield r }
 
-    member M.updated k =
+    member M.bind_γα x (k : kind) =
         M {
-            let! θ = M.get_θ
-            return subst_kind θ.k k
+            let! k = M.updated k
+            return! M.undoable_bind M.lift_γα x k
         }
+
+    member M.search_γ x =
+        M {
+            let! γ = M.get_γ
+            return γ.search x
+        }
+
+    member M.search_γα x =
+        M {
+            let! γα = M.get_γα
+            return γα.search x
+        }
+        
+    member M.lookup_γ x =
+        M {
+            let! γ = M.get_γ
+            return M.lookup Report.Error.unbound_type_symbol γ x
+        }
+
+    member M.undo_γ f =
+        M {
+            let! γ = M.get_γ
+            let! r = f
+            let! γ = M.updated γ
+            return r
+        }
+
+    // environment γα does not have a full undo but only this one, because scoping of vars is special: vars can be introduced anytime and do not have to be undone
+    member M.undo_bind_γα x v f =
+        M {
+            let! _, undo = M.bind_γα x v
+            let! r = f
+            do! undo
+            yield r
+        }
+
+
         

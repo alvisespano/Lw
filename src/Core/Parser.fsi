@@ -181,6 +181,7 @@ type nonTerminalId =
     | NONTERM__startexpr
     | NONTERM__startprogram
     | NONTERM__starttop_decl
+    | NONTERM__startfxty_expr
     | NONTERM__startty_expr
     | NONTERM_interactive_line
     | NONTERM_program
@@ -225,8 +226,6 @@ type nonTerminalId =
     | NONTERM_id
     | NONTERM_typed_param
     | NONTERM_kinded_param
-    | NONTERM_ty_forall_param
-    | NONTERM_ty_forall_params
     | NONTERM_kind_annotation
     | NONTERM_kind
     | NONTERM_kind_arrow_atom
@@ -234,6 +233,12 @@ type nonTerminalId =
     | NONTERM_kind_tuple_atom
     | NONTERM_kind_arg
     | NONTERM_kind_args
+    | NONTERM_fxty_forall_param
+    | NONTERM_fxty_forall_params
+    | NONTERM_ty_forall_param
+    | NONTERM_ty_forall_params
+    | NONTERM_fxty_expr
+    | NONTERM_fxty_expr_
     | NONTERM_ty_expr_annotation
     | NONTERM_ty_expr
     | NONTERM_ty_expr_tuple_atom
@@ -315,4 +320,5 @@ val interactive_line : (Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> token) -
 val expr : (Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> token) -> Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> ( Lw.Core.Absyn.expr ) 
 val program : (Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> token) -> Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> ( Lw.Core.Absyn.program ) 
 val top_decl : (Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> token) -> Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> ( Lw.Core.Absyn.decl ) 
+val fxty_expr : (Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> token) -> Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> ( Lw.Core.Absyn.fxty_expr ) 
 val ty_expr : (Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> token) -> Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> ( Lw.Core.Absyn.ty_expr ) 

@@ -27,11 +27,12 @@ with
 
 type kjenv = Env.t<id, kscheme>
 
+type var_kjenv = Env.t<id, kind>
+
 type kconsenv = Env.t<id, var list * kind>
 
 type kinded =
     abstract kind : kind
-
 
 
 // System-F types
@@ -286,28 +287,30 @@ module prefix =
 // type judice environment
 //
 
+[< RequireQualifiedAccess >]
 type jenv_key =
-        | Jk_Data of id
-        | Jk_Inst of id * int
-        | Jk_Var of id
+        | Data of id
+        | Inst of id * int
+        | Var of id
 with
     override this.ToString () = this.pretty
 
     member this.pretty =
         match this with
-            | Jk_Var x       -> x
-            | Jk_Data x      -> sprintf "data %s" x
-            | Jk_Inst (x, n) -> sprintf Config.Printing.jk_inst_fmt x n 
+            | jenv_key.Var x       -> x
+            | jenv_key.Data x      -> sprintf "data %s" x
+            | jenv_key.Inst (x, n) -> sprintf Config.Printing.jk_inst_fmt x n 
 
     member this.pretty_as_translated_id =
         match this with
-            | Jk_Var x       
-            | Jk_Data x      -> x
-            | Jk_Inst (x, n) -> sprintf Config.Printing.jk_inst_fmt x n 
+            | jenv_key.Var x       
+            | jenv_key.Data x      -> x
+            | jenv_key.Inst (x, n) -> sprintf Config.Printing.jk_inst_fmt x n 
 
+[< RequireQualifiedAccess >]
 type [< NoComparison; NoEquality >] jenv_mode =
-    | Jm_Overload
-    | Jm_Normal
+    | Overload
+    | Normal
 
 type [< NoComparison; NoEquality >] jenv_value =
     {
@@ -319,8 +322,8 @@ with
             
     member this.pretty =        
         match this.mode with
-        | Jm_Overload -> sprintf "<overload> %O" this.scheme
-        | Jm_Normal   -> sprintf "%O" this.scheme
+        | jenv_mode.Overload -> sprintf "<overload> %O" this.scheme
+        | jenv_mode.Normal   -> sprintf "%O" this.scheme
 
 type jenv = Env.t<jenv_key, jenv_value>
 
@@ -333,13 +336,13 @@ type resolution = Res_Strict | Res_Loose | Res_No
 
 type [< NoComparison; NoEquality >] context =
     { 
-        top_level_decl  : bool
+        is_top_level       : bool
         resolution      : resolution
 //        strict          : bool
     }
 with
-    static member top_level = {
-        top_level_decl  = true
+    static member as_top_level_decl = {
+        is_top_level       = true
         resolution      = Res_Strict
 //        strict          = true
     }

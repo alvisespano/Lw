@@ -59,12 +59,12 @@ let private restrict_overloaded x (Γ : jenv) =
     seq {
         for jk, jv in Γ do
             match jk, jv with
-            | Jk_Inst (y, _), { mode = Jm_Normal; scheme = σ } when y = x -> yield jk, σ
+            | jenv_key.Inst (y, _), { mode = jenv_mode.Normal; scheme = σ } when y = x -> yield jk, σ
             | _ -> ()
         }
 
 let rec resolve_constraints (ctx : context) e0 =
-    let M = new translatable_type_inference_builder<_> (e0)
+    let M = new translatable_type_inference_builder<_> (e0, ctx)
     let loc = e0.loc
     let L0 x = Lo loc x
     M {

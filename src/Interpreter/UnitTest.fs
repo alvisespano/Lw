@@ -57,7 +57,7 @@ type typechecker () =
     let mutable st = st0
 
     member private __.unM f x =
-        let ctx0 = context.top_level
+        let ctx0 = context.as_top_level_decl
         let r, st1 = f ctx0 x st
         st <- st1
         r
@@ -66,22 +66,22 @@ type typechecker () =
 
     member this.W_expr e = this.unM W_expr e
     member this.W_decl d = this.unM W_decl d
-    member this.Wk_and_eval_ty_expr_fx τ = this.unM Wk_and_eval_ty_expr_fx τ
+    member this.Wk_and_eval_fxty_expr τ = this.unM Wk_and_eval_fxty_expr τ
     
     member __.auto_generalize loc (t : ty) = t.auto_generalize loc st.Γ
-    member __.lookup_var_Γ x = (st.Γ.lookup (Jk_Var x)).scheme.fxty
+    member __.lookup_var_Γ x = (st.Γ.lookup (jenv_key.Var x)).scheme.fxty
 
-    member this.parse_ty_expr s =
+    member this.parse_fxty_expr s =
         let τ =
-            try parse_ty_expr s
+            try parse_fxty_expr s
             with :? syntax_error as e -> unexpected "syntax error while parsing type expression: %s\n%O" __SOURCE_FILE__ __LINE__ s e
         this.reset_state
-        let ϕ, _ = this.Wk_and_eval_ty_expr_fx τ
+        let ϕ, _ = this.Wk_and_eval_fxty_expr τ
         this.reset_state
         ϕ
 
     member this.parse_ty_expr_and_auto_gen s =
-        match this.parse_ty_expr s with
+        match this.parse_fxty_expr s with
         | Fx_F_Ty t -> Fx_F_Ty <| this.auto_generalize (new location ()) t
         | ϕ         -> ϕ
 
@@ -226,8 +226,8 @@ let test_entry (tchk : typechecker) sec n ((s1, res) : entry) =
     let infs0 = [ entry_info sec n ]
     match res with
     | result.TypeEq (s2, is_eq) ->
-        let ϕ1 = tchk.parse_ty_expr s1
-        let ϕ2 = tchk.parse_ty_expr s2
+        let ϕ1 = tchk.parse_fxty_expr s1
+        let ϕ2 = tchk.parse_fxty_expr s2
         let t1 = ϕ1.ftype
         let t2 = ϕ2.ftype
         let k1 = ϕ1.kind

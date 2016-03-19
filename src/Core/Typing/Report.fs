@@ -25,9 +25,9 @@ type kind_error (msg, n, loc) =
 let flatten_and_trim_strings sep ss = flatten_strings sep (seq { for s : string in ss do let s = s.Trim () in if not <| String.IsNullOrWhiteSpace s then yield s })
 
 let inline prompt ctx prefixes x (t1 : ^t1) t2o =
-    let top_level = (^a : (member top_level_decl : bool) ctx)
-    let log = if top_level then L.msg High else L.msg Normal
-    let prefixes = List.distinct <| if top_level then prefixes else Config.Printing.Prompt.nested_decl_prefix :: prefixes
+    let is_top_level = (^a : (member is_top_level : bool) ctx)
+    let log = if is_top_level then L.msg High else L.msg Normal
+    let prefixes = List.distinct <| if is_top_level then prefixes else Config.Printing.Prompt.nested_decl_prefix :: prefixes
     let header = sprintf "%s %s" (flatten_and_trim_strings Config.Printing.Prompt.header_sep (prefixes @ [x])) (^t1 : (static member binding_separator : string) ())
     use N = var.reset_normalization
     let t1 = (^t1 : (member pretty : string) t1)
@@ -165,9 +165,9 @@ module Error =
     let kind_circularity (loc : location) (k1 : kind) (k2 : kind) kα (k : kind) =
         circularity Ek 401 loc "kind" k1 k2 kα k
 
-    let type_variable_bound_to_generalized_kscheme loc x k =
-        let α = var.fresh_named x
-        Ek 402 loc "type variable %O used in place of type constructor %s :: %O" α x k
+//    let type_variable_bound_to_generalized_kscheme loc x k =
+//        let α = var.fresh_named x
+//        Ek 402 loc "type variable %O used in place of type constructor %s :: %O" α x k
 
 
 [< RequireQualifiedAccess >]
@@ -216,9 +216,9 @@ module Warn =
 
     let unused_quantified_type_variable loc α t =
         W 13 loc Normal "quantified type variable %O does not occur in type %O" α t
-
-    let annot_flex_type_became_Ftype loc ϕ t =
-        W 14 loc Low "type annotation %O is a flexible type and is reduced to a standard (System-F) type: %O" ϕ t
+//
+//    let annot_flex_type_became_Ftype loc ϕ t =
+//        W 14 loc Low "type annotation %O is a flexible type and is reduced to a standard (System-F) type: %O" ϕ t
 
     let unquantified_variables_in_type loc t =
         W 15 loc Low "type expression has unquantified type variables: %O" t

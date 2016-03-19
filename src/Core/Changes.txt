@@ -1,4 +1,11 @@
 ﻿
+18-19/3/2016:
+* REFACT: lots of work in kind inference and type evaluation
+* UP: type variables are not bound into a new environment γα during kind inference
+* UP: all monadic bind functions now return a pair with the bound value and an undo function for unbinding the symbol
+* BUG: populating intrinsics throws an unbound error when encountering type constructor list
+
+
 17/3/2016:
 * FIX: type equivalence fixed
 * UP: kind inference and type evaluation revamped and polished: scoping of quantified variables is supported

@@ -548,8 +548,8 @@ type kscheme with
             subst_kind kθ k
 
 type kind with
-    member k.generalize γ named_tyvars =
-        let αs = k.fv - (fv_γ γ) - named_tyvars
+    member k.generalize γ non_geralizable_vars =
+        let αs = k.fv - (fv_γ γ) - non_geralizable_vars
         in
             { forall = αs; kind = k }
 

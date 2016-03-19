@@ -55,10 +55,10 @@ let W_lit = function
     | Char _      -> T_Char
     | Unit        -> T_Unit
 
-let auto_jk decl_qual x (ϕ : fxty) = if decl_qual.over then Jk_Inst (x, ϕ.pretty.GetHashCode ()) else Jk_Var x
+let auto_jk decl_qual x (ϕ : fxty) = if decl_qual.over then jenv_key.Inst (x, ϕ.pretty.GetHashCode ()) else jenv_key.Var x
 
 let gen_bind ctx prefixes ({ id = x; qual = dq; expr = e0; to_bind = ϕ } as gb) =
-    let M = new translatable_type_inference_builder<_> (e0)
+    let M = new translatable_type_inference_builder<_> (e0, ctx)
     let loc0 = e0.loc
     let Lo0 x = Lo loc0 x
     M {
@@ -97,7 +97,7 @@ let gen_bind ctx prefixes ({ id = x; qual = dq; expr = e0; to_bind = ϕ } as gb)
         // generalization and binding
         let jk = auto_jk dq x gb.to_bind
         let! _ =
-            let jm = if dq.over then Jm_Overload else Jm_Normal
+            let jm = if dq.over then jenv_mode.Overload else jenv_mode.Normal
             in
                 M.bind_generalized_Γ jk jm gb.to_bind
         Report.prompt ctx (prefixes @ dq.as_tokens) x gb.to_bind (Some (Config.Printing.ftype_instance_of_fxty_sep, gb.inferred))
@@ -109,8 +109,8 @@ let gen_bind ctx prefixes ({ id = x; qual = dq; expr = e0; to_bind = ϕ } as gb)
 
 
 // use for unifying annotation on bindings
-let W_binding_annot loc (ϕx : fxty) (ϕe : fxty) =
-    let M = new type_inference_builder (loc)
+let W_binding_annot ctx loc (ϕx : fxty) (ϕe : fxty) =
+    let M = new type_inference_builder (loc, ctx)
     M {
         let! ϕ = M {
             match ϕx.maybe_ftype with
@@ -124,8 +124,8 @@ let W_binding_annot loc (ϕx : fxty) (ϕe : fxty) =
         return ϕ
     }
 
-let check_rec_value_restriction loc (t : ty) =
-    let M = new type_inference_builder (loc)
+let check_rec_value_restriction ctx loc (t : ty) =
+    let M = new type_inference_builder (loc, ctx)
     M {
         match t with
         | T_Foralls0 (_, T_Arrow _) -> ()
@@ -137,7 +137,7 @@ let check_rec_value_restriction loc (t : ty) =
 //
 
 let rec W_expr (ctx : context) (e0 : expr) =
-    let M = new translatable_type_inference_builder<_> (e0)
+    let M = new translatable_type_inference_builder<_> (e0, ctx)
     M {
         L.tabulate 2
         try
@@ -147,12 +147,12 @@ let rec W_expr (ctx : context) (e0 : expr) =
                 | Lambda _  -> "(ABS)"
                 | App _     -> "(APP)"
                 | Let _     -> "(LET)"
-                | _         -> "[e]"
+                | _         -> "[e]  "
             let! Q = M.get_Q
             let! θ = M.get_θ
             let! cs = M.get_constraints
             #if DEBUG_BEFORE_INFERENCE
-            L.debug Min "%-5s %O\n[C]   %O\n[Q]   %O" rule e0 cs Q
+            L.debug Min "%s %O\n[C]   %O\n[Q]   %O" rule e0 cs Q
             #endif
             let! (ϕ : fxty) = W_expr' ctx e0
             do! resolve_constraints ctx e0
@@ -163,9 +163,9 @@ let rec W_expr (ctx : context) (e0 : expr) =
             // TODOL: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)
             #if DEBUG_SUBST
             let! θ' = M.get_θ
-            L.debug Low "%-5s %O\n[:t]  %O\n[F-t] %O\n[e*]  %O\n[C]   %O\n[Q]   %O\n[S]   %O\n[C']  %O\n[Q']  %O\n[S']  %O" rule e0 ϕ ϕ.ftype e0.translated cs Q θ cs' Q' θ'
+            L.debug Low "%s %O\n[:t]  %O\n[F-t] %O\n[e*]  %O\n[C]   %O\n[Q]   %O\n[S]   %O\n[C']  %O\n[Q']  %O\n[S']  %O" rule e0 ϕ ϕ.ftype e0.translated cs Q θ cs' Q' θ'
             #else
-            L.debug Low "%-5s %O\n[:t]  %O\n[F-t] %O\n[e*]  %O\n[C]   %O\n[Q]   %O\n[C']  %O\n[Q']  %O\n" rule e0 ϕ ϕ.ftype e0.translated cs Q cs' Q'
+            L.debug Low "%s %O\n[:t]  %O\n[F-t] %O\n[e*]  %O\n[C]   %O\n[Q]   %O\n[C']  %O\n[Q']  %O\n" rule e0 ϕ ϕ.ftype e0.translated cs Q cs' Q'
             #endif
             #endif
             return ϕ
@@ -174,10 +174,10 @@ let rec W_expr (ctx : context) (e0 : expr) =
     } 
 
 and W_decl ctx d =
-    let M = new translatable_type_inference_builder<_> (d)
+    let M = new translatable_type_inference_builder<_> (d, ctx)
     M {
         L.debug Low "[decl] %O" d
-        if ctx.top_level_decl then
+        if ctx.is_top_level then
             // when it's a top level binding
             #if DEBUG
             use N = var.reset_normalization
@@ -192,17 +192,17 @@ and W_decl ctx d =
     }  
 
 and W_patt ctx (p0 : patt) =
-    let M = new type_inference_builder (p0.loc)
+    let M = new type_inference_builder (p0.loc, ctx)
     M {
         L.tabulate 2
         try
             let rule =
                 sprintf "%-9s" <|
                 match p0.value with
-                | P_Var _     -> "(P-VAR)"
+                | P_Var _     -> "(P-VAR) "
                 | P_Cons _    -> "(P-CONS)"
-                | P_App _     -> "(P-APP)"
-                | _         -> "[p]"
+                | P_App _     -> "(P-APP) "
+                | _           -> "[P]     "
             let! Q = M.get_Q
             let! θ = M.get_θ
             #if DEBUG_BEFORE_INFERENCE
@@ -226,7 +226,7 @@ and W_patt ctx (p0 : patt) =
     }
 
 and W_patt_F ctx (p0 : patt) =
-    let M = new type_inference_builder (p0.loc)
+    let M = new type_inference_builder (p0.loc, ctx)
     M {
         let! ϕ = W_patt ctx p0
         return ϕ.ftype
@@ -234,7 +234,7 @@ and W_patt_F ctx (p0 : patt) =
 
 
 and W_expr_F ctx e0 =
-    let M = new translatable_type_inference_builder< _> (e0)
+    let M = new translatable_type_inference_builder< _> (e0, ctx)
     M {
         let! ϕ = W_expr ctx e0
         return ϕ.ftype
@@ -246,7 +246,7 @@ and W_expr_F ctx e0 =
 
 and W_expr' ctx (e0 : expr) =
     let Lo x = Lo e0.loc x
-    let M = new translatable_type_inference_builder< _> (e0)
+    let M = new translatable_type_inference_builder< _> (e0, ctx)
     let W_desugared_expr = M.W_desugared (W_expr ctx)
     M {
         match e0.value with
@@ -312,9 +312,6 @@ and W_expr' ctx (e0 : expr) =
             do! M.add_constraint (constraintt.fresh_strict Cm_FreeVar x t)
             yield t
 
-//        | Reserved_Cons x ->
-//            return unexpected "Reserved_Cons term is not supposed to appear in input code: %O" __SOURCE_FILE__ __LINE__ x
-
         | PolyCons x ->
             let α = ty.fresh_star_var
             let β = ty.fresh_star_var
@@ -326,13 +323,13 @@ and W_expr' ctx (e0 : expr) =
                 match τo with
                 | None -> return ty.fresh_star_var
                 | Some τ ->
-                    let! t, k = Wk_and_eval_ty_expr_F ctx τ
+                    let! t, k = Wk_and_eval_ty_expr ctx τ
                     do! M.kunify τ.loc K_Star k
                     return t
             }
             // whether annotated or not, all free vars are added to the prefix
             for α in tx.ftv do
-                do! M.add_prefix α (Fx_Bottom K_Star)   // TODOH: use extend here
+                do! M.extend (α, Fx_Bottom K_Star)
             let! ϕ1 = M.undo_Γ <| M {
                 let! _ = M.bind_ungeneralized_var_Γ x tx
                 return! W_expr ctx e
@@ -383,7 +380,7 @@ and W_expr' ctx (e0 : expr) =
 
         | Let (d, e) ->
             yield! M.undo_Γ <| M {
-                do! M.ignore <| W_decl { ctx with top_level_decl = false } d
+                do! M.ignore <| W_decl { ctx with is_top_level = false } d
                 yield! W_expr ctx e
             }
         
@@ -393,7 +390,7 @@ and W_expr' ctx (e0 : expr) =
         // TODO: why don't we try to use flex types here and unify schemes instead? does it make sense?
         | Match (e1, cases) ->
             let! ϕe1 = W_expr ctx e1
-            let! tr = M.add_fresh_star_to_prefix    // TODOH: why not use extend?
+            let! tr = M.extend_fresh_star    // TODOH: why not use extend?
             let! (_, ϕr) =
                 M.List.fold (fun (ϕe1, ϕr) (p, ewo, e) -> M {
                     let! ϕp = W_patt ctx p
@@ -418,7 +415,7 @@ and W_expr' ctx (e0 : expr) =
             assert (es.Length > 1)
             let es, e =
                 let rec R = function
-                    | []       -> unexpected "empty expression list in combine" __SOURCE_FILE__ __LINE__
+                    | []       -> unexpected_case __SOURCE_FILE__ __LINE__ []
                     | [e]      -> [], e
                     | e1 :: es -> let l, e = R es in e1 :: l, e
                 in
@@ -482,9 +479,9 @@ and W_expr' ctx (e0 : expr) =
             match tr with
             | T_Record (xts, _) ->
                 for x, t in xts do
-                    // TODOL: think about a special construct for expressing constraint mode and strictness
+                    // TODOL: think about a syntax for expressing constraint mode and strictness
                     do! M.add_constraint (constraintt.fresh_strict Cm_OpenWorldOverload x t)
-            | _ -> unexpected "non-record type in eject expression: %O" __SOURCE_FILE__ __LINE__ tr
+            | _ -> unexpected_case __SOURCE_FILE__ __LINE__ tr
             let! cs = M.get_constraints
             let x = fresh_reserved_id ()
             let e1 = Record ([ for { name = y } in cs -> y, Lo <| Id y ], None)
@@ -493,12 +490,12 @@ and W_expr' ctx (e0 : expr) =
 
         | Solve (e, τ) ->
             let! te = W_expr_F ctx e
-            let! t, _ = Wk_and_eval_ty_expr_F ctx τ
+            let! t, _ = Wk_and_eval_ty_expr ctx τ
             do! M.unify e.loc (T_Open_Record []) t
             let xts =
                 match t with
                 | T_Record (xts, _) -> xts
-                | _                 -> unexpected "non-record type in manual resolution: %O" __SOURCE_FILE__ __LINE__ t
+                | _                 -> unexpected_case __SOURCE_FILE__ __LINE__ t
             // check that all label types unify with principal types in case of overloaded symbols and whether symbols refer to multiple constraints
             do! M.List.iter (fun (x, t) -> M {
                     let! o = M.search_binding_by_name_Γ x
@@ -522,7 +519,7 @@ and W_expr' ctx (e0 : expr) =
     
 
 and W_decl' (ctx : context) (d0 : decl) =
-    let M = new translatable_type_inference_builder<_> (d0)
+    let M = new translatable_type_inference_builder<_> (d0, ctx)
     let desugar = M.W_desugared (W_decl ctx) 
     
     M {
@@ -535,9 +532,9 @@ and W_decl' (ctx : context) (d0 : decl) =
 
         | D_Overload l ->
             for { id = x; signature = τ } in l do
-                let! t, k = Wk_and_eval_ty_expr_F ctx τ
+                let! t, k = Wk_and_eval_ty_expr ctx τ
                 do! M.kunify τ.loc K_Star k
-                let! _ = M.bind_Γ (Jk_Var x) { mode = Jm_Overload; scheme = Ungeneralized t }
+                let! _ = M.bind_Γ (jenv_key.Var x) { mode = jenv_mode.Overload; scheme = Ungeneralized t }
                 Report.prompt ctx Config.Printing.Prompt.overload_decl_prefixes x t None
 
         | D_Bind bs ->
@@ -559,9 +556,9 @@ and W_decl' (ctx : context) (d0 : decl) =
                                     return [{ expr = b.expr; qual = b.qual; id = x; constraints = cs; to_bind = ϕe; inferred = ϕe }]     // by default bind the inferred type as a flex type
 
                                 | B_Annot (x, τ) ->
-                                    let! ϕx, k = Wk_and_eval_ty_expr_fx ctx τ
+                                    let! tx, k = Wk_and_eval_ty_expr ctx τ
                                     do! M.kunify τ.loc K_Star k
-                                    let! ϕe' = W_binding_annot τ.loc ϕx ϕe
+                                    let! ϕe' = W_binding_annot ctx τ.loc (Fx_F_Ty tx) ϕe    // HACK: temporarily promote the F-type annotation to a fake flex type
                                     do! resolve_constraints ctx e
                                     let! cs = M.get_constraints
                                     return [{ expr = b.expr; qual = b.qual; id = x; constraints = cs; to_bind = ϕe'; inferred = ϕe }]
@@ -572,7 +569,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                                     do! resolve_constraints ctx e
                                     let! cs = M.get_constraints
                                     return! vars_in_patt p |> Set.toList |> M.List.map (fun x -> M {
-                                            let! { scheme = σ } = M.lookup_Γ (Jk_Var x) 
+                                            let! { scheme = σ } = M.lookup_Γ (jenv_key.Var x) 
                                             return { expr = b.expr; qual = b.qual; id = x; constraints = cs; to_bind = σ.fxty; inferred = ϕe }
                                         })
                             }
@@ -592,12 +589,12 @@ and W_decl' (ctx : context) (d0 : decl) =
                                     match τo with
                                     | None -> return ty.fresh_star_var
                                     | Some τ -> 
-                                        let! t, k = Wk_and_eval_ty_expr_F ctx τ
+                                        let! t, k = Wk_and_eval_ty_expr ctx τ
                                         do! M.kunify τ.loc K_Star k
                                         return t
                                 }
                                 for α in tx.fv do
-                                    do! M.add_prefix α (Fx_Bottom K_Star)
+                                    do! M.extend (α, Fx_Bottom K_Star)
                                 let! _ = M.bind_ungeneralized_var_Γ x tx
                                 return b, tx
                             }) bs
@@ -609,7 +606,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                         do! M.unify e.loc tx tβ
                         let! tx = M.updated tx
                         if τo.IsNone && not tx.is_monomorphic then Report.Error.inferred_rec_definition_is_not_monomorphic e.loc x tx
-                        do! check_rec_value_restriction e.loc tx
+                        do! check_rec_value_restriction ctx e.loc tx
                     return l
                 }
                 // rebind all rec bindings with proper generalization
@@ -654,11 +651,11 @@ and W_decl' (ctx : context) (d0 : decl) =
         //          data Nil : list 'a
         //          data Cons : 'a -> list 'a -> list 'a
         | D_Datatype { id = c; kind = kc; datacons = bs } ->
-            let! kσ = M.gen_and_bind_γ c kc
+            let! kσ, _ = M.gen_and_bind_γ c kc
             Report.prompt ctx Config.Printing.Prompt.datatype_decl_prefixes c kσ None
             for { id = x; signature = τx } in bs do
                 // the whole inferred kind must be star, which is even better that the co-domain     
-                let! tx, kx = Wk_and_eval_ty_expr_F ctx τx      // TODOH: support flex types for data constructors
+                let! tx, kx = Wk_and_eval_ty_expr ctx τx      // TODOH: support flex types for data constructors
                 let! (T_Foralls0 (αs, _) as tx) = M.auto_geneneralize tx    // TODOH: take auto generalization directly to a Wk_and_eval_ty_expr or to a wrapper of it
                 do! M.kunify τx.loc K_Star kx                              
                 // each data constructor's return type must be equal to the type constructor being defined; arguments are not checked to be variables, so it means GADTs can be defined
@@ -668,8 +665,8 @@ and W_decl' (ctx : context) (d0 : decl) =
                 | _                                    -> Report.Error.data_constructor_codomain_invalid τx.loc x c txcod
                 // check there are no Γ-free vars in the signature
                 if not tx.fv.IsEmpty then Report.Hint.datacons_contains_env_fv τx.loc c x tx
-                let! σ = M.bind_generalized_Γ (Jk_Data x) Jm_Normal (Fx_F_Ty tx)
-                Report.prompt ctx Config.Printing.Prompt.data_decl_prefixes x σ None
+                let! σ, _ = M.bind_generalized_Γ (jenv_key.Data x) jenv_mode.Normal (Fx_F_Ty tx)
+                Report.prompt ctx Config.Printing.Prompt.data_decl_prefixes x σ.scheme None
 
         // TODOL: implement kind aliases
         | D_Kind _ ->
@@ -679,7 +676,7 @@ and W_decl' (ctx : context) (d0 : decl) =
 
 
 and W_patt' ctx (p0 : patt) : M<fxty> =
-    let M = new type_inference_builder (p0.loc)
+    let M = new type_inference_builder (p0.loc, ctx)
     let loc0 = p0.loc
     let Lo0 = Lo loc0
     M {
@@ -709,7 +706,7 @@ and W_patt' ctx (p0 : patt) : M<fxty> =
             yield T_Open_Variant [x, T_Arrow (α, β)]
 
         | P_Var x ->
-            let! tα = M.add_fresh_star_to_prefix
+            let! tα = M.extend_fresh_star
             let! _ = M.bind_ungeneralized_var_Γ x tα
             yield tα
 
@@ -721,10 +718,10 @@ and W_patt' ctx (p0 : patt) : M<fxty> =
 
         // HACK: this does not use the Lambda-App trick used in Annot rule in W_expr 
         | P_Annot (p, τ) ->
-            let! ϕτ, k = Wk_and_eval_ty_expr_fx ctx τ
+            let! t, k = Wk_and_eval_ty_expr ctx τ
             do! M.kunify τ.loc K_Star k
             let! ϕp = W_patt ctx p
-            yield! W_binding_annot τ.loc ϕτ ϕp
+            yield! W_binding_annot ctx τ.loc (Fx_F_Ty t) ϕp
 
         | P_Lit lit ->
             yield W_lit lit
@@ -779,8 +776,8 @@ and W_patt' ctx (p0 : patt) : M<fxty> =
 
 
 and W_program (prg : program) =
-    let ctx = context.top_level
-    let M = new type_inference_builder ()
+    let ctx = context.as_top_level_decl
+    let M = new type_inference_builder (ctx)
     M {
         for d in prg.decls do
             do! W_decl ctx d

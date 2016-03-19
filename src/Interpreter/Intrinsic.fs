@@ -172,8 +172,8 @@ with
                 |> List.fold (fun (Γ : jenv, Δ : Eval.env) (x, f) ->
                                 let (t : ty), v = f x
                                 in
-                                    Γ.bind (Jk_Var x) { mode = Jm_Normal; scheme = { constraints = constraints.empty
-                                                                                     fxty        = Fx_F_Ty (T_Foralls (List.ofSeq t.fv, t))} },
+                                    Γ.bind (jenv_key.Var x) { mode = jenv_mode.Normal; scheme = { constraints = constraints.empty
+                                                                                                  fxty        = Fx_F_Ty (T_Foralls (List.ofSeq t.fv, t))} },
                                     Δ.bind x v)
                     (Env.empty, Env.empty) 
 
@@ -183,7 +183,7 @@ with
                 |> List.fold (fun (γ : kjenv, δ : tenv) (x, k) ->
                             let t = T_Cons (x, k)
                             in
-                                γ.bind x (k.generalize γ Set.empty),
+                                γ.bind x { forall = k.fv; kind = k },
                                 δ.bind x t)
                     (Env.empty, Env.empty)
 
@@ -191,12 +191,12 @@ with
         let Γ0, γ0, δ0 =
             Builtin.Decls.all
                 |> List.fold (fun (Γ : jenv, γ : kjenv, δ) d ->
-                        let (), st = Inference.W_decl context.top_level d { state.empty with Γ = Γ; γ = γ; δ = δ }
+                        let (), st = Inference.W_decl context.as_top_level_decl d { state.empty with Γ = Γ; γ = γ; δ = δ }
                         in
                             st.Γ, st.γ, st.δ)
                     (Γ01, γ01, δ01)
 
-        let Δ0 = Δ01    // no more values to add to value environment
+        let Δ0 = Δ01    // no more values to add to Δ environment, so it's just rebound as is
         L.msg Min "intrinsics created"
         { Γ = Γ0; Δ = Δ0; γ = γ0; δ = δ0 }
 
