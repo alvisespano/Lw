@@ -94,8 +94,8 @@ let (|Row_Tuple|_|) (|Tup|_|) = function
 ///    the second group consists of the last 2 curried arguments where
 ///                                         c1 is the actual single-shot constructor,
 ///                                         P1 is the actual single-shot pattern.
-/// Consider using this function in curried form, i.e. defining and passing what's needed by the first triple only;
-/// further code will eventually need to pass the second tuple with actual single-shot constructor and pattern.
+/// Use this function in curried form, i.e. defining and passing what's needed by the first triple only;
+/// further code will eventually need to pass the second tuple with the actual single-item constructor and pattern.
 let make_patterns (cs, (|Ps|_|), (|Ps0|)) (c1 : 'a -> 'b) ((|P1|_|) : 'b -> 'a option) = 
     let (|Ps|_|) x = (|Ps|_|) (|P1|_|) x
     in
@@ -340,22 +340,6 @@ type [< NoComparison; NoEquality; Diagnostics.DebuggerDisplay("{ToString()}") >]
 with
     interface annotable with
         member __.annot_sep = Config.Printing.kind_annotation_sep
-
-//    override x.Equals y = CustomCompare.equals_with (fun x y -> (x :> IEquatable<kind>).Equals y) x y
-//
-//    override this.GetHashCode () =
-//        match this with
-//        | K_Cons (x, ks)    -> (x, ks).GetHashCode ()
-//        | K_Var α           -> α.GetHashCode ()
-//
-//    interface IEquatable<kind> with
-//        member x.Equals y =
-//            match x, y with
-//            | K_Cons (x1, ks1), K_Cons (x2, ks2)
-//                when ks1.Length = ks2.Length     -> x1 = x2 && List.forall2 (=) ks1 ks2
-//            | K_Var α, K_Var β                   -> α = β
-//            | _                                  -> false
-
 
 let K_Id x = K_Cons (x, [])
 let (|K_Id|_|) = function
@@ -683,7 +667,7 @@ type ty_udecl with
 // literals
 //
 
-type [< NoComparison >] lit =
+type [< NoComparison; RequireQualifiedAccess >] lit =
     | Int of int
     | Float of float
     | Bool of bool
@@ -1003,7 +987,7 @@ let LambdaFun =
         | P_Wildcard -> Some ()
         | _ -> None
     let (|P_Custom|_|) (p : node<_, _>) (e : node<_, _>) = function
-        | P_Lit Unit -> Some (Lambda ((fresh_reserved_id (), Some (Lo p.loc Te_Unit)), e))
+        | P_Lit lit.Unit -> Some (Lambda ((fresh_reserved_id (), Some (Lo p.loc Te_Unit)), e))
         | _ -> None
     in
         lambda_fun (|P_Annot|_|) (|P_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) Lambda LambdaFunction

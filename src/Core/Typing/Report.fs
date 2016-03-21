@@ -77,8 +77,8 @@ module Error =
     let unbound_symbol loc x =
         Es 10 loc "variable identifier %s is undefined" x
 
-    let unbound_type_symbol loc x =
-        Es 11 loc "type variable or constructor %s is undefined" x
+    let unbound_type_constructor loc x =
+        Es 11 loc "type constructor %s is undefined" x
 
     let unbound_data_constructor loc x =
         Es 12 loc "data constructor %s is undefined" x

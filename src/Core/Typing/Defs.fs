@@ -18,7 +18,7 @@ open Lw.Core.Globals
 open Lw.Core.Absyn
 
 
-// types, schemes, constraints, environments, etc.
+// kind environments and kind schemes
 //
 
 type [< NoComparison; NoEquality >] kscheme = { forall : Set<var>; kind : kind }
@@ -29,14 +29,13 @@ type kjenv = Env.t<id, kscheme>
 
 type var_kjenv = Env.t<id, kind>
 
-type kconsenv = Env.t<id, var list * kind>
-
-type kinded =
-    abstract kind : kind
 
 
 // System-F types
 //
+
+type kinded =
+    abstract kind : kind
 
 type tenv = Env.t<id, ty>   // type constructor environment (namely, δ, analogous to the value environment Δ)
 
@@ -51,35 +50,6 @@ with
     static member binding_separator = Config.Printing.type_annotation_sep
 
     member this.kind = (this :> kinded).kind
-
-//    override x.Equals y = CustomCompare.equals_with (fun x y -> (x :> IEquatable<ty>).Equals y) x y
-//
-//    override this.GetHashCode () =
-//        match this with
-//        | T_Cons (x, k)             -> (x, k).GetHashCode ()
-//        | T_Var (α, k)              -> (α, k).GetHashCode ()
-//        | T_HTuple ts               -> ts.GetHashCode ()
-//        | T_App (t1, t2)            -> (t1, t2).GetHashCode ()
-//        | T_Forall (α, t)           -> (α, t).GetHashCode ()
-//        | T_Closure (_, _, _, _)    -> unexpected "hashing type closure: %O" __SOURCE_FILE__ __LINE__ this   
-//
-////
-//    interface IEquatable<ty> with
-//        member x.Equals y = (x :> TyEq.equivalent<ty>).is_equivalent y TyEq.state.empty |> fst
-//
-//    interface IEquatable<ty> with
-//        member x.Equals y =
-//            x.kind = y.kind
-//                 && match x, y with
-//                    | T_Cons (x, _), T_Cons (y, _)          -> x = y
-//                    | T_Var (α, _), T_Var (β, _)            -> α = β
-//                    | T_App (t1, t2), T_App (t1', t2')      -> t1 = t1' && t2 = t2'
-//                    | T_Forall (α, t1), T_Forall (β, t2)    -> α = β && t1 = t2
-//                    | T_HTuple ts, T_HTuple ts'
-//                        when ts.Length = ts'.Length         -> List.fold2 (fun b t t' -> b && t = t') true ts ts'
-//                    | T_Closure _, _
-//                    | _, T_Closure _                        -> L.unexpected_error "comparing type closures: %O = %O" x y; false
-//                    | _                                     -> false
 
     interface kinded with
         member this.kind =
@@ -114,20 +84,8 @@ with
             | Fx_Forall (_, ϕ)        -> ϕ.kind
             | Fx_F_Ty t               -> t.kind
 
-//    override x.Equals y = CustomCompare.equals_with (fun x y -> (x :> IEquatable<fxty>).Equals y) x y
-//
-//    override this.GetHashCode () =
-//        match this with
-//        | Fx_Bottom k                -> k.GetHashCode ()
-//        | Fx_Forall ((α, ϕ1), ϕ2)    -> (α, ϕ1, ϕ2).GetHashCode ()
-//        | Fx_F_Ty t                  -> t.GetHashCode ()
-//
-//    interface IEquatable<fxty> with
-//        member x.Equals y = (x :> TyEq.equivalent<fxty>).is_equivalent y TyEq.state.empty |> fst
 
-
-
-// overloaded symbol constraints
+// constraints for overloading
 //
 
 type constraint_mode = Cm_FreeVar | Cm_OpenWorldOverload | Cm_ClosedWorldOverload
@@ -215,15 +173,55 @@ module constraints =
 
 
 
-// schemes and predicates
+// schemes, prefix and type judice environment
 //
     
-type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] scheme =
+type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] tscheme =
     {
 //        type_constraints : type_constraints
         constraints      : constraints
         fxty             : fxty
     }
+
+[< RequireQualifiedAccess >]
+type jenv_key =
+        | Data of id
+        | Inst of id * int
+        | Var of id
+with
+    override this.ToString () = this.pretty
+
+    member this.pretty =
+        match this with
+            | jenv_key.Var x       -> x
+            | jenv_key.Data x      -> sprintf "data %s" x
+            | jenv_key.Inst (x, n) -> sprintf Config.Printing.jk_inst_fmt x n 
+
+    member this.pretty_as_translated_id =
+        match this with
+            | jenv_key.Var x       
+            | jenv_key.Data x      -> x
+            | jenv_key.Inst (x, n) -> sprintf Config.Printing.jk_inst_fmt x n 
+
+[< RequireQualifiedAccess >]
+type [< NoComparison; NoEquality >] jenv_mode =
+    | Overload
+    | Normal
+
+type [< NoComparison; NoEquality >] jenv_value =
+    {
+        mode    : jenv_mode
+        scheme  : tscheme
+    }
+with
+    override this.ToString () = this.pretty
+            
+    member this.pretty =        
+        match this.mode with
+        | jenv_mode.Overload -> sprintf "<overload> %O" this.scheme
+        | jenv_mode.Normal   -> sprintf "%O" this.scheme
+
+type jenv = Env.t<jenv_key, jenv_value>
 
 type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] prefix =
     | Q_Nil
@@ -284,52 +282,7 @@ module prefix =
 
 
 
-// type judice environment
-//
-
-[< RequireQualifiedAccess >]
-type jenv_key =
-        | Data of id
-        | Inst of id * int
-        | Var of id
-with
-    override this.ToString () = this.pretty
-
-    member this.pretty =
-        match this with
-            | jenv_key.Var x       -> x
-            | jenv_key.Data x      -> sprintf "data %s" x
-            | jenv_key.Inst (x, n) -> sprintf Config.Printing.jk_inst_fmt x n 
-
-    member this.pretty_as_translated_id =
-        match this with
-            | jenv_key.Var x       
-            | jenv_key.Data x      -> x
-            | jenv_key.Inst (x, n) -> sprintf Config.Printing.jk_inst_fmt x n 
-
-[< RequireQualifiedAccess >]
-type [< NoComparison; NoEquality >] jenv_mode =
-    | Overload
-    | Normal
-
-type [< NoComparison; NoEquality >] jenv_value =
-    {
-        mode    : jenv_mode
-        scheme  : scheme
-    }
-with
-    override this.ToString () = this.pretty
-            
-    member this.pretty =        
-        match this.mode with
-        | jenv_mode.Overload -> sprintf "<overload> %O" this.scheme
-        | jenv_mode.Normal   -> sprintf "%O" this.scheme
-
-type jenv = Env.t<jenv_key, jenv_value>
-
-
-
-// contexts for non-monadic algorithms
+// contexts for off-monad data
 //
 
 type resolution = Res_Strict | Res_Loose | Res_No
@@ -445,7 +398,7 @@ let T_Open_Variant xts = T_Variant (xts, Some var.fresh)
 let T_Closed_Variant xts = T_Variant (xts, None)
 
 
-// substitution types
+// substitutions
 //
 
 type [< NoComparison >] subst< [<EqualityConditionalOn>] 't> (env : Env.t<var, 't>) =
@@ -498,7 +451,7 @@ with
     member this.pretty = this.t.pretty ("[", "]") + if this.k.is_empty then "" else this.k.pretty ("{", "}") 
        
 
-// augmentations for kinds
+// augmentations for kinds and kind schemes
 //
 
 type kind with
@@ -524,7 +477,7 @@ type kscheme with
        
 
 
-// augmentations for types
+// augmentations for types and schemes
 //
 
 type ty with
@@ -561,11 +514,7 @@ let (|T_ForallK|_|) t =
     | _ -> None
 
 let T_ForallsK, (|T_ForallsK0|), (|T_ForallsK|_|) = make_foralls T_ForallK (|T_ForallK|_|)
-
-
-// pretty printer for types, flex types and schemes
-//
-    
+   
 let pretty_kinded_wrapper R' t =
     let R t =
         let k = (t :> kinded).kind
@@ -697,7 +646,7 @@ type fxty with
         | Fx_F_Ty t   -> t.is_monomorphic
 
 
-type scheme with    
+type tscheme with    
     override this.ToString () = this.pretty
 
     member σ.pretty =

@@ -518,7 +518,7 @@ expr_stmts:
 
 expr_stmt_atom_:
   | LET let_decls IN expr           		    { (Lets ($2, $4)).value }     
-  | IF expr THEN expr_stmt_atom			        { If ($2, $4, Lo $4.loc (Lit Unit)) }
+  | IF expr THEN expr_stmt_atom			        { If ($2, $4, Lo $4.loc (Lit lit.Unit)) }
   | IF expr THEN expr_stmt_atom
     ELSE expr_stmt_atom                         { If ($2, $4, $6) }
 /*  | MATCH expr_tuple WITH cases               { Match ((match $2 with [e] -> e | es -> pos parseState 2 <| Tuple es), $4) }*/
@@ -624,13 +624,13 @@ symbol:
   | INFIX                               { $1 }
 
 lit:
-    INT32							{ Int $1 }
-  |	FLOAT							{ Float $1 }
-  | TRUE							{ Bool true }
-  |	FALSE							{ Bool false }
-  | STRING							{ String $1 }
-  | CHAR							{ Char $1 }
-  | BRA KET							{ Unit }
+    INT32							{ lit.Int $1 }
+  |	FLOAT							{ lit.Float $1 }
+  | TRUE							{ lit.Bool true }
+  |	FALSE							{ lit.Bool false }
+  | STRING							{ lit.String $1 }
+  | CHAR							{ lit.Char $1 }
+  | BRA KET							{ lit.Unit }
 
 expr_list:
     expr_stmts                  { $1 }

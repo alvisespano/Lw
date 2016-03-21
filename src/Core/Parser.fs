@@ -3367,7 +3367,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 521 "Parser.fsy"
-                                                                 If (_2, _4, Lo _4.loc (Lit Unit)) 
+                                                                 If (_2, _4, Lo _4.loc (Lit lit.Unit)) 
                    )
 # 521 "Parser.fsy"
                  : 'expr_stmt_atom_));
@@ -4259,7 +4259,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 627 "Parser.fsy"
-                                       Int _1 
+                                       lit.Int _1 
                    )
 # 627 "Parser.fsy"
                  : 'lit));
@@ -4270,7 +4270,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 628 "Parser.fsy"
-                                       Float _1 
+                                       lit.Float _1 
                    )
 # 628 "Parser.fsy"
                  : 'lit));
@@ -4280,7 +4280,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 629 "Parser.fsy"
-                                      Bool true 
+                                      lit.Bool true 
                    )
 # 629 "Parser.fsy"
                  : 'lit));
@@ -4290,7 +4290,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 630 "Parser.fsy"
-                                       Bool false 
+                                       lit.Bool false 
                    )
 # 630 "Parser.fsy"
                  : 'lit));
@@ -4301,7 +4301,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 631 "Parser.fsy"
-                                        String _1 
+                                        lit.String _1 
                    )
 # 631 "Parser.fsy"
                  : 'lit));
@@ -4312,7 +4312,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 632 "Parser.fsy"
-                                      Char _1 
+                                      lit.Char _1 
                    )
 # 632 "Parser.fsy"
                  : 'lit));
@@ -4322,7 +4322,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 633 "Parser.fsy"
-                                         Unit 
+                                         lit.Unit 
                    )
 # 633 "Parser.fsy"
                  : 'lit));

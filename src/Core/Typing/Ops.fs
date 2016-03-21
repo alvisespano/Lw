@@ -514,7 +514,7 @@ type constraints with
 
     member cs.instantiate αs = constraints.B { for c in cs do yield c.instantiate αs }
 
-type scheme with
+type tscheme with
     member σ.fv =
         let { constraints = cs; fxty = t } = σ
         in

@@ -110,9 +110,9 @@ and eval_expr (ctx : context) Δ (e0 : expr) =
         let v1 = E Δ e1
         in
             E Δ (match v1 with
-                 | V_Const (Bool true)  -> e2
-                 | V_Const (Bool false) -> e3
-                 | _                    -> Report.unexpected_value e1.loc "if-guard expression" "boolean" __SOURCE_FILE__ __LINE__ v1)
+                 | V_Const (lit.Bool true)  -> e2
+                 | V_Const (lit.Bool false) -> e3
+                 | _                        -> Report.unexpected_value e1.loc "if-guard expression" "boolean" __SOURCE_FILE__ __LINE__ v1)
 
     | Combine es ->
         let rec R = function
@@ -129,8 +129,8 @@ and eval_expr (ctx : context) Δ (e0 : expr) =
                 cases |> List.pick (fun (p, weo, e) ->                    
                                         match eval_patt ctx Δ p v with
                                         | Some Δ when (something (fun we -> match E Δ we with
-                                                                            | V_Const (Bool b) -> b
-                                                                            | wv               -> Report.unexpected_value we.loc "when-guard in match case" "boolean" __SOURCE_FILE__ __LINE__ wv)
+                                                                            | V_Const (lit.Bool b) -> b
+                                                                            | wv                   -> Report.unexpected_value we.loc "when-guard in match case" "boolean" __SOURCE_FILE__ __LINE__ wv)
                                                             true weo)
                                             -> Some (E Δ e)
                                         | _ -> None)

@@ -25,7 +25,7 @@ type [< NoComparison; NoEquality >] candidate =
     {
         jk          : jenv_key
         constraints : constraints
-        σ           : scheme
+        σ           : tscheme
         δ           : int
         θ           : tksubst
     }
@@ -34,7 +34,7 @@ with
     member this.pretty = sprintf "%O : %O [δ = %d]" this.jk this.σ this.δ
 
 let private search_best_candidate ctx p cx ct jkσs =
-    [ for jk, σ : scheme in jkσs do
+    [ for jk, σ : tscheme in jkσs do
             let { constraints = csi; fxty = ϕi } = σ.instantiate
             let ti = ϕi.ftype // TODO: can we use flex types here?
             match ti.try_instance_of ctx ct with

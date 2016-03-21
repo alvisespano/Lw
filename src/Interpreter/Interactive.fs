@@ -11,29 +11,14 @@ open System.Threading
 open System.Diagnostics
 open Lw.Core
 open Lw.Core.Globals
+open Lw.Interpreter.Globals
 open Lw.Interpreter.Intrinsic
 open Lw.Core.Typing.Defs
-
 open FSharp.Common.Log
 open FSharp.Common
 
 
 module A = Lw.Core.Absyn
-
-let handle_exn (e : exn) =
-    let r code =
-//        #if DEBUG
-//        Diagnostics.Debugger.Break ()
-//        #endif
-        code
-    match e with
-    | :? numeric_error as e         -> L.nerror e.code "%s" e.Message; Config.Exit.error
-    | :? located_error              -> L.fatal_error "%s" e.Message; Config.Exit.error
-    | :? NotImplementedException    -> L.not_implemented "%s" e.Message; r Config.Exit.not_implemented
-    | Failure s                         
-    | Unexpected s                  -> L.unexpected_error "%s\n%O" s e.StackTrace; r Config.Exit.unexpected_error
-    | e                             -> L.unexpected_error "uncaught exception: %s\n%O" (pretty_exn_and_inners e) e.StackTrace; r Config.Exit.unexpected_error
-
 
 let print_env_diffs (Γ1 : jenv) Γ2 (Δ1 : Eval.env) Δ2 =
     for (_, { jenv_value.scheme = σ }), (x, v) in Seq.zip (Γ2 - Γ1) (Δ2 - Δ1) do
@@ -113,6 +98,6 @@ let read_and_interpret_loop (envs : Intrinsic.envs) =
             L.log_line (sprintf "%s%s" (spaces (Console.BufferWidth - s.Length)) s)
 
         with :? OperationCanceledException -> ()
-           | e                             -> ignore <| handle_exn e
+           | e                             -> ignore <| handle_exn_and_return e
 
 

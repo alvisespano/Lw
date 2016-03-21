@@ -105,14 +105,6 @@ with
         | Decl d -> sprintf "<DECL> %s" (p d)
         
 
-let parse_expr_or_decl s =  // TODO: support parsing of type expressions and kinds as well, so everything can be tested
-    try parsed.Expr (parse_expr s)
-    with :? syntax_error ->
-        try parsed.Decl (parse_decl s)
-        with :? syntax_error -> reraise ()
-           | e               -> unexpected "syntax error while parsing expression or declaration: %s\n%O" __SOURCE_FILE__ __LINE__ s e
-
-
 
 // PPrint extensions
 //
@@ -200,6 +192,12 @@ type section = string * entry list
 let entry_info sec n = "entry", txt (sprintf "#%d in section \"%s\"" (n + 1) sec)
 let ok_or_no_info b doc = (txt (sprintf "(%s)" (if b then "OK" else "NO"))) <+> doc
                                  
+let parse_expr_or_decl s =
+    try parsed.Expr (parse_expr s)
+    with :? syntax_error ->
+        try parsed.Decl (parse_decl s)
+        with :? syntax_error -> reraise ()
+           | e               -> unexpected "syntax error while parsing expression or declaration: %s\n%O" __SOURCE_FILE__ __LINE__ s e
 
 let typecheck_expr_or_decl (tchk : typechecker) sec n input =
     testing Min (txt "input:" </> txt input)
@@ -226,8 +224,10 @@ let test_entry (tchk : typechecker) sec n ((s1, res) : entry) =
     let infs0 = [ entry_info sec n ]
     match res with
     | result.TypeEq (s2, is_eq) ->
+        testing Low (txt s1 <+> txt "=" <+> txt s2)
         let ϕ1 = tchk.parse_fxty_expr s1
         let ϕ2 = tchk.parse_fxty_expr s2
+        testing Low (fxty ϕ1 <+> txt "=" <+> fxty ϕ2)
         let t1 = ϕ1.ftype
         let t2 = ϕ2.ftype
         let k1 = ϕ1.kind
@@ -237,7 +237,7 @@ let test_entry (tchk : typechecker) sec n ((s1, res) : entry) =
         let b3 = k1.is_equivalent k2
         let infs =
             infs0 @
-            [ "parsed", txt s1 <+> txt "=" <+> txt s2
+            [ //"parsed", txt s1 <+> txt "=" <+> txt s2
               "flex types", ok_or_no_info b1 (fxty ϕ1 <+> txt "=" <+> fxty ϕ2)
               "F-types", ok_or_no_info b2 (ty t1 <+> txt "=" <+> ty t2)
               "kinds", ok_or_no_info b3 (kind k1 <+> txt "=" <+> kind k2) ]

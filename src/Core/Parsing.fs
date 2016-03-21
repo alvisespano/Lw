@@ -24,7 +24,7 @@ let load_and_parse_program filename =
 let parse_line rd name =
     parse_from_TextReader rd name (0, 0) Parser.interactive_line Lexer.tokenize Parser.tokenTagToTokenId
 
-let parse_from_string what p s = parse_from_string __syntax_error s what (0, 0) p Lexer.tokenize Parser.tokenTagToTokenId
+let parse_from_string what p s = parse_from_string __syntax_error s (sprintf "%s:[%s]" what s) (0, 0) p Lexer.tokenize Parser.tokenTagToTokenId
 let parse_decl = parse_from_string "DECL" Parser.top_decl 
 let parse_ty_expr = parse_from_string "TY-EXPR" Parser.ty_expr
 let parse_fxty_expr = parse_from_string "FXTY-EXPR" Parser.fxty_expr

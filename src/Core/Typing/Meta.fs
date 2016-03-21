@@ -91,7 +91,7 @@ module internal Eval =
             let! θ = M.get_θ
             τ0.typed <- subst_kind θ.k τ0.typed // apply latest subst to each typed node
             let! ϕ = ty_expr' ctx τ0
-            L.debug Min "%s %O\n[::k]   %O\n[T*]    %O" rule τ0 τ0.typed ϕ
+            L.debug Min "%s %O\n[::k]    %O\n[T*]     %O" rule τ0 τ0.typed ϕ
             return ϕ
         } 
 
@@ -100,6 +100,7 @@ module internal Eval =
         let R = ty_expr ctx
         M {
             let k0 = τ0.typed       // this is the kind of the current ty_expr node being evaluated (annotated by previous Wk kind inference algorithm)
+            let! k0 = M.updated k0
             match τ0.value with
             | Te_Var x ->
                 let! α = M.search_or_add_scoped_var x
@@ -108,12 +109,12 @@ module internal Eval =
             | Te_Cons x ->
                 let! too = M.search_δ x
                 match too with
-                | None   -> return Report.Error.unbound_type_symbol τ0.loc x
-                | Some t -> return t
+                | None   -> return Report.Error.unbound_type_constructor τ0.loc x
+                | Some t -> return t    // TODO: if instantiation of kschemes needs to refresh kind vars, the kind part should be updated or something
 
             | Te_Lambda ((x, _), τ) ->
-                let! Δ = M.get_δ
-                return T_Closure (x, ref Δ, τ, k0)
+                let! δ = M.get_δ
+                return T_Closure (x, ref δ, τ, k0)
 
             | Te_App (τ1, τ2) ->
                 let! t1 = R τ1
@@ -274,7 +275,7 @@ module internal Eval =
             let! θ = M.get_θ
             ϕτ0.typed <- subst_kind θ.k ϕτ0.typed // apply latest subst to each typed node
             let! ϕ = fxty_expr' ctx ϕτ0
-            L.debug Min "%-7s %O\n[::k]   %O\n[T*]    %O" rule ϕτ0 ϕτ0.typed ϕ
+            L.debug Min "%s %O\n[::k]   %O\n[T*]    %O" rule ϕτ0 ϕτ0.typed ϕ
             return ϕ
         } 
 
@@ -533,10 +534,10 @@ let rec Wk_fxty_expr ctx ϕτ =
     M {
         match ϕτ.value with
         | Fxe_Bottom ->
-            return kind.fresh_var
+            yield kind.fresh_var
 
         | Fxe_F_Ty τ ->
-            return! Wk_ty_expr ctx τ
+            yield! Wk_ty_expr ctx τ
 
         | Fxe_Forall (((x, ko), τo1), τ2) ->
             let kx = either kind.fresh_var ko
@@ -545,7 +546,7 @@ let rec Wk_fxty_expr ctx ϕτ =
             | Some τ1 ->
                 let! k1 = R τ1
                 do! M.kunify τ1.loc k1 kx
-            return! M.undo_γ << M.undo_scoped_vars <| M {
+            yield! M.undo_γ << M.undo_scoped_vars <| M {
                 let! _ = M.bind_γ x (KUngeneralized kx)
                 let! _ = M.search_or_add_scoped_var x
                 yield! R τ2

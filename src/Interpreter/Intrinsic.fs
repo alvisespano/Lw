@@ -6,18 +6,16 @@
  
 module Lw.Interpreter.Intrinsic
 
-open System
-open System.Text.RegularExpressions
-
 open FSharp.Common.Log
 open FSharp.Common
 open Lw.Core.Absyn
 open Lw.Core.Globals
 open Lw.Core.Typing
 open Lw.Core.Typing.Defs
-open Lw.Core.Typing.Ops
+open Lw.Interpreter.Globals
 open Lw.Core.Typing.StateMonad
 open Lw.Core
+open System
 
 module A = Lw.Core.Absyn
 module N = Lw.Core.Config.Typing.Names
@@ -69,10 +67,10 @@ module Builtin =
 
         let private bin2 a = bin3 a a
 
-        let private I = T_Int,     Int,    function Int x -> Some x | _ -> None
-        let private F = T_Float,   Float,  function Float x -> Some x | _ -> None
-        let private B = T_Bool,    Bool,   function Bool x -> Some x | _ -> None
-        let private S = T_String,  String, function String x -> Some x | _ -> None
+        let private I = T_Int,     lit.Int,    function lit.Int x -> Some x | _ -> None
+        let private F = T_Float,   lit.Float,  function lit.Float x -> Some x | _ -> None
+        let private B = T_Bool,    lit.Bool,   function lit.Bool x -> Some x | _ -> None
+        let private S = T_String,  lit.String, function lit.String x -> Some x | _ -> None
 
         let private un_ii = un1 I
         let private un_ff = un1 F
@@ -87,11 +85,12 @@ module Builtin =
         let private bin_ααb f name =
             let α = ty.fresh_star_var
             T_Arrows [α; α; T_Bool],
-            redux (name, (fun v1 -> redux (sprintf "%O %O" (Id name) v1, (fun v2 -> V_Const (Bool (f v1 v2))))))
+            redux (name, (fun v1 -> redux (sprintf "%O %O" (Id name) v1, (fun v2 -> V_Const (lit.Bool (f v1 v2))))))
 
         let ΓΔ0 =
             [
                 // TODOL: many of these operators will have to become overloaded one day
+
                 // arithmetic
                 "+",    bin_iii (+)     
                 "+.",   bin_fff (+)
@@ -125,28 +124,23 @@ module Builtin =
 
     module Decls =
 
-//        let d s =
-//            match (Parsing.parse_decl s).value with
-//            | D_Datatype dbs -> dbs
-//            | _              -> unexpected "declaration is expected to be a datatype" __SOURCE_FILE__ __LINE__
-
         let t = Parsing.parse_ty_expr
 
         let datatypes =
            List.map (fun x -> ULo (D_Datatype x))
              [
-                // native datatypes here
+                // put native datatypes here
                 { id = T.list; kind = K_Arrows [K_Star; K_Star] // list datatype cannot be parsed and must be defined as a data structure, because constructor names are reserved ids which cannot be lexed
                   datacons =
                     [
-                        { id = D.list_nil; signature = t "list 'a"  }
-                        { id = D.list_cons; signature = t "'a -> list 'a -> list 'a"  }
+                        { id = D.list_nil; signature = t (sprintf "%s 'a" T.list) }
+                        { id = D.list_cons; signature = t (sprintf "'a -> %s 'a -> %s 'a" T.list T.list) }
                     ]
                 }
             ]
           @ List.map Parsing.parse_decl [
-                // parsable datatypes here
-                sprintf "datatype %s :: * -> * = %s : option 'a | %s : 'a -> option 'a" T.option D.option_none D.option_some
+                // put parsable datatypes here
+                sprintf "datatype %s :: * -> * = %s : %s 'a | %s : 'a -> %s 'a" T.option D.option_none T.option D.option_some T.option
             ]
 
         let all = datatypes
@@ -164,41 +158,44 @@ type [< NoEquality; NoComparison >] envs = {
 }
 with
     static member create_envs () =
-        L.msg Low "populating intrinsics..."
-        Config.Log.Presets.set_thresholds_for_intrinsics ()
-        // pupulate Γ and Δ with types and values of builtin functions
-        let Γ01, Δ01 =
-            Builtin.Values.ΓΔ0
-                |> List.fold (fun (Γ : jenv, Δ : Eval.env) (x, f) ->
-                                let (t : ty), v = f x
+        try
+            L.msg Low "populating intrinsics..."
+            Config.Log.Presets.set_thresholds_for_intrinsics () // TODOL: define a logger.save_state method supporting undo and use this for changing thresholds temporarily
+            // pupulate Γ and Δ with types and values of builtin functions
+            let Γ01, Δ01 =
+                Builtin.Values.ΓΔ0
+                    |> List.fold (fun (Γ : jenv, Δ : Eval.env) (x, f) ->
+                                    let (t : ty), v = f x
+                                    in
+                                        Γ.bind (jenv_key.Var x) { mode = jenv_mode.Normal; scheme = { constraints = constraints.empty
+                                                                                                      fxty        = Fx_F_Ty (T_Foralls (List.ofSeq t.fv, t))} },
+                                        Δ.bind x v)
+                        (Env.empty, Env.empty) 
+
+            // populate γ and δ with kinds and type constructors of builtin types
+            let γ01, δ01 =
+                Builtin.Types.γ0
+                    |> List.fold (fun (γ : kjenv, δ : tenv) (x, k) ->
+                                let t = T_Cons (x, k)
                                 in
-                                    Γ.bind (jenv_key.Var x) { mode = jenv_mode.Normal; scheme = { constraints = constraints.empty
-                                                                                                  fxty        = Fx_F_Ty (T_Foralls (List.ofSeq t.fv, t))} },
-                                    Δ.bind x v)
-                    (Env.empty, Env.empty) 
+                                    γ.bind x { forall = k.fv; kind = k },
+                                    δ.bind x t)
+                        (Env.empty, Env.empty)
 
-        // populate γ and δ with kinds and type constructors of builtin types
-        let γ01, δ01 =
-            Builtin.Types.γ0
-                |> List.fold (fun (γ : kjenv, δ : tenv) (x, k) ->
-                            let t = T_Cons (x, k)
+            // add declarations
+            let Γ0, γ0, δ0 =
+                Builtin.Decls.all
+                    |> List.fold (fun (Γ : jenv, γ : kjenv, δ) d ->
+                            let (), st = Inference.W_decl context.as_top_level_decl d { state.empty with Γ = Γ; γ = γ; δ = δ }
                             in
-                                γ.bind x { forall = k.fv; kind = k },
-                                δ.bind x t)
-                    (Env.empty, Env.empty)
+                                st.Γ, st.γ, st.δ)
+                        (Γ01, γ01, δ01)
 
-        // add declarations
-        let Γ0, γ0, δ0 =
-            Builtin.Decls.all
-                |> List.fold (fun (Γ : jenv, γ : kjenv, δ) d ->
-                        let (), st = Inference.W_decl context.as_top_level_decl d { state.empty with Γ = Γ; γ = γ; δ = δ }
-                        in
-                            st.Γ, st.γ, st.δ)
-                    (Γ01, γ01, δ01)
-
-        let Δ0 = Δ01    // no more values to add to Δ environment, so it's just rebound as is
-        L.msg Min "intrinsics created"
-        { Γ = Γ0; Δ = Δ0; γ = γ0; δ = δ0 }
+            let Δ0 = Δ01    // no more values to add to Δ environment, so it's just rebound as is
+            L.msg Min "intrinsics created"
+            { Γ = Γ0; Δ = Δ0; γ = γ0; δ = δ0 }
+        with e -> handle_exn_and_exit e
+                  
 
 let private lazy_envs0 = lazy envs.create_envs ()
 

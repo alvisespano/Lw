@@ -184,6 +184,12 @@ type basic_builder (loc : location) =
             return v, M { do! lift (fun (env : Env.t<_, _>) -> env.remove x) }
         }
 
+    // bind for δ is here because it's used by type inference and type evaluation as well    
+    member M.bind_δ x t =
+        M {
+            return! M.undoable_bind M.lift_δ x t
+        }
+
 
 // monad supertype for inference
 //
@@ -201,7 +207,7 @@ type inference_builder (loc, ctx) =
             return fv_Γ Γ + if ctx.is_top_level then Set.empty else αs
         }
 
-    // bind methods for γ are in this superclass because they are used by both type inference and kind inference
+    // bind methods for γ and δ are in this superclass because they are used by type inference, kind inference and type evaluation
     member M.bind_γ x (kσ : kscheme) =
         M {
             let! kσ = M.updated kσ
@@ -297,7 +303,7 @@ type type_inference_builder (loc, ctx) =
             return subst_constraints θ cs
         }
 
-    member M.updated (σ : scheme) =
+    member M.updated (σ : tscheme) =
         M {
             let! θ = M.get_θ
             return subst_scheme θ σ
@@ -414,7 +420,7 @@ type type_inference_builder (loc, ctx) =
             do! M.lift_constraints (fun cs -> cs.remove c)
         }
 
-    member M.instantiate_and_inherit_constraints (σ : scheme) =
+    member M.instantiate_and_inherit_constraints (σ : tscheme) =
         M {            
             let σ = σ.instantiate
             do! M.add_constraints σ.constraints
@@ -455,12 +461,7 @@ type type_eval_builder<'e> (τ : node<'e, kind>) =
             let! Δ = M.get_δ
             return Δ.search x
         }
-
-    member M.bind_δ x t =
-        M {
-            return! M.undoable_bind M.lift_δ x t
-        }
-    
+   
     member M.undo_δ f =
         M {
             let! δ = M.get_δ
@@ -522,7 +523,7 @@ type kind_inference_builder<'e> (τ : node<'e, kind>, ctx) =
     member M.lookup_γ x =
         M {
             let! γ = M.get_γ
-            return M.lookup Report.Error.unbound_type_symbol γ x
+            return M.lookup Report.Error.unbound_type_constructor γ x
         }
 
     member M.undo_γ f =

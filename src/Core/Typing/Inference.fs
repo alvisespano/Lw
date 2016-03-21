@@ -48,12 +48,12 @@ type [< NoComparison; NoEquality >] gen_binding = {
 //
 
 let W_lit = function
-    | Int _       -> T_Int
-    | Float _     -> T_Float
-    | String _    -> T_String
-    | Bool _      -> T_Bool
-    | Char _      -> T_Char
-    | Unit        -> T_Unit
+    | lit.Int _       -> T_Int
+    | lit.Float _     -> T_Float
+    | lit.String _    -> T_String
+    | lit.Bool _      -> T_Bool
+    | lit.Char _      -> T_Char
+    | lit.Unit        -> T_Unit
 
 let auto_jk decl_qual x (ϕ : fxty) = if decl_qual.over then jenv_key.Inst (x, ϕ.pretty.GetHashCode ()) else jenv_key.Var x
 
@@ -652,6 +652,7 @@ and W_decl' (ctx : context) (d0 : decl) =
         //          data Cons : 'a -> list 'a -> list 'a
         | D_Datatype { id = c; kind = kc; datacons = bs } ->
             let! kσ, _ = M.gen_and_bind_γ c kc
+            let! _ = M.bind_δ c (T_Cons (c, kc))
             Report.prompt ctx Config.Printing.Prompt.datatype_decl_prefixes c kσ None
             for { id = x; signature = τx } in bs do
                 // the whole inferred kind must be star, which is even better that the co-domain     

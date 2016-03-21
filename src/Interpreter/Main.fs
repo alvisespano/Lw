@@ -7,12 +7,12 @@
 module Lw.Interpreter.Main
 
 open System
-
 open FSharp.Common.Log
 open FSharp.Common
 open Lw.Core
 open Lw.Core.Globals
 open Lw.Interpreter.Intrinsic
+open Lw.Interpreter.Globals
 
 
 // workaround for preventing a bug on the event handler add/remove system: dummy handler that won't be removed for the whole application life-cycle
@@ -67,11 +67,10 @@ let interpret (envs : Intrinsic.envs) filename =
     Console.CancelKeyPress.RemoveHandler ctrl_c_handler
     envs
 
-let handle_exn = Interactive.handle_exn
-
 
 [<EntryPoint>]
 let main _ =
+    AppDomain.CurrentDomain.ProcessExit.Add (fun _ -> printfn "scimmia"; Threading.Thread.Sleep(2))
     let code =      
         try            
             Lw.Interpreter.Args.parse ()
@@ -98,11 +97,6 @@ let main _ =
                 Interactive.read_and_interpret_loop !envs
             0
             #endif
-        with e -> handle_exn e
-    
+        with e -> handle_exn_and_return e
 
-    #if WAIT_FOR_KEY_AT_EXIT
-    printfn "\n\npress any key to exit...\n"
-    ignore <| System.Console.ReadKey ()
-    #endif
-    code
+    exit code
