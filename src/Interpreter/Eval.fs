@@ -10,11 +10,15 @@ module Lw.Interpreter.Eval
 #nowarn "40"
 
 open System
-
 open FSharp.Common.Parsing
 open FSharp.Common.Log
 open FSharp.Common
 open Lw.Core.Absyn
+open Lw.Core.Absyn.Misc
+open Lw.Core.Absyn.Var
+open Lw.Core.Absyn.Kind
+open Lw.Core.Absyn.Factory
+open Lw.Core.Absyn.Ast
 open Lw.Core.Globals
 open System.Threading
 

@@ -9,6 +9,11 @@ module Lw.Interpreter.Intrinsic
 open FSharp.Common.Log
 open FSharp.Common
 open Lw.Core.Absyn
+open Lw.Core.Absyn.Misc
+open Lw.Core.Absyn.Var
+open Lw.Core.Absyn.Kind
+open Lw.Core.Absyn.Factory
+open Lw.Core.Absyn.Ast
 open Lw.Core.Globals
 open Lw.Core.Typing
 open Lw.Core.Typing.Defs
@@ -17,7 +22,7 @@ open Lw.Core.Typing.StateMonad
 open Lw.Core
 open System
 
-module A = Lw.Core.Absyn
+module A = Lw.Core.Absyn.Ast
 module N = Lw.Core.Config.Typing.Names
 module T = N.Type
 module K = N.Kind
@@ -146,9 +151,8 @@ module Builtin =
         let all = datatypes
 
 
-// make up environments
+// build environments
 //
-
 
 type [< NoEquality; NoComparison >] envs = {
     Γ : jenv
@@ -157,6 +161,13 @@ type [< NoEquality; NoComparison >] envs = {
     δ : tenv
 }
 with
+    override this.ToString () = this.pretty
+
+    member this.pretty =
+        let { Γ = Γ; Δ = Δ; γ = γ; δ = δ } = this
+        in
+            sprintf "Gamma:\n%O\n\nDelta:\n%O\n\nKGamma:\n%O\n\nKDelta:\n%O" Γ Δ γ δ
+
     static member create_envs () =
         try
             L.msg Low "populating intrinsics..."
@@ -192,8 +203,11 @@ with
                         (Γ01, γ01, δ01)
 
             let Δ0 = Δ01    // no more values to add to Δ environment, so it's just rebound as is
-            L.msg Min "intrinsics created"
-            { Γ = Γ0; Δ = Δ0; γ = γ0; δ = δ0 }
+            let r = { Γ = Γ0; Δ = Δ0; γ = γ0; δ = δ0 }
+            #if DEBUG_INTRINSICS
+            L.msg Low "intrinsics created\n%O" r
+            #endif
+            r
         with e -> handle_exn_and_exit e
                   
 
@@ -203,5 +217,5 @@ type envs with
     static member envs0 = lazy_envs0.Value
 
 type StateMonad.state with
-    static member state0 = { StateMonad.state.empty with Γ = envs.envs0.Γ; γ = envs.envs0.γ }
+    static member state0 = { StateMonad.state.empty with Γ = envs.envs0.Γ; γ = envs.envs0.γ; δ = envs.envs0.δ }
 

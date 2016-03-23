@@ -11,6 +11,11 @@ open FSharp.Common.Log
 open FSharp.Common
 open Lw.Core
 open Lw.Core.Absyn
+open Lw.Core.Absyn.Misc
+open Lw.Core.Absyn.Var
+open Lw.Core.Absyn.Kind
+open Lw.Core.Absyn.Factory
+open Lw.Core.Absyn.Ast
 open Lw.Core.Typing.Defs
 open Lw.Core.Typing.Ops
 open Lw.Core.Globals
@@ -21,7 +26,7 @@ type [< NoComparison; NoEquality; System.Diagnostics.DebuggerDisplayAttribute("{
         // environments
         Γ   : jenv              // type judices
         γ   : kjenv             // kind judices
-        γα  : var_kjenv         // kind judices for vars
+        γα  : vakjenv           // kind judices for vars
         δ   : tenv              // evaluated types
 
         // substitutions
@@ -45,8 +50,8 @@ with
             Γ   = Env.empty
             γ   = Env.empty
             γα  = Env.empty
-            θ   = tksubst.empty
             δ   = tenv.empty
+            θ   = tksubst.empty
             Q   = Q_Nil
 
             constraints = constraints.empty
@@ -57,7 +62,7 @@ with
 type M<'a> = Monad.M<'a, state>
 
 let (|Jb_Overload|Jb_Var|Jb_Data|Jb_OverVar|Jb_Unbound|) = function
-    | Some (jenv_key.Var _, { mode = jenv_mode.Overload; scheme = Ungeneralized ϕ }) -> Jb_Overload ϕ    // HACK: flex types are bound to oveloaded symbols
+    | Some (jenv_key.Var _, { mode = jenv_mode.Overload; scheme = Ungeneralized t }) -> Jb_Overload t
     | Some (jenv_key.Var _, { mode = jenv_mode.Normal; scheme = σ })                 -> Jb_Var σ
     | Some (jenv_key.Inst _, { mode = jenv_mode.Overload; scheme = _ })              -> Jb_OverVar
     | Some (jenv_key.Data _, { mode = jenv_mode.Normal; scheme = σ })                -> Jb_Data σ

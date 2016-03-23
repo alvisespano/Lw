@@ -10,6 +10,10 @@ open FSharp.Common.Log
 open FSharp.Common
 open Lw.Core
 open Lw.Core.Absyn
+open Lw.Core.Absyn.Misc
+open Lw.Core.Absyn.Var
+open Lw.Core.Absyn.Kind
+open Lw.Core.Absyn.Ast
 open Lw.Core.Globals
 open Lw.Core.Typing
 open Lw.Core.Typing.Defs
@@ -217,7 +221,7 @@ let (|FxU0_ForallsQ|FxU0_Bottom|) = function
 // type equivalence
 //
 
-module TyEq =
+module Equivalence =
     type state = Env.t<var, var>
 
     type M<'a> = Monad.M<'a, state>
@@ -230,7 +234,7 @@ module TyEq =
                 let! env = M.get_state
                 match env.search α with
                 | Some α' ->
-                    #if DEBUG_TYPE_EQUALITY
+                    #if DEBUG_TYPE_EQUIVALENCE
                     L.debug Unmaskerable "%O |-> %O = %O: %b" α α' β (α' = β)
                     #endif
                     return α' = β
@@ -239,7 +243,7 @@ module TyEq =
                     if env.exists (fun _ β' -> β' = β) then return false
                     else
                         do! M.lift_state <| fun env -> env.bind α β
-                        #if DEBUG_TYPE_EQUALITY
+                        #if DEBUG_TYPE_EQUIVALENCE
                         L.debug Unmaskerable "%O |-> %O" α β
                         #endif
                         return true
@@ -280,7 +284,9 @@ module TyEq =
                 return false
         }
 
-    let rec private is_prefix_and_unquantified_ty_equivalent (Q1, t1 : ty) (Q2, t2 : ty) =
+    let rec private is_prefixed_unquantified_ty_equivalent (Q1 : prefix, t1 : ty) (Q2, t2 : ty) =
+        assert t1.is_unquantified
+        assert t2.is_unquantified
         let M = new builder<fxty> (is_fxty_equivalent)
         let (&&&) = M.binop_and_with_undo
         M {
@@ -304,7 +310,7 @@ module TyEq =
                     fun Q ->
                         M {
                             let! r, q = R Q_Nil Q
-                            #if DEBUG_TYPE_EQUALITY
+                            #if DEBUG_TYPE_EQUIVALENCE
                             L.debug Unmaskerable "%O contained in %O: %b, %O" α Q2 r q
                             #endif
                             return r, q
@@ -316,13 +322,16 @@ module TyEq =
 
                 | Q_Cons (q1, α) ->
                     let! a, q2 = contains α Q2
-                    let! b = is_permutation q1 q2  
-                    #if DEBUG_TYPE_EQUALITY
+                    let! b = is_permutation q1 q2
+                    #if DEBUG_TYPE_EQUIVALENCE
                     L.debug Unmaskerable "%O is permutation of %O: %b" Q1 Q2 (a && b)
                     #endif
                     return a && b
             }
-            return! is_ty_equivalent t1 t2 &&& is_permutation Q1 Q2
+//            let! env0 = M.get_state
+//            do! M.set_state (env0.filter (fun α _ -> not <| Set.contains α Q1.dom))
+            let! r = is_ty_equivalent t1 t2 &&& is_permutation Q1 Q2
+            return r
         }
 
     and private is_ty_equivalent' (x : ty) (y : ty) =
@@ -331,12 +340,12 @@ module TyEq =
             match x, y with
             | T_Cons (x, _), T_Cons (y, _)          -> return x = y
             | T_Var (α, _), T_Var (β, _)            -> return! M.is_var_equivalent α β
-            | T_App (t1, t2), T_App (t1', t2')      -> return! M.are_equivalent [t1; t1'] [t2; t2']
+            | T_App (t1, t2), T_App (t1', t2')      -> return! M.are_equivalent [t1; t2] [t1'; t2']
 
             | T_ForallsK (αs, t1), T_ForallsK (βs, t2) when αs.Length = βs.Length ->
                 let Q1 = prefix.of_bottoms αs
                 let Q2 = prefix.of_bottoms βs
-                return! is_prefix_and_unquantified_ty_equivalent (Q1, t1) (Q2, t2)
+                return! is_prefixed_unquantified_ty_equivalent (Q1, t1) (Q2, t2)
 
             | T_HTuple ts, T_HTuple ts' when ts.Length = ts'.Length ->
                 return! M.are_equivalent ts ts'
@@ -355,13 +364,13 @@ module TyEq =
         M {   
             match x, y with
             | FxU_ForallsQ (Q1, t1), FxU_ForallsQ (Q2, t2) ->
-                return! is_prefix_and_unquantified_ty_equivalent (Q1, t1) (Q2, t2)
+                return! is_prefixed_unquantified_ty_equivalent (Q1, t1) (Q2, t2)
 
             | Fx_F_Ty t1, Fx_F_Ty t2 ->
                 return! is_ty_equivalent t1 t2
 
             | Fx_Bottom _, Fx_Bottom _ ->
-                return true // kinds will be compared later
+                return true
 
             | _ -> return false
         }
@@ -383,14 +392,14 @@ module TyEq =
 //
 
 type kind with
-    member x.is_equivalent y = TyEq.unM <| TyEq.is_kind_equivalent x y
+    member x.is_equivalent y = Equivalence.unM <| Equivalence.is_kind_equivalent x y
 
 
 // F-type augmentations
 //
 
 type ty with            
-    member x.is_equivalent y = TyEq.unM <| TyEq.is_ty_equivalent x y
+    member x.is_equivalent y = Equivalence.unM <| Equivalence.is_ty_equivalent x y
 
     member t.instantiate_wrt αs =
         let env = Env.t.B { for α in αs do yield α, var.fresh }
@@ -434,7 +443,7 @@ type ty with
 //
 
 type fxty with
-    member x.is_equivalent y = TyEq.unM <| TyEq.is_fxty_equivalent x y
+    member x.is_equivalent y = Equivalence.unM <| Equivalence.is_fxty_equivalent x y
 
     static member instantiate_unquantified (Q : prefix, t : ty) =
             assert t.is_unquantified
@@ -491,17 +500,11 @@ type fxty with
     member this.is_really_flex = this.maybe_ftype.IsNone
 
 
-
-// TODO: is this representation ok for ungeneralized bindings?
-//let Ungeneralized ϕ = { constraints = constraints.empty; fxty = ϕ }
-//let (|Ungeneralized|) = function
-//    | { constraints = cs; fxty = ϕ } when cs.is_empty -> ϕ
-//    | σ -> unexpected "expected an ungeneralized type scheme but got: %O" __SOURCE_FILE__ __LINE__ σ
-
 let Ungeneralized t = { constraints = constraints.empty; fxty = Fx_F_Ty t }
 let (|Ungeneralized|) = function
     | { constraints = cs; fxty = Fx_F_Ty t } when cs.is_empty -> t
     | σ -> unexpected "expected an ungeneralized type scheme but got: %O" __SOURCE_FILE__ __LINE__ σ
+
 
 // operations over constraints, schemes and environments
 //

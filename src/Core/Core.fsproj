@@ -24,7 +24,7 @@
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
     <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;DEBUG_INFERENCE;DEBUG_BEFORE_INFERENCE;DEBUG_UNI;DEBUG_UNI_DEEP;DEBUG_TYPE_EQUALITY;DEBUG_VAR_NAMES</DefineConstants>
+    <DefineConstants>DEBUG;DEBUG_INFERENCE;DEBUG_BEFORE_INFERENCE;DEBUG_UNI;DEBUG_UNI_DEEP;DEBUG_TYPE_EQUIVALENCE</DefineConstants>
     <WarningLevel>5</WarningLevel>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <DocumentationFile>
@@ -65,7 +65,11 @@
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Config.fs" />
     <Compile Include="Globals.fs" />
-    <Compile Include="Absyn.fs" />
+    <Compile Include="Absyn\Misc.fs" />
+    <Compile Include="Absyn\Var.fs" />
+    <Compile Include="Absyn\Factory.fs" />
+    <Compile Include="Absyn\Kind.fs" />
+    <Compile Include="Absyn\AST.fs" />
     <FsYacc Include="Parser.fsy">
       <OtherFlags>--module Lw.Core.Parser</OtherFlags>
     </FsYacc>

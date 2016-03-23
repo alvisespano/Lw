@@ -9,6 +9,11 @@ module Lw.Interpreter.Config
 open System
 open Printf
 open Lw.Core.Absyn
+open Lw.Core.Absyn.Misc
+open Lw.Core.Absyn.Var
+open Lw.Core.Absyn.Kind
+open Lw.Core.Absyn.Factory
+open Lw.Core.Absyn.Ast
 open FSharp.Common
 
 (* -- Compilation Switches --

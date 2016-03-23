@@ -1,417 +1,25 @@
 ﻿(*
  * Lw
- * Absyn.fs: Abstract Syntax
+ * Absyn/AST.fs: main AST
  * (C) Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
  
-module Lw.Core.Absyn
+module Lw.Core.Absyn.Ast
 
 #nowarn "60"
 
 open System
 open System.Collections.Generic
 open FSharp.Common
-
 open FSharp.Common.Log
 open FSharp.Common.Parsing
+open Lw.Core
 open Lw.Core.Globals
+open Lw.Core.Absyn.Misc
+open Lw.Core.Absyn.Var
+open Lw.Core.Absyn.Kind
+open Lw.Core.Absyn.Factory
 
-
-// misc stuff
-//
-
-let parse_float s = Double.Parse (s, Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture)
-let fresh_reserved_id () = Config.reserved_id <| sprintf Config.Printing.fresh_reserved_id (fresh_int ())
-let tuple_index_label = sprintf Config.Printing.tuple_index_label_fmt
-
-type id = string
-
-let (|SymString|_|) =
-    let rex = new System.Text.RegularExpressions.Regex("([a-zA-Z_][a-zA-Z0-9_]*)|(__\\$[0-9]+)")
-    in function
-    | x when not (rex.IsMatch x) -> Some x
-    | _ -> None
-
-let (|Sym|_|) (|Id|_|) = function
-    | Id (SymString _, r) -> Some r
-    | _ -> None
-
-
-type 'a translated = Translated of 'a
-with
-    override this.ToString () = match this with Translated x -> x.ToString ()
-
-type [< NoEquality; NoComparison >] node<'a, 't> (value : 'a, ?loc : location) =
-    let mutable _typed : 't option = None
-    let mutable _translated : 'a translated option = None
-
-    member this.translated
-        with get () = either (Translated this.value) _translated
-        and set x = _translated <- Some x
-    
-    member this.typed
-        with get () = match _typed with Some x -> x | None -> unexpected "node %O has not been typed" __SOURCE_FILE__ __LINE__ this
-        and set t = _typed <- Some t
-
-    member val value = value with get //, set
-    member val loc = defaultArg loc (new location ())
-    abstract pretty : string
-    default this.pretty = sprintf "%O" this.value
-    override this.ToString () = this.pretty
-    static member op_Implicit (this : node<'a, 't>) = this.value
-
-
-let Lo loc (x : 'a) = new node<_, _> (x, loc)
-let ULo x = new node<_, _> (x)
-let (|Lo|) (l : node<'a, _>) = l.value, l.loc
-let (|ULo|) = function Lo (x, _) -> x
-
-let (|Application|) (|App|_|) (|R|_|) = // (|R|_|) matches right-hand atoms
-    let (|L|_|) = function
-        | App _ | R _ as x -> Some x
-        | _ -> None
-    in function
-    | (L e1, R e2)  -> sprintf "%O %O" e1 e2
-    | (e1, R e2)    -> sprintf "(%O) %O" e1 e2
-    | (L e1, e2)    -> sprintf "%O (%O)" e1 e2
-    | (e1, e2)      -> sprintf "(%O) (%O)" e1 e2
-
-let Row_Tuple tup ps = tup (List.mapi (fun i p -> tuple_index_label (i + 1), p) ps, None)
-let (|Row_Tuple|_|) (|Tup|_|) = function
-    | Tup ((x1, _) :: _ as bs, None) when x1 = tuple_index_label 1 -> Some (List.map snd bs)
-    | _ -> None
-
-/// This function produces active patterns and constructors for manipulating multiple occurrences of the given single-shot active pattern and constructor.
-/// For example, it can produce the 'Arrows' constructor and the respective pattern, given the single-shot 'Arrow' constructor and pattern.
-/// In details, this function returns the triple cs', (|Ps0'|), (|Ps'|_|) where:
-///     cs' is the multiple-occurence constructor;
-///     (|Ps0'|) is the non-optional version of the multiple-occurence pattern, defined in such a way that it never fails and returns something even when there are no occurrences (or a single occurrence, depending on the semantics);
-///     (|Ps'|_|) is the optional version of the multiple-occurence pattern.
-/// Arguments are grouped into 2 groups:
-///    the first is a triple where cs is the multiple-occurrence constructor parametric on the single constructor c1,
-///                                 Ps is the optional version of the multiple-occurrence pattern parametric on the single pattern P1,
-///                                 Ps0 is the non-optional version od the multiple-occurrence pattern parametric on the optional one, which is being created using Ps;
-///    the second group consists of the last 2 curried arguments where
-///                                         c1 is the actual single-shot constructor,
-///                                         P1 is the actual single-shot pattern.
-/// Use this function in curried form, i.e. defining and passing what's needed by the first triple only;
-/// further code will eventually need to pass the second tuple with the actual single-item constructor and pattern.
-let make_patterns (cs, (|Ps|_|), (|Ps0|)) (c1 : 'a -> 'b) ((|P1|_|) : 'b -> 'a option) = 
-    let (|Ps|_|) x = (|Ps|_|) (|P1|_|) x
-    in
-        cs c1, (|Ps0|) (|Ps|_|), (|Ps|_|)
-
-
-// arrows active pattern creator
-//
-
-let make_arrow_by_apps arrow_cons apps (|Arrow_Cons|_|) (|Apps|_|) = 
-    let Arrow (t1, t2) = apps [arrow_cons; t1; t2]
-    let (|Arrow|_|) = function
-        | Apps [Arrow_Cons; τ1; τ2] -> Some (τ1, τ2)
-        | _ -> None
-    in
-        Arrow, (|Arrow|_|)
-
-let make_arrows_by f (|F|) =
-    let rec Arrows arrow = function
-        | []        -> unexpected "empty list of Arrows items" __SOURCE_FILE__ __LINE__
-        | [F x]     -> x
-        | x :: xs   -> arrow (x, f (Arrows arrow xs))
-    let rec (|Arrows|_|) (|Arrow|_|) = function
-        | Arrow (x1, F (Arrows (|Arrow|_|) l)) -> Some (x1 :: l)
-        | Arrow (x1, x2)                       -> Some [x1; x2]
-        | _                                    -> None
-    let (|Arrows1|) (|Arrows|_|) = function
-        | Arrows xs -> xs
-        | x         -> [f x]
-    in
-        make_patterns (Arrows, (|Arrows|_|), (|Arrows1|))
-
-
-// apps active pattern creator
-//
-
-let make_apps_by f (|F|) =
-    let rec Apps app = function
-        | []    -> unexpected "empty or singleton list of Apps items" __SOURCE_FILE__ __LINE__
-        | [F x] -> x
-        | l     -> let xs, x = List.takeButLast l in app (f (Apps app xs), x)
-    let rec (|Apps|_|) (|App|_|) = function
-        | App (F (Apps (|App|_|) l), x2) -> Some (l @ [x2])
-        | App (x1, x2)                   -> Some [x1; x2]
-        | _  -> None
-    let (|Apps1|) (|Apps|_|) = function
-        | Apps xs -> xs
-        | x       -> [f x]
-    in
-        make_patterns (Apps, (|Apps|_|), (|Apps1|))
-
-/// Homogeneous version using identity as projection
-let make_arrows x = make_arrows_by identity identity x
-let make_apps x = make_apps_by identity identity x
-
-// foralls active pattern creator
-//
-
-let Foralls forall = function
-    | [], t -> t
-    | αs, t -> List.foldBack (fun α t -> forall (α, t)) αs t
-
-let rec (|Foralls|_|) (|Forall|_|) = function
-    | Forall (α, Foralls (|Forall|_|) (αs, t)) -> Some (α :: αs, t)
-    | Forall (α, t)                            -> Some ([α], t)
-    | _                                        -> None
-
-let (|Foralls0|) (|Foralls|_|) = function
-    | Foralls (αs, t) -> αs, t
-    | t               -> [], t
-
-let make_foralls x = make_patterns (Foralls, (|Foralls|_|), (|Foralls0|)) x
-
-
-type annotable =
-    abstract annot_sep : string
-
-type param<'id, 'n>  = 'id * 'n option
-
-type 'n id_param = param<id, 'n>
-
-let pretty_param sep (id, tyo) =
-    match tyo with
-        | None   -> sprintf "%O" id
-        | Some a -> sprintf "(%O %s %O)" id sep a
-
-
-// unification variables
-//
-
-[< System.Diagnostics.DebuggerDisplay("{ToString()}") >]
-[< CustomEquality; CustomComparison >]
-type var = Va of int * string option
-with
-    member this.uid =
-        match this with
-        | Va (n, _) -> n
-
-    override x.Equals y = CustomCompare.equals_by (fun (α : var) -> α.uid) x y
- 
-    override x.GetHashCode () = match x with Va (n, so) -> hash (n, so)
- 
-    interface System.IComparable with
-      member x.CompareTo y = CustomCompare.compare_by (fun (α : var) -> α.uid) x y
-
-// this module is needed and cannot be turn into static members within the var class because static members are unit closures thus cannot be constants
-[< CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix) >]
-module var =
-    type normalization_context () =
-        member val cnt = 0 with get, set
-        member val env = Env.empty with get, set
-
-    let ctx_stack = new Stack<normalization_context> ()
-    let forall : Set<var> ref = ref Set.empty
-
-type var with
-    static member fresh =
-      #if DEBUG_FRESH_VARS
-      let r =
-      #endif
-        Va (fresh_int (), None)
-      #if DEBUG_FRESH_VARS
-      L.hint Low "new fresh var: %O" r
-      r
-      #endif
-
-    static member fresh_named s =
-      #if DEBUG_FRESH_VARS
-      let r =
-      #endif
-        Va (fresh_int (), Some s)
-      #if DEBUG_FRESH_VARS
-      L.hint Low "new fresh named var: %O" r
-      r
-      #endif
-
-    member this.refresh =
-        match this with
-        | Va (_, Some s) -> var.fresh_named s
-        | Va (_, None)   -> var.fresh
-
-    static member private letterize n =
-        let start, endd = Config.Printing.dynamic.tyvar_range
-        let start, endd = Convert.ToInt32 start, Convert.ToInt32 endd
-        let bas = endd - start + 1
-        let chr n = n + start |> Convert.ToChar |> Convert.ToString
-        let rec div n = let n' = n / bas in (if n' = 0 then "" else div n') + (chr (n % bas))
-        in
-            div n
-
-    static member get_normalization_context = new var.normalization_context ()
-
-    static member reset_normalization =
-        #if !DISABLE_VAR_NORM
-        var.ctx_stack.Push (var.get_normalization_context)
-        #endif
-        { new IDisposable with
-            member __.Dispose () =
-                #if !DISABLE_VAR_NORM
-                ignore <| var.ctx_stack.Pop ()
-                #endif
-                ()
-        }
-
-    static member add_quantified α =
-        var.forall := Set.add α !var.forall
-        { new IDisposable with
-            member __.Dispose () = var.forall := Set.remove α !var.forall
-        }
-
-    static member add_quantifieds αs =
-        let ds = Seq.map var.add_quantified αs
-        { new IDisposable with
-            member __.Dispose () = for d in ds do d.Dispose ()
-        }
-
-    member __.is_quantification_enabled = not (!var.forall).IsEmpty
-    member __.is_normalization_enabled = if var.ctx_stack.Count > 0 then Some (var.ctx_stack.Peek ()) else None
-    
-    member this.pretty =
-        match this.is_normalization_enabled with
-        | None     -> this.pretty_unnormalized
-        | Some ctx -> this.pretty_normalized ctx
-
-    override this.ToString () = this.pretty
-
-    member this.pretty_unnormalized = 
-        match this with
-        | Va (n, None)   -> var.letterize n
-        | Va (_, Some s) -> s
-        |> this.pretty_with_quantification
-
-    member this.pretty_normalized ctx =
-        let env = ctx.env
-        let name =
-            match env.search this.uid with
-            | Some s -> s
-            | None ->
-                let name_exists s = env.exists (fun _ s' -> s' = s)
-                let next_fresh_name () =
-                    let r = var.letterize ctx.cnt
-                    ctx.cnt <- ctx.cnt + 1
-                    r
-                match this with
-                | Va (_, None) ->
-                    let rec R () =
-                        let r = next_fresh_name ()
-                        in
-                            if name_exists r then R () else r
-                    in
-                        R ()
-
-                | Va (_, Some s) ->
-                    let rec R s suffix =
-                        if name_exists s then R (sprintf Config.Printing.already_existing_named_var_fmt s suffix) (suffix + 1) else s
-                    in
-                        R s 0
-        ctx.env <- env.bind this.uid name
-        this.pretty_with_quantification name
-
-    member this.pretty_with_quantification name =
-        #if DEBUG_VAR_NAMES
-        let fmt = 
-            match this with
-            | Va (_, Some _) -> Config.Printing.named_var_fmt
-            | Va (_, None)   -> Config.Printing.anonymous_var_fmt
-        sprintf fmt name this.uid
-        #else
-        name
-        #endif
-        |> sprintf (if not this.is_quantification_enabled || Set.exists (fun (α : var) -> α.uid = this.uid) !var.forall then Config.Printing.dynamic.tyvar_quantified_fmt
-                    else Config.Printing.dynamic.tyvar_unquantified_fmt)
-
-
-
-// kinds
-//
-
-type [< NoComparison; NoEquality; Diagnostics.DebuggerDisplay("{ToString()}") >] kind =
-    | K_Var of var
-    | K_Cons of id * kind list
-with
-    interface annotable with
-        member __.annot_sep = Config.Printing.kind_annotation_sep
-
-let K_Id x = K_Cons (x, [])
-let (|K_Id|_|) = function
-    | K_Cons (x, []) -> Some x
-    | _ -> None
-
-#if DEFINE_K_APP
-let K_App (k1, k2) =
-    match k1 with
-    | K_Cons (x, ks) -> K_Cons (x, ks @ [k2])
-    | k0 -> unexpected "leftmost term '%O' of kind application '%O %O' is not an identifier" __SOURCE_FILE__ __LINE__ k0 k1 k2
-let (|K_App|_|) = function
-    | K_Cons (x, Mapped List.rev (klast :: Mapped List.rev ks)) -> Some (K_App (K_Cons (x, ks), klast))
-    | _ -> None
-
-let K_Apps, (|K_Apps0|), (|K_Apps|_|) = make_apps K_App (|K_App|_|)
-let K_Arrow, (|K_Arrow|_|) = let A = Config.Typing.Names.Kind.arrow in make_arrow_by_apps (K_Id A) K_Apps (function K_Id x when x = A -> Some () | _ -> None) (|K_Apps|_|)
-#else
-let K_Arrow (k1, k2) = K_Cons (Config.Typing.Names.Kind.arrow, [k1; k2])
-let (|K_Arrow|_|) = function
-    | K_Cons (s, [k1; k2]) when s = Config.Typing.Names.Kind.arrow -> Some (k1, k2)
-    | _ -> None
-#endif
-
-let K_Arrows, (|K_Arrows1|), (|K_Arrows|_|) = make_arrows K_Arrow (|K_Arrow|_|)
-
-let K_Star = K_Id Config.Typing.Names.Kind.star
-let (|K_Star|_|) = function
-    | K_Id s when s = Config.Typing.Names.Kind.star -> Some ()
-    | _ -> None
-
-type kind with
-    member this.is_star =
-        match this with
-        | K_Star -> true
-        | _ -> false
-
-let K_Row = K_Cons (Config.Typing.Names.Kind.row, [])
-let (|K_Row|_|) = function
-    | K_Cons (name, []) when name = Config.Typing.Names.Kind.row -> Some ()
-    | _ -> None
-
-let K_HTuple ks = K_Cons (Config.Typing.Names.Kind.htuple, ks)
-let (|K_HTuple|_|) = function
-    | K_Cons (name, ks) when name = Config.Typing.Names.Kind.htuple -> Some ks
-    | _ -> None
-
-type kind with
-    member this.pretty =
-        let (|A|_|) = function
-            | K_Var _ 
-            | K_Cons (_, []) as k -> Some k
-            | _ ->  None
-        let rec R = function
-            | K_Var α                       -> sprintf "%O" α
-            | K_Arrow (K_Arrow _ as k1, k2) -> sprintf "(%s) -> %s" (R k1) (R k2)
-            | K_Arrow (k1, k2)              -> sprintf "%s -> %s" (R k1) (R k2)
-            | K_HTuple ([] | [_])           -> unexpected "empty or unary tuple kind" __SOURCE_FILE__ __LINE__
-            | K_HTuple ks                   -> sprintf "(%s)" (mappen_strings R ", " ks)
-            | K_Cons (x, [])                -> x
-            | K_Cons (x, [A k])             -> sprintf "%s %s" x (R k)
-            | K_Cons (x, ks)                -> sprintf "%s (%s)" x (mappen_strings R ", " ks)
-        in
-            R this
-
-    override this.ToString () = this.pretty
-
-    static member fresh_var = K_Var var.fresh
-
-type kinded_param = kind id_param
-
-type kinded_var_param = param<var, kind>
 
 // bindings and cases
 //
@@ -445,29 +53,6 @@ let pretty_case = function
     | p, Some we, e -> sprintf "%O when %O -> %O" p we e
 
 let pretty_cases cases = mappen_strings pretty_case "\n  | " cases
-
-
-// rows
-//
-
-let make_rows rowed ((|Rowed|_|) : id -> _ -> _) =
-    let Record = rowed Config.Typing.Names.Type.Row.record
-    let (|Record|_|) = (|Rowed|_|) Config.Typing.Names.Type.Row.record
-    let Variant = rowed Config.Typing.Names.Type.Row.variant
-    let (|Variant|_|) = (|Rowed|_|) Config.Typing.Names.Type.Row.variant
-    let Tuple = Row_Tuple Record
-    let (|Tuple|_|) = (|Row_Tuple|_|) (|Record|_|)
-    in
-        Record, Variant, Tuple, (|Record|_|), (|Variant|_|), (|Tuple|_|)
-
-let pretty_row sep binder = function
-    | [], Some x -> sprintf "%O :: %O" x K_Row
-    | xes, xo ->
-        let s = mappen_strings (fun (x, e) -> sprintf "%s %s %O" x binder e) sep xes
-        in
-            match xo with
-                | None   -> s
-                | Some x -> sprintf "%s | %O" s x
 
 
 
@@ -558,12 +143,13 @@ let Te_Arrows, (|Te_Arrows1|), (|Te_Arrows|_|) = nodify make_arrows_by Te_Arrow 
 let Te_Foralls, (|Te_Foralls0|), (|Te_Foralls|_|) = make_foralls (fun (α, τ) -> Lo τ.loc <| Te_Forall (α, τ)) (function ULo (Te_Forall (α, τ)) -> Some (α, τ) | _ -> None)
 let Fxe_Foralls, (|Fxe_Foralls0|), (|Fxe_Foralls|_|) = make_foralls (fun (α, τ) -> Lo τ.loc <| Fxe_Forall (α, τ)) (function ULo (Fxe_Forall (α, τ)) -> Some (α, τ) | _ -> None)
 
-let private Te_Rowed name r = Te_App (ULo <| Te_Cons name, ULo <| Te_Row r)
-let private (|Te_Rowed|_|) name = function
-    | Te_App (ULo (Te_Cons name'), ULo (Te_Row (xes, xo))) when name = name' -> Some (xes, xo)
-    | _ -> None
-
-let Te_Record, Te_Variant, Te_Tuple, (|Te_Record|_|), (|Te_Variant|_|), (|Te_Tuple|_|) = make_rows Te_Rowed (|Te_Rowed|_|)
+let Te_Record, Te_Variant, Te_Tuple, (|Te_Record|_|), (|Te_Variant|_|), (|Te_Tuple|_|) =
+    let Te_Rowed name r = Te_App (ULo <| Te_Cons name, ULo <| Te_Row r)
+    let (|Te_Rowed|_|) name = function
+        | Te_App (ULo (Te_Cons name'), ULo (Te_Row (xes, xo))) when name = name' -> Some (xes, xo)
+        | _ -> None
+    in
+        make_rows Te_Rowed (|Te_Rowed|_|)
 
 let Tp_Apps, (|Tp_Apps1|), (|Tp_Apps|_|) = nodify make_apps_by Tp_App (function Tp_App (τ1, τ2) -> Some (τ1, τ2) | _ -> None)
 let Tp_Arrow, (|Tp_Arrow|_|) = let A = Config.Typing.Names.Type.arrow in make_arrow_by_apps (ULo (Tp_Cons A)) Tp_Apps (function ULo (Tp_Cons x) when x = A -> Some () | _ -> None) (|Tp_Apps|_|)
@@ -571,12 +157,13 @@ let Tp_Arrows, (|Tp_Arrows1|), (|Tp_Arrows|_|) = nodify make_arrows_by Tp_Arrow 
 // TODO: type patterns do not have the forall case yet
 //let Tp_Foralls, (|Tp_Foralls0|), (|Tp_Foralls|_|) = make_foralls (fun (α, τ) -> Lo τ.loc <| Tp_Forall (α, τ)) (function ULo (Tp_Forall (α, τ)) -> Some (α, τ) | _ -> None)
 
-let private Tp_Rowed name r = Tp_App (ULo <| Tp_Var name, ULo <| Tp_Row r)
-let private (|Tp_Rowed|_|) name = function
-    | Tp_App (ULo (Tp_Var name'), ULo (Tp_Row (xes, xo))) when name = name' -> Some (xes, xo)
-    | _ -> None
-
-let Tp_Record, Tp_Variant, Tp_Tuple, (|Tp_Record|_|), (|Tp_Variant|_|), (|Tp_Tuple|_|) = make_rows Tp_Rowed (|Tp_Rowed|_|)
+let Tp_Record, Tp_Variant, Tp_Tuple, (|Tp_Record|_|), (|Tp_Variant|_|), (|Tp_Tuple|_|) =
+    let Tp_Rowed name r = Tp_App (ULo <| Tp_Var name, ULo <| Tp_Row r)
+    let (|Tp_Rowed|_|) name = function
+        | Tp_App (ULo (Tp_Var name'), ULo (Tp_Row (xes, xo))) when name = name' -> Some (xes, xo)
+        | _ -> None
+    in
+        make_rows Tp_Rowed (|Tp_Rowed|_|)
 
 type ty_upatt with
     override this.ToString () = this.pretty
@@ -707,8 +294,8 @@ and [< NoComparison; NoEquality >] patt = node<upatt, unit>
 
 let P_Apps, (|P_Apps1|), (|P_Apps|_|) = nodify make_apps_by P_App (function P_App (τ1, τ2) -> Some (τ1, τ2) | _ -> None)
 
-let P_Tuple = Row_Tuple (fun (bs, _) -> P_Record bs)
-let (|P_Tuple|_|) = (|Row_Tuple|_|) (function P_Record bs -> Some (bs, None) | _ -> None)
+let P_Tuple = Row_based_Tuple (fun (bs, _) -> P_Record bs)
+let (|P_Tuple|_|) = (|Row_based_Tuple|_|) (function P_Record bs -> Some (bs, None) | _ -> None)
 
 let P_ConsApps (x, ps) = P_Apps (ULo (P_Cons x) :: ps)
 let (|P_ConsApps1|_|) = function
@@ -829,8 +416,8 @@ let (|Id|_|) = function
     | Var x -> Some x
     | _ -> None
 
-let Tuple = Row_Tuple Record
-let (|Tuple|_|) = (|Row_Tuple|_|) (function Record (bs, o) -> Some (bs, o) | _ -> None)
+let Tuple = Row_based_Tuple Record
+let (|Tuple|_|) = (|Row_based_Tuple|_|) (function Record (bs, o) -> Some (bs, o) | _ -> None)
 
 let UnApp (op, e : expr) = App (Lo e.loc <| Id op, e)
 let BinApp (e1 : expr, op, e2 : expr) = App (Lo e1.loc <| App (Lo e2.loc <| Id op, e1), e2)

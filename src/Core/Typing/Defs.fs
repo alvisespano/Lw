@@ -16,30 +16,33 @@ open FSharp.Common.Log
 open Lw.Core
 open Lw.Core.Globals
 open Lw.Core.Absyn
+open Lw.Core.Absyn.Misc
+open Lw.Core.Absyn.Var
+open Lw.Core.Absyn.Kind
+open Lw.Core.Absyn.Factory
+open Lw.Core.Absyn.Ast
 
 
-// kind environments and kind schemes
+// kinding environments, types and related stuff
 //
 
 type [< NoComparison; NoEquality >] kscheme = { forall : Set<var>; kind : kind }
 with
     static member binding_separator = "::"
 
+// kind judice environment for type constructors
 type kjenv = Env.t<id, kscheme>
 
-type var_kjenv = Env.t<id, kind>
-
-
-
-// System-F types
-//
+// kind judice environment for type variables
+type vakjenv = Env.t<id, kind>
 
 type kinded =
     abstract kind : kind
 
-type tenv = Env.t<id, ty>   // type constructor environment (namely, δ, analogous to the value environment Δ)
 
-and [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] ty =
+// System-F types
+
+type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] ty =
     | T_Cons of id * kind
     | T_Var of var * kind    
     | T_HTuple of ty list   // TODOL: try to design a more general Rowed type which does not expect star on fields, and encode htuples with it
@@ -64,8 +67,11 @@ with
                                         | k              -> unexpected "non-arrow kind %O in left hand of type application: %O" __SOURCE_FILE__ __LINE__ k this
 
 
+// evaluated types environment (namely δ, analogous to the value environment Δ)
+and tenv = Env.t<id, ty>
+
+
 // flexible types
-//
 
 type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] fxty =
     | Fx_Forall of (var * fxty) * fxty
@@ -173,7 +179,7 @@ module constraints =
 
 
 
-// schemes, prefix and type judice environment
+// type schemes, prefix and typing environments
 //
     
 type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] tscheme =
@@ -362,17 +368,19 @@ let (|K_Row_Ext|_|) = function
     | K_Arrows [K_Star; K_Row; K_Row] -> Some ()
     | _ -> None
 
-let T_Row_Empty = T_Cons (string N.Type.Row.special_char, K_Row)
-let T_Row_Ext (l, t, ρ) = T_Apps [T_Cons (sprintf "%c%s" N.Type.Row.special_char l, K_Row_Ext); t; ρ]
+let T_Row_Empty = T_Cons (string N.Type.Row.special_prefix, K_Row)
+let T_Row_Ext (l, t, ρ) = T_Apps [T_Cons (sprintf "%c%s" N.Type.Row.special_prefix l, K_Row_Ext); t; ρ]
 
 let (|T_Row_Empty|T_Row_Ext|T_Row_Var|T_NoRow|) = function
-    | T_Var (ρ, K_Row)              -> T_Row_Var ρ
-    | T_Cons (s, K_Row) when s.Length = 1 && s.[0] = N.Type.Row.special_char ->
+    | T_Var (ρ, K_Row) -> T_Row_Var ρ
+
+    | T_Cons (s, K_Row) when s = string N.Type.Row.special_prefix ->
         T_Row_Empty
 
-    | T_Apps [T_Cons (s, K_Row_Ext); t; ρ] when s.Length > 1 && s.[0] = N.Type.Row.special_char ->
-        T_Row_Ext (s.TrimStart [|N.Type.Row.special_char|], t, ρ)
-    | t                                                           -> T_NoRow t
+    | T_Apps [T_Cons (s, K_Row_Ext); t; ρ] when s.Length > 1 && s.[0] = N.Type.Row.special_prefix ->
+        T_Row_Ext (s.TrimStart [|N.Type.Row.special_prefix|], t, ρ)
+
+    | t -> T_NoRow t
 
 let T_Row (r, ρo) = List.foldBack (fun (l, t) ρ -> T_Row_Ext (l, t, ρ)) r (match ρo with Some ρ -> T_Row_Var ρ | None -> T_Row_Empty)
 let (|T_Row|_|) = function
@@ -386,12 +394,14 @@ let (|T_Row|_|) = function
         in
             Some (R t)
 
-let private T_Rowed name r = T_App (T_Cons (name, K_Arrow (K_Row, K_Star)), T_Row r)
-let private (|T_Rowed|_|) name = function
-    | T_App (T_Cons (name', K_Arrow (K_Row, K_Star)), T_Row r) when name = name' -> Some r
-    | _ -> None
+let T_Record, T_Variant, T_Tuple, (|T_Record|_|), (|T_Variant|_|), (|T_Tuple|_|) =
+    let T_Rowed name r = T_App (T_Cons (name, K_Arrow (K_Row, K_Star)), T_Row r)
+    let (|T_Rowed|_|) name = function
+        | T_App (T_Cons (name', K_Arrow (K_Row, K_Star)), T_Row r) when name = name' -> Some r
+        | _ -> None
+    in
+        make_rows T_Rowed (|T_Rowed|_|)
 
-let T_Record, T_Variant, T_Tuple, (|T_Record|_|), (|T_Variant|_|), (|T_Tuple|_|) = make_rows T_Rowed (|T_Rowed|_|)
 let T_Open_Record xts = T_Record (xts, Some var.fresh)
 let T_Closed_Record xts = T_Record (xts, None)
 let T_Open_Variant xts = T_Variant (xts, Some var.fresh)
@@ -428,7 +438,7 @@ type [< NoComparison >] subst< [<EqualityConditionalOn>] 't> (env : Env.t<var, '
     override this.ToString () = this.pretty ("[", "]")
       
     member private θ1.append (θ2 : subst<'t>) =
-        assert (Set.intersect θ1.dom θ2.dom).IsEmpty
+        assert (Set.intersect θ1.dom θ2.dom).IsEmpty    // HACK: if this assert gets triggered, try change compose as described in the note below
         new subst<'t> (θ1.env + θ2.env)
 
     static member empty = new subst<'t> ()

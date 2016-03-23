@@ -23,7 +23,7 @@ open Printf
  * DEBUG_HML                // turn on log for functions involved into HML type inference
  * DEBUG_UNI                // turn on log in unification functions
  * DEBUG_UNI_DEEP           // log even recursive calls of unification functions
- * DEBUG_TYPE_EQUALITY      // turn on log in type equalivalence algorithm
+ * DEBUG_TYPE_EQUIVALENCE      // turn on log in type equalivalence algorithm
  *
  * DISABLE_VAR_NORM         // turn off variable normalization
  * DISABLE_HML_FIXES        // disable little fixes done by me
@@ -60,7 +60,7 @@ module Typing =
 
             // TODO: should reserved ids be used for these type constructors or should they have a publicly usable name?
             module Row =
-                let special_char = '|'
+                let special_prefix = '|'
                 let record = "Record"
                 let variant = "Variant"
 
@@ -127,7 +127,7 @@ module Printing =
     let jk_inst_fmt : StringFormat<string -> int -> string> = "%s$%X"
     let constraint_id_fmt : StringFormat<string -> int -> string> = "%s#%X"
     let fresh_reserved_id : StringFormat<int -> string> = "?%d"
-    let tuple_index_label_fmt : StringFormat<int -> string> = "#%d"
+    let row_based_tuple_label_fmt : StringFormat<int -> string> = "#%d"
     let already_existing_named_var_fmt : StringFormat<string -> int -> string> = "%s%d" // this is needed for disambiguating the name of a named var that already existed and whose name conflicted
     #if DEBUG_VAR_NAMES
     let anonymous_var_fmt : StringFormat<string -> int -> string> = "%s?%d"

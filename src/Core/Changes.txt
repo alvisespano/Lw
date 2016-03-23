@@ -1,4 +1,13 @@
 ﻿
+23/3/2016:
+* REFACT: big refactor of former Absyn module: now it is split into several files within a source folder
+* REFACT: another big source layout refactor involving UnitTest
+* FIX: Intrinsic.envs0.δ environment was not forwarded to the initial state of the monad and led to unbound tyep constructors in type evaluation
+* UP: a few very minor TODOs implemented and others cleaned up
+* FIX: type equivalence fixed: T_App case was inverting comparison between arguments (damn!!)
+* BUG: still a subtle bug in type equivalence: quantified vars must be removed from the equivalence monad state and then reput inside
+
+
 20-21/3/2016:
 * REFACT: various refactorings on stuff related with kind inference and type evaluation
 * FIX: various fixes on type management and γ and δ environments

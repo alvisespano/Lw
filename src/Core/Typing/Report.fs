@@ -11,6 +11,11 @@ open FSharp.Common.Parsing
 open FSharp.Common.Log
 open Lw.Core
 open Lw.Core.Absyn
+open Lw.Core.Absyn.Misc
+open Lw.Core.Absyn.Var
+open Lw.Core.Absyn.Kind
+open Lw.Core.Absyn.Factory
+open Lw.Core.Absyn.Ast
 open Lw.Core.Typing.Defs
 open Lw.Core.Globals
 open Printf

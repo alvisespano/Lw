@@ -17,8 +17,7 @@ open Lw.Core.Typing.Defs
 open FSharp.Common.Log
 open FSharp.Common
 
-
-module A = Lw.Core.Absyn
+module A = Lw.Core.Absyn.Ast
 
 let print_env_diffs (Γ1 : jenv) Γ2 (Δ1 : Eval.env) Δ2 =
     for (_, { jenv_value.scheme = σ }), (x, v) in Seq.zip (Γ2 - Γ1) (Δ2 - Δ1) do
@@ -40,7 +39,7 @@ let read_and_interpret_loop (envs : Intrinsic.envs) =
     Console.CancelKeyPress.AddHandler default_ctrl_c_handler
 
     let rΔ = ref envs.Δ
-    let st = ref { Typing.StateMonad.state.empty with Γ = envs.Γ; γ = envs.γ }
+    let st = ref { Typing.StateMonad.state.empty with Γ = envs.Γ; γ = envs.γ; δ = envs.δ }
     let unM f x =
         let ctx = Typing.Defs.context.as_top_level_decl
         let r, st' = f ctx x !st

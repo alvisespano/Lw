@@ -11,6 +11,11 @@ open FSharp.Common.Log
 open FSharp.Common
 open Lw.Core
 open Lw.Core.Absyn
+open Lw.Core.Absyn.Misc
+open Lw.Core.Absyn.Var
+open Lw.Core.Absyn.Kind
+open Lw.Core.Absyn.Factory
+open Lw.Core.Absyn.Ast
 open Lw.Core.Globals
 open Lw.Core.Typing.Defs
 open Lw.Core.Typing.StateMonad
@@ -28,10 +33,7 @@ let rec kmgu (ctx : uni_context) k1_ k2_ =
       L.uni Low "[kmgu] %O == %O" k1 k2
       let θ as r =
       #endif
-        match k1, k2 with
-//        | k1, k2 when k1 = k2 ->
-//            ksubst.empty
-                                     
+        match k1, k2 with                                    
         | K_Cons (x1, ks1), K_Cons (x2, ks2) when x1 = x2 && ks1.Length = ks2.Length ->
             List.fold2 (fun tθ t t' -> let tθ' = R t t' in tθ' ** tθ) ksubst.empty ks1 ks2
 

@@ -6,10 +6,14 @@
  
 module Lw.Core.Typing.Unify
 
-
 open FSharp.Common.Log
 open FSharp.Common
 open Lw.Core.Absyn
+open Lw.Core.Absyn.Misc
+open Lw.Core.Absyn.Var
+open Lw.Core.Absyn.Kind
+open Lw.Core.Absyn.Factory
+open Lw.Core.Absyn.Ast
 open Lw.Core.Globals
 open Lw.Core.Typing.Defs
 open Lw.Core.Typing.StateMonad
@@ -125,7 +129,7 @@ module internal Mgu =
             assert t.is_nf
             assert ϕ.is_nf
             match t, ϕ with            
-            | _, FxU0_Bottom k ->          // this case is not in the HML paper but it is necessary
+            | _, FxU0_Bottom k ->          // this case is not in the HML paper but it is necessary or it will recur infinitely
                 Q0, kmgu ctx t.kind k                    
 
             | T_ForallsK0 (αks, t1), FxU0_ForallsQ (Mapped fxty.instantiate_unquantified (Q', t2)) ->
@@ -139,7 +143,7 @@ module internal Mgu =
                 #else
                 let r = Q1, { θ1 with t = θ1.t.remove (Q3.dom + Q'.dom) }   // HACK: Q'.dom contains variables created by the intantiation, and therefore must be removed
                 #endif
-                check_skolems_escape ctx skcs r     // HACK: HML paper is ambiguous here cause it binds Q2 twice: I believe it should check what's returned as result
+                check_skolems_escape ctx skcs r
                 r
           #if DEBUG_UNI && DEBUG_HML
           L.uni High "[sub=] %O :> %O\n       %O\n       Q' = %O" t ϕ θ Q
@@ -165,7 +169,7 @@ module internal Mgu =
             | FxU0_ForallsQ  (Mapped fxty.instantiate_unquantified (Q1, t1)), FxU0_ForallsQ (Mapped fxty.instantiate_unquantified (Q2, t2)) ->
                 assert (let p (a : prefix) b = a.is_disjoint b in p Q Q1 && p Q1 Q2 && p Q Q2)  // instantiating ϕ1 and ϕ2 makes this assert always false
                 let Q3, θ3 = mgu ctx (Q + Q1 + Q2) t1 t2
-                let Q4, Q5 = Q3.split (Q.dom + (fv_Γ (subst_jenv θ3 ctx.Γ)))    // HACK: abstract this code by using get_ungeneralizable_vars
+                let Q4, Q5 = Q3.split (Q.dom + (fv_Γ (subst_jenv θ3 ctx.Γ)))    // TODOH: abstract this code by using get_ungeneralizable_vars
                 in
                     Q4, θ3, FxU_ForallsQ (Q5, S θ3 t1)
           #if DEBUG_UNI && DEBUG_HML

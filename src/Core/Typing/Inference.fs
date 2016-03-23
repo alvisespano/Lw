@@ -11,11 +11,15 @@ module Lw.Core.Typing.Inference
 open System
 open System.Text.RegularExpressions
 open System.Diagnostics
-
 open FSharp.Common.Log
 open FSharp.Common
 open Lw.Core
 open Lw.Core.Absyn
+open Lw.Core.Absyn.Misc
+open Lw.Core.Absyn.Var
+open Lw.Core.Absyn.Kind
+open Lw.Core.Absyn.Factory
+open Lw.Core.Absyn.Ast
 open Lw.Core.Globals
 open Lw.Core.Typing.Defs
 open Lw.Core.Typing.StateMonad
@@ -156,7 +160,7 @@ let rec W_expr (ctx : context) (e0 : expr) =
             #endif
             let! (ϕ : fxty) = W_expr' ctx e0
             do! resolve_constraints ctx e0
-            // TODOH: insert automatic generalization here, besides automatic resolution
+            // TODOH: insert automatic generalization here, beside automatic resolution
             #if DEBUG_INFERENCE
             let! Q' = M.get_Q
             let! cs' = M.get_constraints
@@ -390,7 +394,7 @@ and W_expr' ctx (e0 : expr) =
         // TODO: why don't we try to use flex types here and unify schemes instead? does it make sense?
         | Match (e1, cases) ->
             let! ϕe1 = W_expr ctx e1
-            let! tr = M.extend_fresh_star    // TODOH: why not use extend?
+            let! tr = M.extend_fresh_star
             let! (_, ϕr) =
                 M.List.fold (fun (ϕe1, ϕr) (p, ewo, e) -> M {
                     let! ϕp = W_patt ctx p
@@ -655,9 +659,9 @@ and W_decl' (ctx : context) (d0 : decl) =
             let! _ = M.bind_δ c (T_Cons (c, kc))
             Report.prompt ctx Config.Printing.Prompt.datatype_decl_prefixes c kσ None
             for { id = x; signature = τx } in bs do
-                // the whole inferred kind must be star, which is even better that the co-domain     
-                let! tx, kx = Wk_and_eval_ty_expr ctx τx      // TODOH: support flex types for data constructors
-                let! (T_Foralls0 (αs, _) as tx) = M.auto_geneneralize tx    // TODOH: take auto generalization directly to a Wk_and_eval_ty_expr or to a wrapper of it
+                // the whole inferred kind must be star
+                let! tx, kx = Wk_and_eval_ty_expr ctx τx      // TODO: support flex types for data constructors
+                let! (T_Foralls0 _ as tx) = M.auto_geneneralize tx
                 do! M.kunify τx.loc K_Star kx                              
                 // each data constructor's return type must be equal to the type constructor being defined; arguments are not checked to be variables, so it means GADTs can be defined
                 let txcod = tx.return_ty

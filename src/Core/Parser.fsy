@@ -4,7 +4,12 @@ open FSharp.Common
 open FSharp.Common.Parsing.LexYacc
 open Lw.Core
 open Lw.Core.Absyn
-open Lw.Core.Absyn.Aux
+open Lw.Core.Absyn.Misc
+open Lw.Core.Absyn.Var
+open Lw.Core.Absyn.Kind
+open Lw.Core.Absyn.Factory
+open Lw.Core.Absyn.Ast
+open Lw.Core.Absyn.Ast.Aux
 
 let parse_error_rich = Some (fun ctx -> raise (ParseErrorContextException ctx))
 
@@ -26,13 +31,13 @@ let parse_error_rich = Some (fun ctx -> raise (ParseErrorContextException ctx))
 %right SEMICOLON
 %right THEN ELSE
 %left ASSIGN
-%left AS
+%left AS 
 %left COMMA
 %right ARROW
 %left PIPE DOUBLEPIPE
 %left AMP DOUBLEAMP
 %right COLON2 
-%left EQ LT GT LEQ GEQ NEQ 
+%left EQ LT GT LEQ GEQ NEQ
 %left PLUS MINUS 
 %left INFIX
 %left STAR SLASH MOD 
@@ -44,13 +49,13 @@ let parse_error_rich = Some (fun ctx -> raise (ParseErrorContextException ctx))
 %nonassoc UMINUS
 %nonassoc BANG
 
-%type < Lw.Core.Absyn.ty_patt > ty_patt
-%type < Lw.Core.Absyn.ty_expr > ty_expr
-%type < Lw.Core.Absyn.fxty_expr > fxty_expr
-%type < Lw.Core.Absyn.expr > expr
-%type < Lw.Core.Absyn.decl > top_decl
-%type < Lw.Core.Absyn.program > program
-%type < Lw.Core.Absyn.interactive_line > interactive_line
+%type < Lw.Core.Absyn.Ast.ty_patt > ty_patt
+%type < Lw.Core.Absyn.Ast.ty_expr > ty_expr
+%type < Lw.Core.Absyn.Ast.fxty_expr > fxty_expr
+%type < Lw.Core.Absyn.Ast.expr > expr
+%type < Lw.Core.Absyn.Ast.decl > top_decl
+%type < Lw.Core.Absyn.Ast.program > program
+%type < Lw.Core.Absyn.Ast.interactive_line > interactive_line
 
 %start ty_expr
 %start fxty_expr
