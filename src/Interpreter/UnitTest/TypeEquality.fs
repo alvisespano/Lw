@@ -38,4 +38,8 @@ let type_equality =
     "forall ('a :> forall 'b. 'b -> 'b) 'c. list ('a * 'c)",            type_eq "forall 'c ('a :> forall 'b. 'b -> 'b). list ('a * 'c)"
     "forall ('a :> forall 'b. 'b -> 'b) 'c 'd. list ('a * 'c * 'd)",    type_eq "forall 'd ('a :> forall 'b. 'b -> 'b) 'c. list ('a * 'c * 'd)"
     "forall ('a :> forall 'b. 'b -> 'b) 'b. list ('a * 'b)",            type_eq "forall 'b ('a :> forall 'b. 'b -> 'b). list ('a * 'b)"
+
+    // test scoping of quantified vars in type equivalence by reusing var names withing foralls
+    "forall ('b :> forall 'b. 'b -> 'b). list 'b",                      type_eq "forall ('f :> forall 'f. 'f -> 'f). list 'f"
+    "forall ('b :> forall 'b. 'b -> 'x). list 'b",                      type_eq "forall ('f :> forall 'f. 'f -> 'y). list 'f"
     ]

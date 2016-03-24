@@ -92,7 +92,7 @@ let main _ =
             try
                 if not (String.IsNullOrWhiteSpace Args.filename) then
                     envs := interpret !envs Args.filename
-            with e -> handle_exn e |> ignore
+            with e -> handle_exn_and_return e |> ignore
             if Config.Interactive.interactive_mode then
                 Interactive.read_and_interpret_loop !envs
             0

@@ -20,6 +20,7 @@ open Lw.Core.Typing.StateMonad
 open Lw.Core.Typing.Meta
 open Lw.Core.Typing.Ops
 open Lw.Core
+open Lw.Core.Typing.Subst
 open System.Diagnostics
 
 

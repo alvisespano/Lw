@@ -24,7 +24,7 @@
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
     <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;DEBUG_INFERENCE;DEBUG_BEFORE_INFERENCE;DEBUG_UNI;DEBUG_UNI_DEEP;DEBUG_TYPE_EQUIVALENCE</DefineConstants>
+    <DefineConstants>DEBUG;DEBUG_INFERENCE;DEBUG_BEFORE_INFERENCE;DEBUG_UNI;DEBUG_UNI_DEEP</DefineConstants>
     <WarningLevel>5</WarningLevel>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <DocumentationFile>
@@ -87,6 +87,8 @@
     <Compile Include="Parsing.fs" />
     <Compile Include="Typing\Defs.fs" />
     <Compile Include="Typing\Report.fs" />
+    <Compile Include="Typing\Subst.fs" />
+    <Compile Include="Typing\Equivalence.fs" />
     <Compile Include="Typing\Ops.fs" />
     <Compile Include="Typing\StateMonad.fs" />
     <Compile Include="Typing\Meta.fs" />

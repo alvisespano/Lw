@@ -249,3 +249,6 @@ module Hint =
 
     let datacons_contains_env_fv loc c x tx =
         H 3 loc Normal "datatype %s defines a data constructor %s whose type %O has type variables that cannot be generalized" c x tx
+
+    let scoped_tyvar_was_not_generalized loc α =
+        H 4 loc Min "scoped type variable %O will not be generalized" α

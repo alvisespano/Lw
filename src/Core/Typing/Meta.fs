@@ -20,6 +20,7 @@ open Lw.Core.Globals
 open Lw.Core.Typing.Defs
 open Lw.Core.Typing.StateMonad
 open Lw.Core.Typing.Ops
+open Lw.Core.Typing.Subst
 
 
 // kind unification
@@ -149,7 +150,7 @@ module internal Eval =
                 }
 
             | Te_Row (xτs, τo) ->
-                let! xts = M.List.map (fun (x : id, τ) -> M { let! t = R τ in return x, t }) xτs
+                let! xts = M.List.map (fun (x : ident, τ) -> M { let! t = R τ in return x, t }) xτs
                 let! too = M.Option.map R τo
                 match too with
                 | Some (T_Row_Var α)        -> return T_Row (xts, Some α)
@@ -372,7 +373,7 @@ and Wk_ty_expr' (ctx : context) (τ0 : ty_expr) =
 
         | Te_Forall ((x, ko), τ) ->
             let kx = either kind.fresh_var ko
-            return! M.undo_bind_γα x kx <| M {
+            return! M.undoable_bind_γα x kx <| M {
                 yield! R τ
             }
 

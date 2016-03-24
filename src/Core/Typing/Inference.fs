@@ -27,6 +27,7 @@ open Lw.Core.Typing.Unify
 open Lw.Core.Typing.Resolve
 open Lw.Core.Typing.Ops
 open Lw.Core.Typing.Meta
+open Lw.Core.Typing.Subst
 
 
 type translatable_type_inference_builder<'e> with
@@ -41,7 +42,7 @@ type translatable_type_inference_builder<'e> with
 type [< NoComparison; NoEquality >] gen_binding = {
     qual   : decl_qual
     expr        : expr
-    id          : id
+    id          : ident
     constraints : constraints
     inferred    : fxty
     to_bind     : fxty
@@ -258,7 +259,7 @@ and W_expr' ctx (e0 : expr) =
             yield W_lit lit
 
         | Record (bs, eo) ->
-            let! bs = M.List.map (fun (x : id, e) -> M { let! t = W_expr_F ctx e in yield x, t }) bs
+            let! bs = M.List.map (fun (x : ident, e) -> M { let! t = W_expr_F ctx e in yield x, t }) bs
             match eo with
             | None ->
                 yield T_Closed_Record bs
@@ -384,7 +385,7 @@ and W_expr' ctx (e0 : expr) =
 
         | Let (d, e) ->
             yield! M.undo_Γ <| M {
-                do! M.ignore <| W_decl { ctx with is_top_level = false } d
+                do! W_decl { ctx with is_top_level = false } d
                 yield! W_expr ctx e
             }
         
@@ -739,7 +740,7 @@ and W_patt' ctx (p0 : patt) : M<fxty> =
             yield T_Tuple ts
 
         | P_Record xps ->
-            let! xts = M.List.map (fun (x : id, p) -> M { let! t = W_patt_F ctx p in return x, t }) xps
+            let! xts = M.List.map (fun (x : ident, p) -> M { let! t = W_patt_F ctx p in return x, t }) xps
             yield T_Open_Record xts
 
         | P_Or (p1, p2) ->

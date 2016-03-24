@@ -31,10 +31,10 @@ with
     static member binding_separator = "::"
 
 // kind judice environment for type constructors
-type kjenv = Env.t<id, kscheme>
+type kjenv = Env.t<ident, kscheme>
 
 // kind judice environment for type variables
-type vakjenv = Env.t<id, kind>
+type vakjenv = Env.t<ident, kind>
 
 type kinded =
     abstract kind : kind
@@ -43,12 +43,12 @@ type kinded =
 // System-F types
 
 type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] ty =
-    | T_Cons of id * kind
+    | T_Cons of ident * kind
     | T_Var of var * kind    
     | T_HTuple of ty list   // TODOL: try to design a more general Rowed type which does not expect star on fields, and encode htuples with it
     | T_App of (ty * ty)
     | T_Forall of var * ty
-    | T_Closure of id * tenv ref * ty_expr * kind
+    | T_Closure of ident * tenv ref * ty_expr * kind
 with
     static member binding_separator = Config.Printing.type_annotation_sep
 
@@ -68,7 +68,7 @@ with
 
 
 // evaluated types environment (namely δ, analogous to the value environment Δ)
-and tenv = Env.t<id, ty>
+and tenv = Env.t<ident, ty>
 
 
 // flexible types
@@ -104,7 +104,7 @@ with
 
 type [< CustomEquality; CustomComparison; DebuggerDisplay("{ToString()}") >] constraintt =
     {
-        name    : id
+        name    : ident
         num     : int
         mode    : constraint_mode
         strict  : bool
@@ -191,9 +191,9 @@ type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] tscheme =
 
 [< RequireQualifiedAccess >]
 type jenv_key =
-        | Data of id
-        | Inst of id * int
-        | Var of id
+        | Data of ident
+        | Inst of ident * int
+        | Var of ident
 with
     override this.ToString () = this.pretty
 
@@ -627,6 +627,32 @@ type ty with
         | T_Forall (_, t) -> t.return_ty
         | T_Arrows ts     -> List.last ts
         | _               -> t
+
+    member t.is_unquantified =
+        match t with
+        | T_Forall _ -> false
+        | _          -> true
+
+
+// active patterns for dealing with quantification, instantiation etc. 
+
+let Fx_ForallsQ (Q : prefix, ϕ : fxty) = Fx_Foralls (Seq.toList Q, ϕ)
+let FxU_ForallsQ (Q, t : ty) = Fx_ForallsQ (Q, Fx_F_Ty t)
+
+// all outer quantified vars are taken, both from the flex type and from possible F-type quantifiers, hence right hand is guaranteed unquantified
+let (|FxU_ForallsQ|FxU_Unquantified|FxU_Bottom|) = function
+    | Fx_Foralls (qs, Fx_F_Ty (T_ForallsK (αks, t))) -> assert t.is_unquantified; FxU_ForallsQ (prefix.ofSeq qs + prefix.of_bottoms αks, t)
+    | Fx_Foralls (qs, Fx_F_Ty t)                     -> assert t.is_unquantified; FxU_ForallsQ (prefix.ofSeq qs, t)
+    | Fx_F_Ty (T_ForallsK (αks, t))                  -> assert t.is_unquantified; FxU_ForallsQ (prefix.of_bottoms αks, t)
+    | Fx_F_Ty t                                      -> assert t.is_unquantified; FxU_Unquantified t
+    | Fx_Bottom k                                    -> FxU_Bottom k
+    | Fx_Forall _ as ϕ                               -> unexpected_case __SOURCE_FILE__ __LINE__ ϕ
+
+// reduced form of the active pattern above where the ForallsQ case supports also empty prefixes
+let (|FxU0_ForallsQ|FxU0_Bottom|) = function
+    | FxU_ForallsQ (Q, t) -> FxU0_ForallsQ (Q, t)
+    | FxU_Unquantified t  -> FxU0_ForallsQ (Q_Nil, t)
+    | FxU_Bottom k        -> FxU0_Bottom k
 
 type fxty with
     override this.ToString () = this.pretty    

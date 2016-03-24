@@ -25,6 +25,7 @@ open Lw.Core.Typing.Meta
 open Lw.Core.Typing.Ops
 open Lw.Core.Typing.Report
 open Lw.Core.Typing.StateMonad
+open Lw.Core.Typing.Equivalence
 open PPrint
 
 type logger with
@@ -305,7 +306,7 @@ let test_entry (tchk : typechecker) sec n ((s1, res) : entry) =
 
 let score_infos scores =
     [score.Ok; score.Weak; score.Failed] @ scores   // trick for making countBy always count at least 1 for each kind of score
-    |> List.countBy identity
+    |> List.countBy id
     |> List.sortBy (fst >> function score.Ok -> 1 | score.Weak -> 2 | score.Failed -> 3)
     |> List.map (fun (score, n) -> sprintf "%O" score, fmt "%d" (n  - 1))   // n-1 because of the trick above
 

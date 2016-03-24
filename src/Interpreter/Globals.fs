@@ -34,5 +34,5 @@ let handle_exn exit (e : exn) =
 
 let handle_exn_and_exit x = handle_exn exit x
 
-let handle_exn_and_return x = handle_exn identity x
+let handle_exn_and_return x = handle_exn id x
     

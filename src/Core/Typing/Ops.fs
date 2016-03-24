@@ -17,6 +17,12 @@ open Lw.Core.Absyn.Ast
 open Lw.Core.Globals
 open Lw.Core.Typing
 open Lw.Core.Typing.Defs
+open Lw.Core.Typing.Subst
+open Lw.Core.Typing.Equivalence
+
+
+// various utils
+//
 
 let vars_in_term (|Var|Leaf|Nodes|) =
     let rec R = function
@@ -76,7 +82,7 @@ let vars_in_ty_patt : ty_patt -> _ =
 let rec vars_in_decl (d : decl) =
     let B = Computation.B.set
     let pars bs = B { for b in bs do let x, _ = b.par in yield x }
-    let inline ids bs = B { for b in bs do yield (^x : (member id : id) b) }
+    let inline ids bs = B { for b in bs do yield (^x : (member id : ident) b) }
     in
         B {
             match d.value with
@@ -103,304 +109,11 @@ let possibly_tuple L0 e tuple cs =
     | ps  -> L0 (tuple ps)
 
 
-// substitution applications
-//
-
-let rec subst_kind (kθ : ksubst) =
-    let S k = subst_kind kθ k
-    in function
-    | K_Cons (x, ks) -> K_Cons (x, List.map S ks)
-    | K_Var α as k ->
-        match kθ.search α with
-        | Some β -> β
-        | None   -> k
-
-let subst_var (tθ : tsubst) α =
-    match tθ.search α with
-    #if DEBUG
-    | Some (T_Var (β, _)) -> β
-    | None                -> α
-    | t                   -> unexpected "substituting type variable with non-variable type: %s" __SOURCE_FILE__ __LINE__ (subst<_>.pretty_item (α, t))
-    #else
-    | Some (T_Var (β, _)) -> β
-    | _                   -> α
-    #endif
-
-let rec subst_ty =
-    let rec subst_ty_in_ty (tθ : tsubst) =
-        let S t = subst_ty_in_ty tθ t
-        in function
-        | T_Var (α, _) as t         -> either t (tθ.search α)
-        | T_Forall (α, t)           -> T_Forall (subst_var tθ α, S t)
-        | T_App (t1, t2)            -> T_App (S t1, S t2)
-        | T_HTuple ts               -> T_HTuple (List.map S ts)
-        | T_Cons _
-        | T_Closure _ as t          -> t
-    let rec subst_kind_in_ty kθ =
-        let S t = subst_kind_in_ty kθ t
-        let Sk k = subst_kind kθ k
-        function
-        | T_Var (α, k)              -> T_Var (α, Sk k)
-        | T_Forall (α, t)           -> T_Forall (α, S t)
-        | T_Cons (x, k)             -> T_Cons (x, Sk k)
-        | T_App (t1, t2)            -> T_App (S t1, S t2)
-        | T_HTuple ts               -> T_HTuple (List.map S ts)
-        | T_Closure (x, Δ, τ, k)    -> T_Closure (x, Δ, τ, Sk k)
-    in
-        fun θ t -> t |> subst_ty_in_ty θ.t |> subst_kind_in_ty θ.k
-
-let rec subst_fxty θ =
-    let S x = subst_fxty θ x
-    let St t = subst_ty θ t
-    let Sk k = subst_kind θ.k k
-    in function
-    | Fx_Bottom k             -> Fx_Bottom (Sk k)
-    | Fx_F_Ty t               -> Fx_F_Ty (St t)
-    | Fx_Forall ((α, ϕ1), ϕ2) -> Fx_Forall ((subst_var θ.t α, S ϕ1), S ϕ2)
-
-
-/// first argument is the NEW subst, second argument is the OLD one
-let compose_ksubst (kθ' : ksubst) (kθ : ksubst) = kθ'.compose subst_kind kθ
-let compose_tksubst { t = tθ'; k = kθ' } { t = tθ; k = kθ } =
-    let kθ = compose_ksubst kθ' kθ
-    let tθ = tθ'.compose (fun tθ -> subst_ty { t = tθ; k = kθ }) tθ     // this correct! left argument of compose is 'this' when calling method compose, and composition have the NEW subst as first argument, i.e. left
-    in
-        { t = tθ; k = kθ }
-
-let subst_prefix θ Q = prefix.B { for α, ϕ in Q do yield subst_var θ.t α, subst_fxty θ ϕ }
-
-let subst_type_constraints _ tcs = tcs
-
-let subst_constraints θ (cs : constraints) = cs.map (fun c -> { c with ty = subst_ty θ c.ty })
-
-let subst_scheme θ σ =
-    let { constraints = cs; fxty = ϕ } = σ
-    in
-        { constraints = subst_constraints θ cs; fxty = subst_fxty θ ϕ }
-        
-let subst_kscheme (kθ : ksubst) σκ =
-    let { forall = αs; kind = k } = σκ
-    let kθ = kθ.remove αs
-    in
-        { forall = αs; kind = subst_kind kθ k }
-
-let subst_jenv θ (env : jenv) = env.map (fun _ ({ scheme = σ } as jv) -> { jv with scheme = subst_scheme θ σ })
-let subst_kjenv kθ (env : kjenv) = env.map (fun _ -> subst_kscheme kθ)
-let subst_tenv θ (env : tenv) = env.map (fun _ -> subst_ty θ)
-
-
-// active patterns for dealing with quantification, instantiation etc. 
-//
-
-type ty with
-    member t.is_unquantified =
-        match t with
-        | T_Forall _ -> false
-        | _          -> true
-
-let Fx_ForallsQ (Q : prefix, ϕ : fxty) = Fx_Foralls (Seq.toList Q, ϕ)
-let FxU_ForallsQ (Q, t : ty) = Fx_ForallsQ (Q, Fx_F_Ty t)
-
-// all outer quantified vars are taken, both from the flex type and from possible F-type quantifiers, hence right hand is guaranteed unquantified
-let (|FxU_ForallsQ|FxU_Unquantified|FxU_Bottom|) = function
-    | Fx_Foralls (qs, Fx_F_Ty (T_ForallsK (αks, t))) -> assert t.is_unquantified; FxU_ForallsQ (prefix.ofSeq qs + prefix.of_bottoms αks, t)
-    | Fx_Foralls (qs, Fx_F_Ty t)                     -> assert t.is_unquantified; FxU_ForallsQ (prefix.ofSeq qs, t)
-    | Fx_F_Ty (T_ForallsK (αks, t))                  -> assert t.is_unquantified; FxU_ForallsQ (prefix.of_bottoms αks, t)
-    | Fx_F_Ty t                                      -> assert t.is_unquantified; FxU_Unquantified t
-    | Fx_Bottom k                                    -> FxU_Bottom k
-    | Fx_Forall _ as ϕ                               -> unexpected_case __SOURCE_FILE__ __LINE__ ϕ
-
-// reduced form of the active pattern above where the ForallsQ case supports also empty prefixes
-let (|FxU0_ForallsQ|FxU0_Bottom|) = function
-    | FxU_ForallsQ (Q, t) -> FxU0_ForallsQ (Q, t)
-    | FxU_Unquantified t  -> FxU0_ForallsQ (Q_Nil, t)
-    | FxU_Bottom k        -> FxU0_Bottom k
-
-
-
-// type equivalence
-//
-
-module Equivalence =
-    type state = Env.t<var, var>
-
-    type M<'a> = Monad.M<'a, state>
-
-    type builder<'t> (is_equivalent : 't -> 't -> M<bool>) =
-        inherit Monad.state_builder<state> ()
-
-        member M.is_var_equivalent (α : var) (β : var) =
-            M {
-                let! env = M.get_state
-                match env.search α with
-                | Some α' ->
-                    #if DEBUG_TYPE_EQUIVALENCE
-                    L.debug Unmaskerable "%O |-> %O = %O: %b" α α' β (α' = β)
-                    #endif
-                    return α' = β
-                | None ->
-                    let! env = M.get_state
-                    if env.exists (fun _ β' -> β' = β) then return false
-                    else
-                        do! M.lift_state <| fun env -> env.bind α β
-                        #if DEBUG_TYPE_EQUIVALENCE
-                        L.debug Unmaskerable "%O |-> %O" α β
-                        #endif
-                        return true
-            }
-
-        member M.binop_and_with_undo x y =
-            M {
-                let! st = M.get_state
-                let! a = x
-                if a then
-                    let! b = y
-                    if b then return true
-                    else
-                        do! M.set_state st
-                        return false
-                else 
-                    do! M.set_state st
-                    return false
-            }
-            
-        member M.are_equivalent l1 l2 =
-            let (&&&) = M.binop_and_with_undo
-            M {
-                return! M.List.fold (fun b (t1, t2) -> M { return! M { return b } &&& is_equivalent t1 t2 }) true (List.zip l1 l2)
-            }
-
-    let rec is_kind_equivalent (x : kind) (y : kind) =
-        let M = new builder<kind> (is_kind_equivalent)
-        M {
-            match x, y with
-            | K_Var α, K_Var β ->
-                 return! M.is_var_equivalent α β
-
-            | K_Cons (x1, ks1), K_Cons (x2, ks2) when x1 = x2 && ks1.Length = ks2.Length ->
-                return! M.are_equivalent ks1 ks2
-
-            | _ ->
-                return false
-        }
-
-    let rec private is_prefixed_unquantified_ty_equivalent (Q1 : prefix, t1 : ty) (Q2, t2 : ty) =
-        assert t1.is_unquantified
-        assert t2.is_unquantified
-        let M = new builder<fxty> (is_fxty_equivalent)
-        let (&&&) = M.binop_and_with_undo
-        M {
-            let contains (α, αϕ) =
-                let rec R q Q =
-                    M {
-                        match Q with
-                        | Q_Nil ->
-                            return false, q
-
-                        | Q_Cons (q1, (β, βϕ)) ->
-                            let! st = M.get_state
-                            let! a = is_fxty_equivalent αϕ βϕ
-                            let! b = M.is_var_equivalent α β
-                            if a && b then return true, q1 + q
-                            else
-                                do! M.set_state st
-                                return! R (q.insert (β, βϕ)) q1
-                    }
-                in
-                    fun Q ->
-                        M {
-                            let! r, q = R Q_Nil Q
-                            #if DEBUG_TYPE_EQUIVALENCE
-                            L.debug Unmaskerable "%O contained in %O: %b, %O" α Q2 r q
-                            #endif
-                            return r, q
-                        }
-            let rec is_permutation Q1 Q2 = M {
-                match Q1 with
-                | Q_Nil ->
-                    return true
-
-                | Q_Cons (q1, α) ->
-                    let! a, q2 = contains α Q2
-                    let! b = is_permutation q1 q2
-                    #if DEBUG_TYPE_EQUIVALENCE
-                    L.debug Unmaskerable "%O is permutation of %O: %b" Q1 Q2 (a && b)
-                    #endif
-                    return a && b
-            }
-//            let! env0 = M.get_state
-//            do! M.set_state (env0.filter (fun α _ -> not <| Set.contains α Q1.dom))
-            let! r = is_ty_equivalent t1 t2 &&& is_permutation Q1 Q2
-            return r
-        }
-
-    and private is_ty_equivalent' (x : ty) (y : ty) =
-        let M = new builder<ty> (is_ty_equivalent)
-        M {   
-            match x, y with
-            | T_Cons (x, _), T_Cons (y, _)          -> return x = y
-            | T_Var (α, _), T_Var (β, _)            -> return! M.is_var_equivalent α β
-            | T_App (t1, t2), T_App (t1', t2')      -> return! M.are_equivalent [t1; t2] [t1'; t2']
-
-            | T_ForallsK (αs, t1), T_ForallsK (βs, t2) when αs.Length = βs.Length ->
-                let Q1 = prefix.of_bottoms αs
-                let Q2 = prefix.of_bottoms βs
-                return! is_prefixed_unquantified_ty_equivalent (Q1, t1) (Q2, t2)
-
-            | T_HTuple ts, T_HTuple ts' when ts.Length = ts'.Length ->
-                return! M.are_equivalent ts ts'
-
-            #if DEBUG
-            | T_Closure _, _ | _, T_Closure _ ->
-                L.unexpected_error "comparing type closures: %O = %O" x y
-                return false
-            #endif
-            | _ ->
-                return false
-        }
-
-    and private is_fxty_equivalent' (x : fxty) (y : fxty) =
-        let M = new builder<fxty> (is_fxty_equivalent)
-        M {   
-            match x, y with
-            | FxU_ForallsQ (Q1, t1), FxU_ForallsQ (Q2, t2) ->
-                return! is_prefixed_unquantified_ty_equivalent (Q1, t1) (Q2, t2)
-
-            | Fx_F_Ty t1, Fx_F_Ty t2 ->
-                return! is_ty_equivalent t1 t2
-
-            | Fx_Bottom _, Fx_Bottom _ ->
-                return true
-
-            | _ -> return false
-        }
-
-    and private is_kinded_equivalent f x y =
-        let M = new builder<fxty> (is_fxty_equivalent)
-        let (&&&) = M.binop_and_with_undo
-        M {
-            let! r = f x y
-            return! M { return r } &&& is_kind_equivalent (x :> kinded).kind (y :> kinded).kind
-        }
-
-    and is_fxty_equivalent = is_kinded_equivalent is_fxty_equivalent'
-    and is_ty_equivalent = is_kinded_equivalent is_ty_equivalent'
-
-    let unM f = f state.empty |> fst
-
-// kind augmentations
-//
-
-type kind with
-    member x.is_equivalent y = Equivalence.unM <| Equivalence.is_kind_equivalent x y
-
 
 // F-type augmentations
 //
 
-type ty with            
-    member x.is_equivalent y = Equivalence.unM <| Equivalence.is_ty_equivalent x y
-
+type ty with
     member t.instantiate_wrt αs =
         let env = Env.t.B { for α in αs do yield α, var.fresh }
         let Sk = subst_kind (new ksubst (env.map (fun _ β -> K_Var β)))
@@ -443,8 +156,6 @@ type ty with
 //
 
 type fxty with
-    member x.is_equivalent y = Equivalence.unM <| Equivalence.is_fxty_equivalent x y
-
     static member instantiate_unquantified (Q : prefix, t : ty) =
             assert t.is_unquantified
             let θ = !> (new tsubst (Env.t.B { for α, ϕ in Q do yield α, T_Var (var.fresh, ϕ.kind) }))

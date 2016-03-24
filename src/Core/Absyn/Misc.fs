@@ -22,7 +22,7 @@ let parse_float s = Double.Parse (s, Globalization.NumberStyles.Float, Globaliza
 let fresh_reserved_id () = Config.reserved_id <| sprintf Config.Printing.fresh_reserved_id (fresh_int ())
 let tuple_index_label = sprintf Config.Printing.row_based_tuple_label_fmt
 
-type id = string
+type ident = string
 
 let (|SymString|_|) =
     let rex = new System.Text.RegularExpressions.Regex("([a-zA-Z_][a-zA-Z0-9_]*)|(__\\$[0-9]+)")
@@ -54,7 +54,7 @@ type [< NoEquality; NoComparison >] node<'a, 't> (value : 'a, ?loc : location) =
         with get () = match _typed with Some x -> x | None -> unexpected "node %O has not been typed" __SOURCE_FILE__ __LINE__ this
         and set t = _typed <- Some t
 
-    member val value = value with get //, set
+    member val value = value with get
     member val loc = defaultArg loc (new location ())
     abstract pretty : string
     default this.pretty = sprintf "%O" this.value
@@ -73,7 +73,7 @@ type annotable =
 
 type param<'id, 'n>  = 'id * 'n option
 
-type 'n id_param = param<id, 'n>
+type 'n id_param = param<ident, 'n>
 
 let pretty_param sep (id, tyo) =
     match tyo with

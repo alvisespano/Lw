@@ -36,12 +36,12 @@ with
     override this.ToString () = this.pretty
     member this.pretty = sprintf "%O%O = %O" this.qual (pretty_param this.expr.value.annot_sep this.par) this.expr
 
-type [< NoComparison; NoEquality >] kind_binding = { id : id; pars : var list; kind : kind }
+type [< NoComparison; NoEquality >] kind_binding = { id : ident; pars : var list; kind : kind }
 with
     override this.ToString () = this.pretty
     member this.pretty = sprintf "%s%s = %O" this.id (soprintf " (%s)" (match this.pars with [] -> None | αs -> Some (flatten_stringables ", " αs))) this.kind
 
-type [< NoComparison; NoEquality >] signature_binding<'e, 'a when 'e :> annotable> = { id : id; signature : node<'e, 'a> }
+type [< NoComparison; NoEquality >] signature_binding<'e, 'a when 'e :> annotable> = { id : ident; signature : node<'e, 'a> }
 with
     override this.ToString () = this.pretty
     member this.pretty = sprintf "%O %s %O" this.id this.signature.value.annot_sep this.signature
@@ -68,30 +68,30 @@ with
     static member none = Dummy_ty_decl_qual
 
 type [< NoComparison; NoEquality >] ty_upatt =
-    | Tp_Var of id
-    | Tp_Cons of id
+    | Tp_Var of ident
+    | Tp_Cons of ident
     | Tp_Annot of ty_patt * kind
     | Tp_App of (ty_patt * ty_patt)
     | Tp_HTuple of ty_patt list
     | Tp_Or of ty_patt * ty_patt
     | Tp_And of ty_patt * ty_patt
-    | Tp_As of ty_patt * id
+    | Tp_As of ty_patt * ident
     | Tp_Wildcard
-    | Tp_Row of (id * ty_patt) list * ty_patt option
+    | Tp_Row of (ident * ty_patt) list * ty_patt option
 with
     interface annotable with
         member __.annot_sep = Config.Printing.kind_annotation_sep
 
 and [< NoComparison; NoEquality >] ty_uexpr =
-    | Te_Var of id
-    | Te_Cons of id
+    | Te_Var of ident
+    | Te_Cons of ident
     | Te_Lambda of kinded_param * ty_expr
     | Te_HTuple of ty_expr list
     | Te_App of (ty_expr * ty_expr)
     | Te_Let of ty_decl * ty_expr
     | Te_Match of ty_expr * ty_case list
     | Te_Annot of ty_expr * kind
-    | Te_Row of (id * ty_expr) list * ty_expr option
+    | Te_Row of (ident * ty_expr) list * ty_expr option
     | Te_Forall of kinded_param * ty_expr
 with
     interface annotable with
@@ -278,17 +278,17 @@ with
 //
 
 type [< NoComparison; NoEquality >] upatt =
-    | P_Var of id
-    | P_Cons of id
-    | P_PolyCons of id
+    | P_Var of ident
+    | P_Cons of ident
+    | P_PolyCons of ident
     | P_App of (patt * patt)
     | P_Lit of lit
     | P_Annot of patt * ty_expr
-    | P_As of patt * id
+    | P_As of patt * ident
     | P_Wildcard
     | P_Or of patt * patt
     | P_And of patt * patt
-    | P_Record of (id * patt) list
+    | P_Record of (ident * patt) list
 
 and [< NoComparison; NoEquality >] patt = node<upatt, unit>
 
@@ -369,19 +369,19 @@ with
 
 type [< NoComparison; NoEquality >] uexpr =
     | Lit of lit
-    | Var of id
+    | Var of ident
 //    | Reserved_Cons of id    // internal only
-    | FreeVar of id
-    | PolyCons of id
+    | FreeVar of ident
+    | PolyCons of ident
     | Loosen of expr
-    | Record of (id * expr) list * expr option
+    | Record of (ident * expr) list * expr option
     | Lambda of typed_param * expr
     | If of expr * expr * expr
     | App of (expr * expr)
     | Let of decl * expr
     | Match of expr * expr_case list
-    | Select of expr * id
-    | Restrict of expr * id
+    | Select of expr * ident
+    | Restrict of expr * ident
     | Annot of expr * ty_expr
     | Combine of expr list
     | Val of expr
@@ -395,7 +395,7 @@ with
 and binding = qbinding<decl_qual, upatt, uexpr, unit>
 and rec_binding = rec_qbinding<decl_qual, ty_expr, uexpr, unit>
 and overload_binding = signature_binding<ty_uexpr, kind>
-and [< NoComparison; NoEquality >] datatype_binding = { id : id; kind : kind; datacons : signature_binding<ty_uexpr, kind> list }
+and [< NoComparison; NoEquality >] datatype_binding = { id : ident; kind : kind; datacons : signature_binding<ty_uexpr, kind> list }
 
 and [< NoComparison; NoEquality >] udecl =
     | D_Bind of binding list
@@ -512,7 +512,7 @@ type udecl with
 
 
 type [< NoComparison; NoEquality >] program =
-  { namespacee : id option
+  { namespacee : ident option
     decls      : decl list
     main       : expr option
   }

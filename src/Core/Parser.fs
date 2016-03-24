@@ -1266,7 +1266,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 121 "Parser.fsy"
-                                                               { over = true }, identity 
+                                                               { over = true }, id 
                    )
 # 121 "Parser.fsy"
                  : 'let_quals));
@@ -1606,7 +1606,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 185 "Parser.fsy"
-                                                                       (decl_qual.none, identity), _1 
+                                                                       (decl_qual.none, id), _1 
                    )
 # 185 "Parser.fsy"
                  : 'let_qbinding));
@@ -1629,7 +1629,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 189 "Parser.fsy"
-                                                                       (decl_qual.none, identity), _1 
+                                                                       (decl_qual.none, id), _1 
                    )
 # 189 "Parser.fsy"
                  : 'letrec_qbinding));
@@ -2284,7 +2284,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 323 "Parser.fsy"
-                                                                                 (_2, Some _4), Some _6 
+                                                                                (_2, Some _4), Some _6 
                    )
 # 323 "Parser.fsy"
                  : 'fxty_forall_param));

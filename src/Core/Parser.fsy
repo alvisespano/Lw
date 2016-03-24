@@ -118,7 +118,7 @@ top_decl:
 
 let_quals:
     VAL                                 { { over = false }, fun (e : expr) -> Lo e.loc (Val e) }
-  | OVER                                { { over = true }, identity }
+  | OVER                                { { over = true }, id }
   | OVER VAL                            { { over = true }, fun (e : expr) -> Lo e.loc (Val e) }
 
 nested_decl:
@@ -182,11 +182,11 @@ kind_and_bindings:
 /* single bindings */
 
 let_qbinding:
-    let_binding                                 { (decl_qual.none, identity), $1 }
+    let_binding                                 { (decl_qual.none, id), $1 }
   | let_quals let_binding                       { $1, $2 }
 
 letrec_qbinding:
-    letrec_binding                              { (decl_qual.none, identity), $1 }
+    letrec_binding                              { (decl_qual.none, id), $1 }
   | let_quals letrec_binding                    { $1, $2 }
 
 let_binding:
@@ -317,10 +317,10 @@ kind_args:
  */
 
  fxty_forall_param:
-  | TICK_ID                                             { ($1, None), None }        /* TODO: this rule and the other one without bound produce a reduce/reduce conflics */
+  | TICK_ID                                             { ($1, None), None }        /* TODOH: this rule and the other one without bound produce reduce/reduce conflics: need fix */
   | BRA TICK_ID COLON2 kind_annotation KET              { ($2, Some $4), None }
   | BRA TICK_ID COLONGT fxty_expr KET                   { ($2, None), Some $4 }
-  | BRA TICK_ID COLON2 kind_annotation GEQ fxty_expr KET  { ($2, Some $4), Some $6 }
+  | BRA TICK_ID COLON2 kind_annotation GEQ fxty_expr KET { ($2, Some $4), Some $6 }
 
 fxty_forall_params:
     fxty_forall_param                                   { [$1] }

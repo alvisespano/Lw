@@ -29,13 +29,13 @@ type [< NoComparison; NoEquality >] context = {
 with
     static member uncancellable = { cancellation_token = CancellationToken.None }
 
-type env = Env.t<id, value>
+type env = Env.t<ident, value>
 
 and [< NoComparison; CustomEquality >] value =
     | V_Const of lit
-    | V_Cons of id * value list
+    | V_Cons of ident * value list
     | V_Tuple of value list
-    | V_Record of Env.t<id, value>
+    | V_Record of Env.t<ident, value>
     | V_Redux of string * (context -> value -> value)
 with
     override this.ToString () = this.pretty

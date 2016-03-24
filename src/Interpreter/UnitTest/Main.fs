@@ -23,14 +23,14 @@ open Lw.Interpreter.UnitTest.HML
 let all : section list =
     [
     type_equality
-//        intrinsics
-//        scoping
-//        type_annotations
-//        scoped_type_variables
-//        lists
-//        hindley_milner
-//        hml
-//        higher_rank
+    intrinsics
+    scoping
+    type_annotations
+    scoped_type_variables
+    lists
+    hindley_milner
+    hml
+    higher_rank
     ]
     
 let main () =

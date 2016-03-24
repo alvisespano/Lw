@@ -22,7 +22,7 @@ open Lw.Core.Absyn.Factory
 
 type [< NoComparison; NoEquality; Diagnostics.DebuggerDisplay("{ToString()}") >] kind =
     | K_Var of var
-    | K_Cons of id * kind list
+    | K_Cons of ident * kind list
 with
     interface annotable with
         member __.annot_sep = Config.Printing.kind_annotation_sep

@@ -37,11 +37,11 @@ let type_annotations =
 let scoped_type_variables =
     "Scoped Type Variables",
     [
-    "let i (x : 'bar) = x in i 1, i true, i",   type_is "int * bool * (forall 'bar. 'bar -> 'bar)"
+    "let i (x : 'bar) = x in i 1, i true, i",   wrong_type  // this is considered non-top-level also in OCaml, so no generalization
     "let y =
         let i (x : 'foo) = x
         in
-            i 1, i true",                       type_ok "int * bool"    // generalization of scoped vars is allowed
+            i 1, i true",                       wrong_type
     ]
 
 let lists =

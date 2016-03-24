@@ -20,6 +20,7 @@ open Lw.Core.Typing.StateMonad
 open Lw.Core.Typing.Ops
 open Lw.Core.Typing.Unify
 open Lw.Core.Typing.Meta
+open Lw.Core.Typing.Equivalence
 
 
 // constraint resolution

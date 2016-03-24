@@ -4,41 +4,15 @@
  *)
 
 namespace Test 
+ 
 
-let id x = x
-
-let rec map f = function
-    | [] -> []
-    | x :: xs -> f x :: map f xs
-
-let poly (f : forall 'a. 'a -> 'a) = f 1, f true
-
-let ids = [id]
-
-let c = map poly ids
-
-
-
-(*let rec append l1 l2 =
+let rec append l1 l2 =
     match l1 with
     | [] -> l2
     | x :: xs -> x :: append xs l2
 
-let single x = [x]
+let append1 l x = append l [x]
 
-let inc n = n + 1
-
-let ids_fx : _|_ = single id
-let ids_F = ids_fx
-
-
-let c = map poly ids_F
-
-
-let a = map poly ids_fx, append (single inc) ids_fx
-
-let b = map poly ids_F, append (single inc) ids_F
-*)
 
 (*
 let patt_in_non_letrec f x =

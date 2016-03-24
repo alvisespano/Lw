@@ -93,8 +93,8 @@ let make_apps_by f (|F|) =
         make_patterns (Apps, (|Apps|_|), (|Apps1|))
 
 /// Homogeneous version using identity as projection
-let make_arrows x = make_arrows_by identity identity x
-let make_apps x = make_apps_by identity identity x
+let make_arrows x = make_arrows_by id id x
+let make_apps x = make_apps_by id id x
 
 // foralls active pattern creator
 
@@ -120,7 +120,7 @@ let (|Row_based_Tuple|_|) (|Tup|_|) = function
     | Tup ((x1, _) :: _ as bs, None) when x1 = tuple_index_label 1 -> Some (List.map snd bs)
     | _ -> None
 
-let make_rows rowed ((|Rowed|_|) : id -> _ -> _) =
+let make_rows rowed ((|Rowed|_|) : ident -> _ -> _) =
     let Record = rowed Config.Typing.Names.Type.Row.record
     let (|Record|_|) = (|Rowed|_|) Config.Typing.Names.Type.Row.record
     let Variant = rowed Config.Typing.Names.Type.Row.variant

@@ -1,4 +1,10 @@
 ﻿
+24/3/2016:
+* REFACT: another file refactor: certains stuff in Ops have been put into new Subst and Equivalence modules
+* FIX: type equality now is more robust and all relevant unit tests are successful
+* BUG: unit tests using previous bindings throw an unbound error (dunno why!)
+
+
 23/3/2016:
 * REFACT: big refactor of former Absyn module: now it is split into several files within a source folder
 * REFACT: another big source layout refactor involving UnitTest

@@ -19,6 +19,7 @@ open Lw.Core.Absyn.Ast
 open Lw.Core.Typing.Defs
 open Lw.Core.Typing.Ops
 open Lw.Core.Globals
+open Lw.Core.Typing.Subst
 
 
 type [< NoComparison; NoEquality; System.Diagnostics.DebuggerDisplayAttribute("{ToString()}") >] state =
@@ -245,7 +246,7 @@ type type_inference_builder (loc, ctx) =
         }
 
     member M.Yield (t : ty) = M { yield Fx_F_Ty t }   
-    member M.Yield ((x : id, t : ty)) = M { let! t = M.updated t in return x, t }    // used for row types
+    member M.Yield ((x : ident, t : ty)) = M { let! t = M.updated t in return x, t }    // used for row types
 
     member M.updated (t : ty) =
         M {
@@ -393,6 +394,9 @@ type type_inference_builder (loc, ctx) =
             | FxU0_ForallsQ (Q, _) -> assert (Set.intersect Q.dom αs).IsEmpty   // no quantified vars must be ungeneralizable
             | FxU0_Bottom _        -> ()                                        // TODOL: is there something to check with kind vars?
             assert ϕ.fv.IsSubsetOf αs                                           // dual check: free vars must be among the ungeneralizable ones
+            let! Q = M.get_Q
+            for α in Set.intersect ϕ.fv αs do
+                Report.Hint.scoped_tyvar_was_not_generalized loc α
             let! cs = M.get_constraints
             return! M.bind_Γ jk { mode = jm; scheme = { constraints = cs; fxty = ϕ } }
         }
@@ -513,12 +517,6 @@ type kind_inference_builder<'e> (τ : node<'e, kind>, ctx) =
             return! M.undoable_bind M.lift_γα x k
         }
 
-    member M.search_γ x =
-        M {
-            let! γ = M.get_γ
-            return γ.search x
-        }
-
     member M.search_γα x =
         M {
             let! γα = M.get_γα
@@ -536,11 +534,12 @@ type kind_inference_builder<'e> (τ : node<'e, kind>, ctx) =
             let! γ = M.get_γ
             let! r = f
             let! γ = M.updated γ
+            do! M.set_γ γ
             return r
         }
 
     // environment γα does not have a full undo but only this one, because scoping of vars is special: vars can be introduced anytime and do not have to be undone
-    member M.undo_bind_γα x v f =
+    member M.undoable_bind_γα x v f =
         M {
             let! _, undo = M.bind_γα x v
             let! r = f
