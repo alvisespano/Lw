@@ -7,6 +7,7 @@
 module Lw.Interpreter.UnitTest.All
 
 open Lw.Interpreter.UnitTest
+open Lw.Interpreter.UnitTester
 
 // just for testing and comparing with F#
 module private InFSharp =
@@ -20,8 +21,7 @@ module private InFSharp =
 let all : section list =
     [
     TypeEquality.all
-    
-    hml
-    higher_rank
-    ]
+    Basic.all
+    HML.all
+    ] |> List.concat
     

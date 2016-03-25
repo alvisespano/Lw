@@ -1,7 +1,7 @@
 ﻿
 module Lw.Interpreter.UnitTest.Basic
 
-open Lw.Interpreter.UnitTest.Engine.Tests
+open Lw.Interpreter.UnitTester.Aux
 
 let intrinsics =
     "Intrinsics",

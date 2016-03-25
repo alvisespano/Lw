@@ -101,7 +101,7 @@
     <Compile Include="Eval.fs" />
     <Compile Include="Intrinsic.fs" />
     <Compile Include="Interactive.fs" />
-    <Compile Include="UnitTest\Engine.fs" />
+    <Compile Include="UnitTester.fs" />
     <Compile Include="UnitTest\TypeEquality.fs" />
     <Compile Include="UnitTest\Basic.fs" />
     <Compile Include="UnitTest\HML.fs" />
