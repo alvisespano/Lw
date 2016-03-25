@@ -1,7 +1,7 @@
 ﻿
 module Lw.Interpreter.UnitTest.TypeEquality
 
-open Lw.Interpreter.UnitTest.Engine.Tests
+open Lw.Interpreter.UnitTester.Aux
 
 let type_equality =
     "Type Equality",
@@ -42,4 +42,9 @@ let type_equality =
     // test scoping of quantified vars in type equivalence by reusing var names withing foralls
     "forall ('b :> forall 'b. 'b -> 'b). list 'b",                      type_eq "forall ('f :> forall 'f. 'f -> 'f). list 'f"
     "forall ('b :> forall 'b. 'b -> 'x). list 'b",                      type_eq "forall ('f :> forall 'f. 'f -> 'y). list 'f"
+    ]
+
+let all =
+    [
+    type_equality
     ]

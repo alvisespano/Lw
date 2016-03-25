@@ -12,7 +12,7 @@ open Lw.Core.Absyn
 open Lw.Core.Absyn.Misc
 open Lw.Core.Absyn.Var
 open Lw.Core.Absyn.Kind
-open Lw.Core.Absyn.Factory
+open Lw.Core.Absyn.Sugar
 open Lw.Core.Absyn.Ast
 open Lw.Core.Globals
 open Lw.Core.Typing
@@ -156,7 +156,7 @@ module Builtin =
 
 type [< NoEquality; NoComparison >] envs = {
     Γ : jenv
-    Δ : Eval.env
+    Δ : Eval.venv
     γ : kjenv
     δ : tenv
 }
@@ -175,7 +175,7 @@ with
             // pupulate Γ and Δ with types and values of builtin functions
             let Γ01, Δ01 =
                 Builtin.Values.ΓΔ0
-                    |> List.fold (fun (Γ : jenv, Δ : Eval.env) (x, f) ->
+                    |> List.fold (fun (Γ : jenv, Δ : Eval.venv) (x, f) ->
                                     let (t : ty), v = f x
                                     in
                                         Γ.bind (jenv_key.Var x) { mode = jenv_mode.Normal; scheme = { constraints = constraints.empty

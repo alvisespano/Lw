@@ -4,7 +4,7 @@
  * (C) Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
  
-module Lw.Interpreter.UnitTest.Engine
+module Lw.Interpreter.UnitTester
 
 open System
 open FSharp.Common
@@ -327,7 +327,9 @@ let test_sections secs =
     List.sumBy (function score.Ok | score.Weak -> 1 | _ -> 0) scores
 
 
-module Tests =
+// shortcuts for unit tests
+
+module Aux =
     let type_ok s = result.TypedOk (Some s, [])
     let type_is s = result.TypedOk (Some s, [flag.Verbatim])
     let type_eq s = result.TypeEq (s, true)

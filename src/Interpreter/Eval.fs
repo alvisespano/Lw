@@ -17,7 +17,7 @@ open Lw.Core.Absyn
 open Lw.Core.Absyn.Misc
 open Lw.Core.Absyn.Var
 open Lw.Core.Absyn.Kind
-open Lw.Core.Absyn.Factory
+open Lw.Core.Absyn.Sugar
 open Lw.Core.Absyn.Ast
 open Lw.Core.Globals
 open System.Threading
@@ -29,7 +29,7 @@ type [< NoComparison; NoEquality >] context = {
 with
     static member uncancellable = { cancellation_token = CancellationToken.None }
 
-type env = Env.t<ident, value>
+type venv = Env.t<ident, value>
 
 and [< NoComparison; CustomEquality >] value =
     | V_Const of lit
@@ -80,7 +80,7 @@ let beta_redux ctx loc v1 v2 =
     | _              -> Report.unexpected_value loc "left hand of application" "closure" __SOURCE_FILE__ __LINE__ v1
 
 
-let rec enclose ctx (x, e, Δ : env ref as cl) = V_Redux (Config.Interactive.pretty_closure cl, (fun ctx v -> eval_expr ctx ((!Δ).bind x v) e))
+let rec enclose ctx (x, e, Δ : venv ref as cl) = V_Redux (Config.Interactive.pretty_closure cl, (fun ctx v -> eval_expr ctx ((!Δ).bind x v) e))
 
 // TODOL: implement Δ with a fast hashmap: do not worry about scoping as the bindings can be left inside the map and overwritten, as type checking already dealt with scoping
 and eval_expr (ctx : context) Δ (e0 : expr) =
@@ -175,7 +175,7 @@ and eval_patt ctx Δ p v =
     | P_Lit lit, V_Const lit' when lit = lit'               -> Some Δ
     | P_Tuple ps, V_Tuple vs when ps.Length = vs.Length     -> Some (List.fold2 (fun Δ p v -> either Δ (R p v)) Δ ps vs)
     | P_Annot (p, _), v                                     -> R p v
-    | P_As (p, x), v                                        -> Option.map (fun (Δ : env) -> Δ.bind x v) (R p v)
+    | P_As (p, x), v                                        -> Option.map (fun (Δ : venv) -> Δ.bind x v) (R p v)
     | P_Wildcard, _                                         -> Some Δ
     | P_Record xps, V_Record venv
         when List.forall (fun (x, _) ->
@@ -193,7 +193,7 @@ and eval_decl ctx Δ0 (d0 : decl) =
 
     | D_Rec bs ->
         let rec Δ' = 
-            List.fold (fun (Δ : env) { par = (x, _); expr = e } -> Δ.bind x (V_Redux (Config.Interactive.pretty_rec_closure (x, e, Δ),
+            List.fold (fun (Δ : venv) { par = (x, _); expr = e } -> Δ.bind x (V_Redux (Config.Interactive.pretty_rec_closure (x, e, Δ),
                                                                                       fun ctx v -> beta_redux ctx e.loc (eval_expr ctx Δ' e) v)))   // DO NOT CURRY variable 'v' or recursion won't stop
                 Δ0 bs
         in

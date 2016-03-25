@@ -82,7 +82,7 @@ let main _ =
             #if UNIT_TEST
             ignore <| Intrinsic.envs.envs0 // just to trigger intrinsic population so that logger can be set to Unit Test thresholds afterwards
             Config.Log.Presets.set_thresholds_for_unit_test ()
-            Lw.Interpreter.UnitTest.Main.main ()
+            UnitTester.test_sections UnitTest.All.all
             #else
             let envs = ref Intrinsic.envs.envs0
             if Config.Interactive.interactive_mode then

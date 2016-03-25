@@ -18,7 +18,7 @@ open Lw.Core.Globals
 open Lw.Core.Absyn.Misc
 open Lw.Core.Absyn.Var
 open Lw.Core.Absyn.Kind
-open Lw.Core.Absyn.Factory
+open Lw.Core.Absyn.Sugar
 
 
 // bindings and cases
@@ -302,35 +302,6 @@ let (|P_ConsApps1|_|) = function
     | P_Apps1 (ULo (P_Cons x) :: ts) -> Some (x, ts)
     | _ -> None
 
-type upatt with
-    override this.ToString () = this.pretty
-
-    member this.pretty =
-        let (|A|) =
-            let (|R|_|) = function
-                | (ULo (P_PolyCons _ | P_Cons _ | P_Var _)) as p -> Some p
-                | _ -> None
-            let (|L|_|) = function
-                | ULo (P_App _) | R _ as p -> Some p
-                | _ -> None
-            in
-                (|Application|) (|L|_|) (|R|_|)
-        let (|P_Sym|_|) = (|Sym|_|) (function P_Var x | P_PolyCons x -> Some (x, x) | _ -> None)
-        match this with
-            | P_Sym x                                 -> sprintf "(%O)" x
-            | P_Var x
-            | P_Cons x                                -> x
-            | P_PolyCons x                            -> sprintf Config.Printing.polycons_fmt x
-            | P_Lit lit                               -> lit.pretty
-            | P_Tuple ([] | [_])                      -> unexpected "empty or unary tuple pattern" __SOURCE_FILE__ __LINE__
-            | P_Tuple ps                              -> sprintf "(%s)" (flatten_stringables ", " ps)
-            | P_App (A s)                             -> s
-            | P_Annot (p, t)                          -> sprintf "(%O : %O)" p t
-            | P_As (p, x)                             -> sprintf "(%O as %s)" p x
-            | P_Or (p1, p2)                           -> sprintf "(%O | %O)" p1 p2
-            | P_And (p1, p2)                          -> sprintf "(%O & %O)" p1 p2
-            | P_Wildcard                              -> "_"
-            | P_Record bs                             -> sprintf "{ %s }" (mappen_strings (fun (x, e) -> sprintf "%s = %O" x e) "; " bs)
 
 
 
@@ -353,24 +324,10 @@ with
 
     member this.as_tokens = [this.pretty]
 
-//type [< NoComparison; NoEquality >] var_qual =
-//    | VaQ_Strict
-//    | VaQ_Flex
-//with
-//    member this.is_strict =
-//        match this with
-//            | VaQ_Strict -> true
-//            | VaQ_Flex   -> false
-//
-//    member this.pretty_id id =
-//        match this with
-//            | VaQ_Strict  -> id
-//            | VaQ_Flex    -> sprintf "%s#" id
 
 type [< NoComparison; NoEquality >] uexpr =
     | Lit of lit
     | Var of ident
-//    | Reserved_Cons of id    // internal only
     | FreeVar of ident
     | PolyCons of ident
     | Loosen of expr
@@ -422,7 +379,6 @@ let (|Tuple|_|) = (|Row_based_Tuple|_|) (function Record (bs, o) -> Some (bs, o)
 let UnApp (op, e : expr) = App (Lo e.loc <| Id op, e)
 let BinApp (e1 : expr, op, e2 : expr) = App (Lo e1.loc <| App (Lo e2.loc <| Id op, e1), e2)
 
-//let EApps es = (Apps (fun (e1, e2) -> Lo e1.loc <| App (e1, e2)) es).value
 let Apps, (|Apps1|), (|Apps|_|) = nodify make_apps_by App (function App (τ1, τ2) -> Some (τ1, τ2) | _ -> None)
 
 module N = Config.Typing.Names
@@ -442,6 +398,51 @@ let P_List_Nil = P_Cons N.Data.list_nil
 let P_List_Cons (p1, p2) = P_Apps [ULo (P_Cons N.Data.list_cons); p1; p2]
 let P_List_Seq (ps : patt list) = List.foldBack (fun p z -> P_List_Cons (p, Lo p.loc z)) ps P_List_Nil
 
+let LambdaFunction = make_lambda_patt Lambda Match Id
+let Te_LambdaFunction = make_lambda_patt Te_Lambda Te_Match Te_Cons
+
+let LambdaFun =
+    let (|P_Annot|_|) = function
+        | P_Annot (a, b) -> Some (a, b)
+        | _ -> None
+    let (|P_Var|_|) = function
+        | P_Var r -> Some r
+        | _ -> None
+    let (|P_Wildcard|_|) = function
+        | P_Wildcard -> Some ()
+        | _ -> None
+    let (|P_Custom|_|) (p : node<_, _>) (e : node<_, _>) = function
+        | P_Lit lit.Unit -> Some (Lambda ((fresh_reserved_id (), Some (Lo p.loc Te_Unit)), e))
+        | _ -> None
+    in
+        make_lambdas (|P_Annot|_|) (|P_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) Lambda LambdaFunction
+
+let Te_LambdaFun =
+    let (|P_Annot|_|) = function
+        | Tp_Annot (a, b) -> Some (a, b)
+        | _ -> None
+    let (|P_Var|_|) = function
+        | Tp_Var r -> Some r
+        | _ -> None
+    let (|P_Wildcard|_|) = function
+        | Tp_Wildcard -> Some ()
+        | _ -> None
+    let (|P_Custom|_|) _ _ _ = None
+    in
+        make_lambdas (|P_Annot|_|) (|Tp_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) Te_Lambda Te_LambdaFunction
+          
+let LambdaCases x = make_lambda_cases LambdaFun P_Var Id Match Tuple P_Tuple x
+let Te_LambdaCases x = make_lambda_cases Te_LambdaFun Tp_Var Te_Cons Te_Match Te_Tuple Tp_Tuple  x
+            
+let RecLambda ((x, t), cases) =
+    let e = LambdaCases cases
+    let L x = Lo (let _, _, e = cases.[0] in e.loc) x
+    in
+        L <| Let (L <| D_Rec [{ qual = decl_qual.none; par = (x, t); expr = e }], L <| Id x)
+
+let Lets x = make_lets Let x
+let Te_Lets x = make_lets Te_Let x
+
 
 type uexpr with
     override this.ToString () = this.pretty
@@ -449,7 +450,7 @@ type uexpr with
     member this.pretty =
         let (|A|) =
             let (|R|_|) = function
-                | (ULo (Lit _ | Var _ | FreeVar _ | (*Reserved_Cons _ |*) Record _ | Select _)) as e -> Some e
+                | (ULo (Lit _ | Var _ | FreeVar _ |  Record _ | Select _)) as e -> Some e
                 | _ -> None
             let (|L|_|) = function
                 | ULo (App _) | R _ as e -> Some e
@@ -467,7 +468,6 @@ type uexpr with
             | List_Cons (e1, e2)    -> sprintf "%O :: %O" e1 e2
             | Sym x                 -> sprintf "(%s)" x
             | Var x                 -> sprintf "%s" x
-//            | Reserved_Cons x       -> x
             | FreeVar x             -> sprintf Config.Printing.freevar_fmt x
             | PolyCons x            -> sprintf Config.Printing.polycons_fmt x
             | App (A s)             -> s
@@ -489,7 +489,6 @@ type uexpr with
             | Eject e               -> sprintf "%O _/" e
             | Loosen e              -> sprintf "(%O)#" e
 
-
 type udecl with       
     override this.ToString () = this.pretty
 
@@ -510,6 +509,39 @@ type udecl with
             | D_Datatype dt       -> sprintf "datatype %s :: %O with %s" dt.id dt.kind (flatten_stringables " | " dt.datacons)
             | D_Reserved_Multi ds -> flatten_stringables ";; " ds
 
+type upatt with
+    override this.ToString () = this.pretty
+
+    member this.pretty =
+        let (|A|) =
+            let (|R|_|) = function
+                | (ULo (P_PolyCons _ | P_Cons _ | P_Var _)) as p -> Some p
+                | _ -> None
+            let (|L|_|) = function
+                | ULo (P_App _) | R _ as p -> Some p
+                | _ -> None
+            in
+                (|Application|) (|L|_|) (|R|_|)
+        let (|P_Sym|_|) = (|Sym|_|) (function P_Var x | P_PolyCons x -> Some (x, x) | _ -> None)
+        match this with
+            | P_Sym x                                 -> sprintf "(%O)" x
+            | P_Var x
+            | P_Cons x                                -> x
+            | P_PolyCons x                            -> sprintf Config.Printing.polycons_fmt x
+            | P_Lit lit                               -> lit.pretty
+            | P_Tuple ([] | [_])                      -> unexpected "empty or unary tuple pattern" __SOURCE_FILE__ __LINE__
+            | P_Tuple ps                              -> sprintf "(%s)" (flatten_stringables ", " ps)
+            | P_App (A s)                             -> s
+            | P_Annot (p, t)                          -> sprintf "(%O : %O)" p t
+            | P_As (p, x)                             -> sprintf "(%O as %s)" p x
+            | P_Or (p1, p2)                           -> sprintf "(%O | %O)" p1 p2
+            | P_And (p1, p2)                          -> sprintf "(%O & %O)" p1 p2
+            | P_Wildcard                              -> "_"
+            | P_Record bs                             -> sprintf "{ %s }" (mappen_strings (fun (x, e) -> sprintf "%s = %O" x e) "; " bs)
+
+
+// top-most AST nodes
+//
 
 type [< NoComparison; NoEquality >] program =
   { namespacee : ident option
@@ -532,105 +564,6 @@ with
             | Line_Expr e -> e.pretty
             | Line_Decl d -> d.pretty
     
-    
-// additional sugars
-//
-
-// TODOL: polish these functions in such a way that they return always a uexpr and always arguments pick exprs
-let lambda_function lambda matchh id (cases : case<_, _, _> list) =
-    let loc = let p, _, _ = cases.[0] in p.loc
-    let L = Lo loc
-    let x = fresh_reserved_id ()
-    in
-        L <| lambda ((x, None), (L <| matchh (L <| id x, cases)))
-
-let LambdaFunction = lambda_function Lambda Match Id
-let Te_LambdaFunction = lambda_function Te_Lambda Te_Match Te_Cons
-
-let lambda_fun (|P_Annot|_|) (|P_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) lambda lambda_function = function
-    | [], _ -> unexpected "empty lambda parameter list" __SOURCE_FILE__ __LINE__
-    | ps, e ->
-        List.foldBack (fun (p : node<_, _>) (e : node<_, _>) ->
-                let loc = p.loc
-                let rec f = function
-                    | P_Annot (ULo (P_Var x), t) -> Lo loc <| lambda ((x, Some t), e)
-                    | P_Tuple ([_] | [])         -> unexpected "empty or unary tuple pattern" __SOURCE_FILE__ __LINE__
-                    | P_Var x                    -> Lo loc <| lambda ((x, None), e)
-                    | P_Wildcard                 -> Lo loc <| lambda ((fresh_reserved_id (), None), e)
-                    | P_Custom p e e'            -> Lo loc e'
-                    | _                          -> lambda_function [p, None, e]
-                in
-                    f p.value)
-            ps e
-
-let LambdaFun =
-    let (|P_Annot|_|) = function
-        | P_Annot (a, b) -> Some (a, b)
-        | _ -> None
-    let (|P_Var|_|) = function
-        | P_Var r -> Some r
-        | _ -> None
-    let (|P_Wildcard|_|) = function
-        | P_Wildcard -> Some ()
-        | _ -> None
-    let (|P_Custom|_|) (p : node<_, _>) (e : node<_, _>) = function
-        | P_Lit lit.Unit -> Some (Lambda ((fresh_reserved_id (), Some (Lo p.loc Te_Unit)), e))
-        | _ -> None
-    in
-        lambda_fun (|P_Annot|_|) (|P_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) Lambda LambdaFunction
-
-let Te_LambdaFun =
-    let (|P_Annot|_|) = function
-        | Tp_Annot (a, b) -> Some (a, b)
-        | _ -> None
-    let (|P_Var|_|) = function
-        | Tp_Var r -> Some r
-        | _ -> None
-    let (|P_Wildcard|_|) = function
-        | Tp_Wildcard -> Some ()
-        | _ -> None
-    let (|P_Custom|_|) _ _ _ = None
-    in
-        lambda_fun (|P_Annot|_|) (|Tp_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) Te_Lambda Te_LambdaFunction
-        
-let lambda_cases lambdafun p_var var matchh tuple p_tuple =
-    let tuple = function
-        | [e : node<_, _>] -> e.value
-        | es  -> tuple es
-    let p_tuple = function
-        | [p : node<_, _>] -> p.value
-        | ps  -> p_tuple ps
-    function
-    | [ps, None, e] -> lambdafun (ps, e)
-    | (p0 : node<_, _> :: _ as ps0, _, _) :: cases' as cases ->
-        let len0 = List.length ps0
-        let L0 x = Lo p0.loc x
-        for ps, _, _ in cases' do
-            if List.length ps <> len0 then
-                raise (syntax_error (sprintf "number of function parameters expected to be %d across all cases" len0, p0.loc))
-        let ids = List.init len0 (fun _ -> fresh_reserved_id ())
-        let pars f = List.mapi (fun i (p : node<_, _>) -> Lo p.loc <| f ids.[i]) ps0
-        let cases = List.map (fun (ps, weo, e) -> L0 <| p_tuple ps, weo, e) cases
-        in
-            lambdafun (pars p_var, L0 <| matchh (L0 <| tuple (pars var), cases))
-
-    | l -> unexpected "ill-formed lambda case list: %O" __SOURCE_FILE__ __LINE__ l
-    
-let LambdaCases x = lambda_cases LambdaFun P_Var Id Match Tuple P_Tuple x
-let Te_LambdaCases x = lambda_cases Te_LambdaFun Tp_Var Te_Cons Te_Match Te_Tuple Tp_Tuple  x
-            
-let RecLambda ((x, t), cases) =
-    let e = LambdaCases cases
-    let L x = Lo (let _, _, e = cases.[0] in e.loc) x
-    in
-        L <| Let (L <| D_Rec [{ qual = decl_qual.none; par = (x, t); expr = e }], L <| Id x)
-
-let lets lett (ds, e) = List.foldBack (fun d e -> Lo e.loc <| lett (d, e)) ds e
-
-let Lets x = lets Let x
-let Te_Lets x = lets Te_Let x
-
-
 
 
 // parser auxiliary tools

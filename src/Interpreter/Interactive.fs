@@ -19,11 +19,11 @@ open FSharp.Common
 
 module A = Lw.Core.Absyn.Ast
 
-let print_env_diffs (Γ1 : jenv) Γ2 (Δ1 : Eval.env) Δ2 =
+let print_env_diffs (Γ1 : jenv) Γ2 (Δ1 : Eval.venv) Δ2 =
     for (_, { jenv_value.scheme = σ }), (x, v) in Seq.zip (Γ2 - Γ1) (Δ2 - Δ1) do
         L.log_line (Config.Interactive.pretty_prompt_decl x σ v)
 
-let print_decl_bindings (Γ : jenv) (Δ : Eval.env) d =
+let print_decl_bindings (Γ : jenv) (Δ : Eval.venv) d =
     for x in Typing.Ops.vars_in_decl d do
         let σ = Γ.lookup (jenv_key.Var x)
         let v = Δ.lookup x

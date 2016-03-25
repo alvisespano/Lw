@@ -18,7 +18,7 @@ open Lw.Core.Absyn
 open Lw.Core.Absyn.Misc
 open Lw.Core.Absyn.Var
 open Lw.Core.Absyn.Kind
-open Lw.Core.Absyn.Factory
+open Lw.Core.Absyn.Sugar
 open Lw.Core.Absyn.Ast
 open Lw.Core.Globals
 open Lw.Core.Typing.Defs

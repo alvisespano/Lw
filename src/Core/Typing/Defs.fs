@@ -19,7 +19,7 @@ open Lw.Core.Absyn
 open Lw.Core.Absyn.Misc
 open Lw.Core.Absyn.Var
 open Lw.Core.Absyn.Kind
-open Lw.Core.Absyn.Factory
+open Lw.Core.Absyn.Sugar
 open Lw.Core.Absyn.Ast
 
 
@@ -407,59 +407,6 @@ let T_Closed_Record xts = T_Record (xts, None)
 let T_Open_Variant xts = T_Variant (xts, Some var.fresh)
 let T_Closed_Variant xts = T_Variant (xts, None)
 
-
-// substitutions
-//
-
-type [< NoComparison >] subst< [<EqualityConditionalOn>] 't> (env : Env.t<var, 't>) =
-    interface IEnumerable<var * 't> with
-        member __.GetEnumerator () = (env :> IEnumerable<_>).GetEnumerator ()
-
-    interface Collections.IEnumerable with
-        member this.GetEnumerator () = (this :> IEnumerable<_>).GetEnumerator () :> Collections.IEnumerator
-
-    new () = new subst<'t> (Env.empty)
-    new (α, t) = new subst<'t> (Env.empty.bind α t)
-
-    member internal __.env = env
-
-    member __.is_empty = env.is_empty
-    member __.search = env.search
-    member __.dom = env.dom
-    member __.filter f = new subst<'t> (env.filter f)
-    member this.restrict αs = this.filter (fun α _ -> Set.contains α αs)
-    member this.remove αs = this.filter (fun α _ -> not <| Set.contains α αs)
-    member __.map f = new subst<'t> (env.map f)
-    member __.search_by f = env.search_by f
-
-    static member pretty_item (bra, ket, α : var, t : 't) = sprintf "%s%O %s %O%s" bra α Config.Printing.substitution_sep t ket
-    static member pretty_item (α, t) = subst<'t>.pretty_item ("[", "]", α, t)
-    member __.pretty (bra, ket) = if env.is_empty then sprintf "%s%s" bra ket else env.pretty_by_binding (fun α t -> subst<'t>.pretty_item (bra, ket, α, t)) ""
-    override this.ToString () = this.pretty ("[", "]")
-      
-    member private θ1.append (θ2 : subst<'t>) =
-        assert (Set.intersect θ1.dom θ2.dom).IsEmpty    // HACK: if this assert gets triggered, try change compose as described in the note below
-        new subst<'t> (θ1.env + θ2.env)
-
-    static member empty = new subst<'t> ()
-  
-    // from "Typing Haskell in Haskell":
-    //      s1 @@ s2    = [ (u, apply s1 t) | (u,t) <- s2 ] ++ s1
-    // HACK: this does not restrict domain of appended substitution, thus the assert in method append might get triggered
-    member θ1.compose apply_subst (θ2 : subst<'t>) = (θ2.map (fun _ -> apply_subst θ1)).append θ1 // (θ2.restrict (θ2.dom - θ1.dom))
-
-type ksubst = subst<kind>
-type tsubst = subst<ty>
-
-type [< NoComparison; NoEquality >] tksubst = { t : tsubst; k : ksubst }
-with
-    static member op_Implicit tθ = { t = tθ; k = ksubst.empty }
-    static member op_Implicit kθ = { t = tsubst.empty; k = kθ }
-    static member empty = { t = tsubst.empty; k = ksubst.empty }
-    member θ.dom = θ.t.dom + θ.k.dom
-    override this.ToString () = this.pretty
-    member this.pretty = this.t.pretty ("[", "]") + if this.k.is_empty then "" else this.k.pretty ("{", "}") 
-       
 
 // augmentations for kinds and kind schemes
 //

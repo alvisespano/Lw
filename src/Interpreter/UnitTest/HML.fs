@@ -102,6 +102,11 @@ let higher_rank =
     "let f (x :: [forall a.a -> a]) = x in let g (x :: [Int -> Int]) = x in let ids = [id] in (f ids, g ids)", ok "([forall a. a -> a],[Int -> Int])")*)
     ]
 
+let all =
+    [
+    hml
+    higher_rank
+    ]
 
 
 (*

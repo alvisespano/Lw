@@ -89,3 +89,15 @@ let hindley_milner =
             id",                                   type_ok "(('a -> 'b) -> list 'a -> list 'b) -> ('a -> 'b) -> list 'a -> list 'b"
     "map2",                                     unbound_error        
     ]
+
+
+let all =
+    [
+    intrinsics
+    scoping
+    type_annotations
+    scoped_type_variables
+    lists
+    hindley_milner
+    ]
+

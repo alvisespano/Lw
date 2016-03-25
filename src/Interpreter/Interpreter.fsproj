@@ -105,7 +105,7 @@
     <Compile Include="UnitTest\TypeEquality.fs" />
     <Compile Include="UnitTest\Basic.fs" />
     <Compile Include="UnitTest\HML.fs" />
-    <Compile Include="UnitTest\Main.fs" />
+    <Compile Include="UnitTest\All.fs" />
     <Compile Include="Main.fs" />
     <None Include="test\misc.lw" />
     <None Include="test\interactive.lw" />

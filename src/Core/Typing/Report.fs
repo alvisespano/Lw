@@ -14,7 +14,7 @@ open Lw.Core.Absyn
 open Lw.Core.Absyn.Misc
 open Lw.Core.Absyn.Var
 open Lw.Core.Absyn.Kind
-open Lw.Core.Absyn.Factory
+open Lw.Core.Absyn.Sugar
 open Lw.Core.Absyn.Ast
 open Lw.Core.Typing.Defs
 open Lw.Core.Globals
@@ -80,19 +80,19 @@ module Error =
     // unbound symbol errors
 
     let unbound_symbol loc x =
-        Es 10 loc "variable identifier %s is undefined" x
+        Es 10 loc "variable identifier `%s` is undefined" x
 
     let unbound_type_constructor loc x =
-        Es 11 loc "type constructor %s is undefined" x
+        Es 11 loc "type constructor `%s` is undefined" x
 
     let unbound_data_constructor loc x =
-        Es 12 loc "data constructor %s is undefined" x
+        Es 12 loc "data constructor `%s` is undefined" x
 
 
     // misc errors 
 
     let duplicate_label loc l what =
-        Es 100 loc "multiple occurrences of label %s in %s" l what  // this is gonna be removed when overloading of record labels will be implemented
+        Es 100 loc "multiple occurrences of label '%s' in %s" l what  // this is gonna be removed when overloading of record labels will be implemented
 
 
     // type errors

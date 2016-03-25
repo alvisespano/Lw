@@ -17,7 +17,7 @@ open FSharp.Common.Parsing
 open Lw.Core.Globals
 open Lw.Core.Absyn.Misc
 open Lw.Core.Absyn.Var
-open Lw.Core.Absyn.Factory
+open Lw.Core.Absyn.Sugar
 
 
 type [< NoComparison; NoEquality; Diagnostics.DebuggerDisplay("{ToString()}") >] kind =

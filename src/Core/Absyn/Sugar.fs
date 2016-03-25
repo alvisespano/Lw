@@ -1,10 +1,10 @@
 ﻿(*
  * Lw
- * Absyn/Factory.fs: active pattern and constructor factories
+ * Absyn/Sugar.fs: pattern and constructor factories for syntactic sugars
  * (C) Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
  
-module Lw.Core.Absyn.Factory
+module Lw.Core.Absyn.Sugar
 
 open System
 open System.Collections.Generic
@@ -130,3 +130,65 @@ let make_rows rowed ((|Rowed|_|) : ident -> _ -> _) =
     in
         Record, Variant, Tuple, (|Record|_|), (|Variant|_|), (|Tuple|_|)
 
+
+// lambda with pattern matching on argument creator
+
+let make_lambda_patt lambda matchh id cases =
+    let loc = let (p : node<_, _>), _, _ = List.head cases in p.loc
+    let L = Lo loc
+    let x = fresh_reserved_id ()
+    in
+        L <| lambda ((x, None), (L <| matchh (L <| id x, cases)))
+
+// lambda with multiples arguments creator
+
+let make_lambdas (|P_Annot|_|) (|P_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) lambda lambda_function = function
+    | [], _ -> unexpected "empty lambda parameter list" __SOURCE_FILE__ __LINE__
+    | ps, e ->
+        List.foldBack (fun (p : node<_, _>) (e : node<_, _>) ->
+                let loc = p.loc
+                let rec f = function
+                    | P_Annot (ULo (P_Var x), t) -> Lo loc <| lambda ((x, Some t), e)
+                    | P_Tuple ([_] | [])         -> unexpected "empty or unary tuple pattern" __SOURCE_FILE__ __LINE__
+                    | P_Var x                    -> Lo loc <| lambda ((x, None), e)
+                    | P_Wildcard                 -> Lo loc <| lambda ((fresh_reserved_id (), None), e)
+                    | P_Custom p e e'            -> Lo loc e'
+                    | _                          -> lambda_function [p, None, e]
+                in
+                    f p.value)
+            ps e
+
+let make_lambda_cases lambdas p_var var matchh tuple p_tuple =
+    let tuple = function
+        | [e : node<_, _>] -> e.value
+        | es  -> tuple es
+    let p_tuple = function
+        | [p : node<_, _>] -> p.value
+        | ps  -> p_tuple ps
+    in function
+        | [ps, None, e] -> lambdas (ps, e)
+        | (p0 : node<_, _> :: _ as ps0, _, _) :: cases' as cases ->
+            let len0 = List.length ps0
+            let L0 x = Lo p0.loc x
+            for ps, _, _ in cases' do
+                if List.length ps <> len0 then
+                    raise (syntax_error (sprintf "number of function parameters expected to be %d across all cases" len0, p0.loc))
+            let ids = List.init len0 (fun _ -> fresh_reserved_id ())
+            let pars f = List.mapi (fun i (p : node<_, _>) -> Lo p.loc <| f ids.[i]) ps0
+            let cases = List.map (fun (ps, weo, e) -> L0 <| p_tuple ps, weo, e) cases
+            in
+                lambdas (pars p_var, L0 <| matchh (L0 <| tuple (pars var), cases))
+
+        | l -> unexpected "ill-formed lambda case list: %O" __SOURCE_FILE__ __LINE__ l
+
+// multiple let-decls in let..in series
+
+let make_lets lett (ds, e) = List.foldBack (fun d e -> Lo e.loc <| lett (d, e)) ds e
+
+// recursive lambda sugar
+
+let make_rec_lambda lambda_cases lett d_rec var ((x, t), cases) =
+    let e = lambda_cases cases
+    let L x = Lo (let _, _, e = List.head cases in (e : node<_, _>).loc) x
+    in
+        L <| lett (L <| d_rec [(x, t), e], L <| var x)

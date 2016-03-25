@@ -1,4 +1,9 @@
 ﻿
+25/3/2016:
+* NEW: attempt to writen a simpler non-monadic type equivalence algorithm, but I'm not persuaded it would be better so it's now in the TODO list
+* REFACT: pattern and constructor factories for sugars have been polished
+
+
 24/3/2016:
 * REFACT: another file refactor: certains stuff in Ops have been put into new Subst and Equivalence modules
 * FIX: type equality now is more robust and all relevant unit tests are successful
