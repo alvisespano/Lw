@@ -1,9 +1,9 @@
 # Lw
 
-Lw is a general-purpose statically-typed functional language with advanced features.
-It is currently in development and some of its features are yet to come or still unstable, nonetheless it has reached a stage at which people who enjoy experimenting with new programming languages may start to play with it.
+Lw is a general-purpose statically-typed functional-first language aimed at writing succinct, robust, powerful and highly reusable code. It includes some of the most advanced achievements in language literature as well as several novel features.
+Lw is currently in development and its implementation could still be unstable, nonetheless it has reached a stage at which people who enjoy experimenting with new programming languages may want to play with it.
 
-I will keep this README file updated and document the most interesting among its constructs and features. Consider, however, that any feature may change in the future or may get broken at some point until a stable version is released.
+I will keep this README file updated and increasingly document the language as development goes on. Consider, however, that features may change in the future or may get broken at some point until a stable version or an hotfix is released.
 
 ## Installation
 
