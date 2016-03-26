@@ -20,7 +20,7 @@ module private InFSharp =
 
 let all : section list =
     [
-    TypeEquality.all
+    TypeEquivalence.all
     Basic.all
     HML.all
     ] |> List.concat

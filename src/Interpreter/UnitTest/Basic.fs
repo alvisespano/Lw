@@ -1,10 +1,11 @@
 ﻿
 module Lw.Interpreter.UnitTest.Basic
 
+open Lw.Interpreter.UnitTester
 open Lw.Interpreter.UnitTester.Aux
 
 let intrinsics =
-    "Intrinsics",
+    "Intrinsics", [],
     [
     "[]",                                       type_ok "list 'a"
     "[1; 2]",                                   type_ok "list int"
@@ -20,14 +21,16 @@ let intrinsics =
     ]
 
 let scoping =
-    "Scoping",
+    "Scoping", [],
     [
     "let id x = x in id true",                  type_ok "bool"
     "id 1",                                     unbound_error
+    "let f x = x",                              type_ok "'a -> 'a"
+    "let g x = f x",                            type_ok "'a -> 'a"
     ]
 
 let type_annotations =
-    "Type Annotations",
+    "Type Annotations", [],
     [
     "fun f x y -> ((f : 'a -> 'a) x, y) : _ * int",         type_ok "('a -> 'a) -> 'a -> int -> 'a * int"
     "fun f (x : 'x) y -> ((f : 'a -> _) x, y) : _ * int",   type_ok "('x -> 'a) -> 'x -> int -> 'a * int"
@@ -35,7 +38,7 @@ let type_annotations =
     ]
 
 let scoped_type_variables =
-    "Scoped Type Variables",
+    "Scoped Type Variables", [],
     [
     "let i (x : 'bar) = x in i 1, i true, i",   wrong_type  // this is considered non-top-level also in OCaml, so no generalization
     "let y =
@@ -45,7 +48,7 @@ let scoped_type_variables =
     ]
 
 let lists =
-    "Lists",
+    "Lists", [flag.KeepBindingsAtEnd],
     [
     "let rec map f = function
         | [] -> []
@@ -66,7 +69,7 @@ let lists =
     ]
 
 let hindley_milner =
-    "Hindley-Milner",
+    "Hindley-Milner", [],
     [
     "fun x -> x",                               type_ok "forall 'a. 'a -> 'a"
     "fun f x -> f x",                           type_ok "forall 'a 'b. ('a -> 'b) -> 'a -> 'b"
@@ -86,12 +89,12 @@ let hindley_milner =
         and map2 = id map
         and id x = x
         in
-            id",                                   type_ok "(('a -> 'b) -> list 'a -> list 'b) -> ('a -> 'b) -> list 'a -> list 'b"
+            id",                                type_ok_ "(('a -> 'b) -> list 'a -> list 'b) -> ('a -> 'b) -> list 'a -> list 'b" [flag.RemoveBindings]
     "map2",                                     unbound_error        
     ]
 
 
-let all =
+let all : section list =
     [
     intrinsics
     scoping

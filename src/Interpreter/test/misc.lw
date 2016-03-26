@@ -4,26 +4,14 @@
  *)
 
 namespace Test 
-
-
-// test datatypes
-
-datatype option :: * -> * with  // se si possono definire anche dentro uno scope tramite let datatype, perché non usare "=" al posto di "with"?
-    | None : option 'a
-    | Some : 'a -> option 'a
-
-datatype list :: * -> * with
-    | Nil : list 'a
-    | Cons : 'a -> list 'a -> list 'a
-
-    
+   
 let test_option () =
     let map f = function None -> None | Some x -> Some (f x)
-    // let data Might : option 'a -> option 'a
+    let data Might : option 'a -> option 'a
     let rec fold f z = function
         | None          -> z
         | Some x        -> f x z
-        // | Might o       -> fold f z o
+        | Might o       -> fold f z o
     in
         fold map
    	

@@ -37,10 +37,21 @@ type logger with
 [< RequireQualifiedAccess >]
 type flag =
     | Verbatim
+    | RemoveBindings
+    | KeepBindingsAtEnd
+    | No of flag
+with
+    static member private fold_flags p flag flags =
+        List.fold (fun r ->
+                function flag' when flag = flag'     -> true
+                       | No flag' when flag = flag'  -> false
+                       | _                           -> r)
+            false flags |> p
+    static member is_enabled = flag.fold_flags id
 
 [< RequireQualifiedAccess >]
 type [< NoComparison; NoEquality >] result =
-    | TypedOk of string option * flag list
+    | TypedOk of string option
     | StaticError of Type * int option
     | TypeEq of string * bool
 
@@ -58,8 +69,7 @@ with
 
 // TODO: reuse this for interactive as well
 type typechecker () =
-    let st0 = Typing.StateMonad.state.state0
-    let mutable st = st0
+    let mutable st = Typing.StateMonad.state.state0
 
     member private __.unM f x =
         let ctx0 = context.as_top_level_decl
@@ -67,22 +77,25 @@ type typechecker () =
         st <- st1
         r
                 
-    member __.reset_state = st <- st0
-
     member this.W_expr e = this.unM W_expr e
     member this.W_decl d = this.unM W_decl d
     member this.Wk_and_eval_fxty_expr τ = this.unM Wk_and_eval_fxty_expr τ
     
     member __.auto_generalize loc (t : ty) = t.auto_generalize loc st.Γ
     member __.lookup_var_Γ x = (st.Γ.lookup (jenv_key.Var x)).scheme.fxty
+//    member __.remove_var_Γ x = st <- { st with Γ = st.Γ.remove (jenv_key.Var x) }
+
+    member __.envs
+        with get () = st.Γ, st.γ, st.δ
+        and set (Γ, γ, δ) = st <- { st with Γ = Γ; γ = γ; δ =  δ }
 
     member this.parse_fxty_expr s =
         let τ =
             try parse_fxty_expr s
             with :? syntax_error as e -> unexpected "syntax error while parsing type expression: %s\n%O" __SOURCE_FILE__ __LINE__ s e
-        this.reset_state
+        let st1 = st
         let ϕ, _ = this.Wk_and_eval_fxty_expr τ
-        this.reset_state
+        st <- st1
         ϕ
 
     member this.parse_ty_expr_and_auto_gen s =
@@ -191,8 +204,23 @@ let compare_test_verbatim =
 
 let decl_dummy_ty = Fx_F_Ty T_Unit
 
-type entry = string * result
-type section = string * entry list
+type entry = string * (result * flag list)
+type section = string * flag list * entry list
+
+type section_data = {
+    name : string
+    num : int
+    flags : flag list
+}
+//with
+//    member this.is_enabled flag = List.contains flag this.flags
+
+type entry_data = {
+    input : string
+    flags : flag list
+}
+with
+    member this.is_enabled fl = flag.is_enabled fl this.flags
 
 let entry_info sec n = "entry", txt (sprintf "#%d in section \"%s\"" (n + 1) sec)
 let ok_or_no_info b doc = (txt (sprintf "(%s)" (if b then "OK" else "NO"))) <+> doc
@@ -204,9 +232,9 @@ let parse_expr_or_decl s =
         with :? syntax_error -> reraise ()
            | e               -> unexpected "syntax error while parsing expression or declaration: %s\n%O" __SOURCE_FILE__ __LINE__ s e
 
-let typecheck_expr_or_decl (tchk : typechecker) sec n input =
-    testing Min (txt "input:" </> txt input)
-    let p = parse_expr_or_decl input
+let typecheck_expr_or_decl (tchk : typechecker) sd ed =
+    testing Min (txt "input:" </> txt ed.input)
+    let p = parse_expr_or_decl ed.input
     testing Low (txt "parsed:" </> fmt "%O" p)
     let ϕ =
         match p with
@@ -214,9 +242,13 @@ let typecheck_expr_or_decl (tchk : typechecker) sec n input =
         | parsed.Decl d ->
             tchk.W_decl d
             match d.value with
-            | D_Bind [{ patt = ULo (P_Var x) | ULo (P_Annot (ULo (P_Var x), _)) }]
-            | D_Rec [{ par = x, _ }] ->
-                tchk.lookup_var_Γ x
+            | D_Rec [{ par = x, _ }]
+            | D_Bind [{ patt = ULo (P_Var x) | ULo (P_Annot (ULo (P_Var x), _)) }] ->
+                let envs0 = tchk.envs
+                let r = tchk.lookup_var_Γ x
+                if ed.is_enabled flag.RemoveBindings then
+                    tchk.envs <- envs0
+                r
 
             | _ -> decl_dummy_ty
     in
@@ -225,8 +257,9 @@ let typecheck_expr_or_decl (tchk : typechecker) sec n input =
                                                                       ok_or_no_info tb (ty ϕ.ftype),
                                                                       ok_or_no_info kb (kind ϕ.kind)) ]
 
-let test_entry (tchk : typechecker) sec n ((s1, res) : entry) =
-    let infs0 = [ entry_info sec n ]
+let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
+    let infs0 = [ entry_info sd.name sd.num ]
+    let ed = { input = s1; flags = sd.flags @ flags }
     match res with
     | result.TypeEq (s2, is_eq) ->
         testing Low (txt s1 <+> txt "=" <+> txt s2)
@@ -242,8 +275,7 @@ let test_entry (tchk : typechecker) sec n ((s1, res) : entry) =
         let b3 = k1.is_equivalent k2
         let infs =
             infs0 @
-            [ //"parsed", txt s1 <+> txt "=" <+> txt s2
-              "flex types", ok_or_no_info b1 (fxty ϕ1 <+> txt "=" <+> fxty ϕ2)
+            [ "flex types", ok_or_no_info b1 (fxty ϕ1 <+> txt "=" <+> fxty ϕ2)
               "F-types", ok_or_no_info b2 (ty t1 <+> txt "=" <+> ty t2)
               "kinds", ok_or_no_info b3 (kind k1 <+> txt "=" <+> kind k2) ]
         let test_ok' = if is_eq then test_ok else test_failed
@@ -257,8 +289,7 @@ let test_entry (tchk : typechecker) sec n ((s1, res) : entry) =
             | false, false, _   -> test_failed' "types are different")
                 infs
 
-    | result.TypedOk (so, flags) ->
-        let is_enabled flag = List.contains flag flags
+    | result.TypedOk so ->        
         let ϕok =
             match so with
             | Some s -> try tchk.parse_ty_expr_and_auto_gen s
@@ -266,8 +297,8 @@ let test_entry (tchk : typechecker) sec n ((s1, res) : entry) =
             | None   -> decl_dummy_ty
         in
             try
-                let ϕres, infs1 = typecheck_expr_or_decl tchk sec n s1
-                let compare_test = if is_enabled flag.Verbatim then compare_test_verbatim else compare_test_eq
+                let ϕres, infs1 = typecheck_expr_or_decl tchk sd ed
+                let compare_test = if ed.is_enabled flag.Verbatim then compare_test_verbatim else compare_test_eq
                 let b3 = compare_test ϕres ϕok
                 let infs1 = infs0 @ infs1 b3
                 let infs2 = expected_infos ϕok
@@ -285,7 +316,7 @@ let test_entry (tchk : typechecker) sec n ((s1, res) : entry) =
     | result.StaticError (T, codeo) ->
         assert (let t = typeof<static_error> in t = T || T.IsSubclassOf t)
         try
-            let _, infs1 = typecheck_expr_or_decl tchk sec n s1
+            let _, infs1 = typecheck_expr_or_decl tchk sd ed
             in
                 test_failed
                     (something (sprintf "expected static error %d") "expected a static error" codeo)
@@ -313,16 +344,19 @@ let score_infos scores =
 let section_infos sec (span : TimeSpan) (scores : score list) =
     ["section", txt sec; "entries", fmt "%d" scores.Length; "cpu time", txt span.pretty; "results", pp_infos (score_infos scores)]
 
-let test_section tchk ((sec, entries) : section) =
-    let scores, span = cputime (List.mapi (fun i -> test_entry tchk sec i)) entries
+let test_section (tchk : typechecker) ((sec, flags, entries) : section) =
+    let envs0 = tchk.envs
+    let scores, span = cputime (List.mapi (fun i -> test_entry tchk { name = sec; num = i; flags = flags })) entries
     let infs = section_infos sec span scores
     L.pp (L.msg High) (pp_infos infs)
+    if not <| flag.is_enabled flag.KeepBindingsAtEnd flags then
+        tchk.envs <- envs0
     scores
 
-let test_sections secs =
+let test_sections (secs : section list) =
     let tchk = new typechecker ()
     let scores, span = cputime (fun () -> List.map (test_section tchk) secs |> List.concat) () 
-    let infs = section_infos (mappen_strings fst ", " secs) span scores
+    let infs = section_infos (mappen_strings (fun (name, _, _) -> name) ", " secs) span scores
     L.pp (L.msg Unmaskerable) (pp_infos infs)
     List.sumBy (function score.Ok | score.Weak -> 1 | _ -> 0) scores
 
@@ -330,16 +364,28 @@ let test_sections secs =
 // shortcuts for unit tests
 
 module Aux =
-    let type_ok s = result.TypedOk (Some s, [])
-    let type_is s = result.TypedOk (Some s, [flag.Verbatim])
-    let type_eq s = result.TypeEq (s, true)
-    let type_neq s = result.TypeEq (s, false)
-    let ok = result.TypedOk (None, [])
-    let wrong< 'exn when 'exn :> static_error > codeo = result.StaticError (typeof<'exn>, codeo)
-    let wrong_type = wrong<type_error> None
-    let wrong_syntax = wrong<syntax_error> None
-    let static_errn code = wrong<static_error> (Some code)
-    let type_errn code = wrong<type_error> (Some code)
-    let unbound_error = static_errn 10
+    let type_ok_ s l : result * flag list = result.TypedOk (Some s), l
+    let type_is_ s l : result * flag list = result.TypedOk (Some s), [flag.Verbatim] @ l
+    let type_eq_ s l : result * flag list = result.TypeEq (s, true), l
+    let type_neq_ s l : result * flag list = result.TypeEq (s, false), l
+    let ok_ l : result * flag list = result.TypedOk None, l
 
+    let type_ok s = type_ok_ s []
+    let type_is s = type_is_ s []
+    let type_eq s = type_eq_ s []
+    let type_neq s = type_neq_ s []
+    let ok = ok_ []
 
+    let wrong_< 'exn when 'exn :> static_error > codeo l : result * flag list = result.StaticError (typeof<'exn>, codeo), l
+    let wrong_type_ = wrong_<type_error> None
+    let wrong_syntax_ = wrong_<syntax_error> None
+    let static_errn_ code = wrong_<static_error> (Some code)
+    let type_errn_ code = wrong_<type_error> (Some code)
+    let unbound_error_ = static_errn_ 10
+
+    let wrong codeo = wrong_ codeo []
+    let wrong_type = wrong_type_ []
+    let wrong_syntax = wrong_syntax_ []
+    let static_errn code = static_errn_ code []
+    let type_errn code = type_errn_ code []
+    let unbound_error = unbound_error_ []

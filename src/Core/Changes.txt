@@ -1,4 +1,9 @@
 ﻿
+26/3/2016:
+* UP: solution has now new configurations: Interactive Debug and Release; Interpreter Debug and Release; plus UnitTest
+* UP: UnitTest revamped: sections as well as entries support flags for controlling environments and other details 
+
+
 25/3/2016:
 * NEW: attempt to writen a simpler non-monadic type equivalence algorithm, but I'm not persuaded it would be better so it's now in the TODO list
 * REFACT: pattern and constructor factories for sugars have been polished

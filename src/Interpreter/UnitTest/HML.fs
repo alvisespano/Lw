@@ -1,10 +1,11 @@
 ﻿
 module Lw.Interpreter.UnitTest.HML
 
+open Lw.Interpreter.UnitTester
 open Lw.Interpreter.UnitTester.Aux
 
 let hml =
-    "HML",
+    "HML", [flag.KeepBindingsAtEnd],
     [
     "let i x = x in i 1, i true, i",            type_ok "int * bool * (forall 'a. 'a -> 'a)"
     "fun (i : forall 'a. 'a -> 'a) ->
@@ -41,7 +42,7 @@ let hml =
     ]
 
 let higher_rank = 
-    "Impredicative Application and Higher Rank Arguments",
+    "Impredicative Application and Higher Rank Arguments", [],
     [
     "let auto (id : forall 'a. 'a -> 'a) = id",         type_ok "(forall 'a. 'a -> 'a) -> (forall 'a. 'a -> 'a)"
     "let xauto (id : forall 'a. 'a -> 'a) x = id x",    type_ok "forall 'a. (forall 'b. 'b -> 'b) -> 'a -> 'a"
@@ -102,11 +103,15 @@ let higher_rank =
     "let f (x :: [forall a.a -> a]) = x in let g (x :: [Int -> Int]) = x in let ids = [id] in (f ids, g ids)", ok "([forall a. a -> a],[Int -> Int])")*)
     ]
 
-let all =
+let all : section list =
     [
     hml
     higher_rank
     ]
+
+
+
+
 
 
 (*

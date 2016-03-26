@@ -15,7 +15,7 @@
     <Name>Interpreter</Name>
     <TargetFrameworkProfile />
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Interpreter Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
@@ -30,24 +30,10 @@
     <StartArguments>test\firstclass_poly.lw</StartArguments>
     <StartWorkingDirectory>..\..</StartWorkingDirectory>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <Tailcalls>true</Tailcalls>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>RELEASE</DefineConstants>
-    <WarningLevel>5</WarningLevel>
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DocumentationFile>
-    </DocumentationFile>
-    <Prefer32Bit>false</Prefer32Bit>
-    <StartArguments>test\misc.lw</StartArguments>
-    <StartWorkingDirectory>..\..</StartWorkingDirectory>
-  </PropertyGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Interactive|AnyCPU' ">
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Interactive Release|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
@@ -91,6 +77,34 @@
   <PropertyGroup>
     <PreBuildEvent />
   </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Interactive Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <Tailcalls>false</Tailcalls>
+    <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT</DefineConstants>
+    <WarningLevel>5</WarningLevel>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DocumentationFile />
+    <Prefer32Bit>false</Prefer32Bit>
+    <StartArguments>--interactive test/interactive.lw</StartArguments>
+    <StartWorkingDirectory>..\..</StartWorkingDirectory>
+    <OutputPath>bin\Interactive Debug\</OutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Interpreter Release|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <Tailcalls>false</Tailcalls>
+    <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT</DefineConstants>
+    <WarningLevel>5</WarningLevel>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DocumentationFile />
+    <Prefer32Bit>false</Prefer32Bit>
+    <StartArguments>test\firstclass_poly.lw</StartArguments>
+    <StartWorkingDirectory>..\..</StartWorkingDirectory>
+    <OutputPath>bin\Interpreter Release\</OutputPath>
+  </PropertyGroup>
   <ItemGroup>
     <None Include="App.config" />
     <Content Include="packages.config" />
@@ -102,7 +116,7 @@
     <Compile Include="Intrinsic.fs" />
     <Compile Include="Interactive.fs" />
     <Compile Include="UnitTester.fs" />
-    <Compile Include="UnitTest\TypeEquality.fs" />
+    <Compile Include="UnitTest\TypeEquivalence.fs" />
     <Compile Include="UnitTest\Basic.fs" />
     <Compile Include="UnitTest\HML.fs" />
     <Compile Include="UnitTest\All.fs" />

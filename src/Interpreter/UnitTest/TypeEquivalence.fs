@@ -1,10 +1,11 @@
 ﻿
-module Lw.Interpreter.UnitTest.TypeEquality
+module Lw.Interpreter.UnitTest.TypeEquivalence
 
+open Lw.Interpreter.UnitTester
 open Lw.Interpreter.UnitTester.Aux
 
-let type_equality =
-    "Type Equality",
+let type_equivalence : section =
+    "Type Equivalence", [],
     [
     "'a",                                       type_eq "'a"
     "'a",                                       type_eq "'b"
@@ -46,5 +47,5 @@ let type_equality =
 
 let all =
     [
-    type_equality
+    type_equivalence
     ]
