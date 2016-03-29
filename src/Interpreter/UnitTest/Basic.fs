@@ -69,7 +69,7 @@ let lists =
     ]
 
 let hindley_milner =
-    "Hindley-Milner", [],
+    "Hindley-Milner", [flag.KeepBindingsAtEnd],
     [
     "fun x -> x",                               type_ok "forall 'a. 'a -> 'a"
     "fun f x -> f x",                           type_ok "forall 'a 'b. ('a -> 'b) -> 'a -> 'b"

@@ -1,4 +1,12 @@
 ﻿
+29/3/2016:
+* REFACT: UnitTest solution configuration is no more: now unit testing is triggered via command line argument "--unit-test"
+* REFACT: logger class does not support profile channel anymore, and now has a custom_debug method logging in blue and with its own threshold; header must always be specified though
+* REFACT: Log thresholds and related stuff has been polished and are more consistent: test methods are assigned to the debug threshold, uni and resolve channels too; test_weak_ok and
+          test_fail although are treated as unleveled and are subject to no threshold
+* BUG: flex type annotation management must be fixed
+
+
 26/3/2016:
 * UP: solution has now new configurations: Interactive Debug and Release; Interpreter Debug and Release; plus UnitTest
 * UP: UnitTest revamped: sections as well as entries support flags for controlling environments and other details 

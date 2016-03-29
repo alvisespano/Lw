@@ -1,16 +1,15 @@
 ﻿
 SHORT-TERM
 ----------
-(+++)   [Scoped type variables] Redesign the behaviour of named tyvars and fix unification problems with them. OCaml documentations says:
-            "The type expression ' ident stands for the type variable named ident. The type expression _ stands for an anonymous type variable.
-            In data type definitions, type variables are names for the data type parameters. In type constraints, they represent unspecified types that
-            can be instantiated by any type to satisfy the type constraint. In general the scope of a named type variable is the whole top-level phrase
-            where it appears, and it can only be generalized when leaving this scope. Anonymous variables have no such restriction.
-            In the following cases, the scope of named type variables is restricted to the type expression where they appear:
-                1) for universal (explicitly polymorphic) type variables;
-                2) for type variables that only appear in public method specifications (as those variables will be made universal, as described in section 6.9.1);
-                3) for variables used as aliases, when the type they are aliased to would be invalid in the scope of the enclosing definition (i.e. when it
-                        contains free universal type variables, or locally defined types.)"
+(+++)   [Type-level programming with HML] Understand how foralls can be treated as type-lambdas and how flex types are lets, encoding applicated lambdas as well.
+            Apparently, the system would allow programmer to express any program based on var/lambda/app/let terms, but there are limitations. First of all, flex types can only occur at outmost
+            nesting level, therefore, if they encode lets as well as applicaed lambdas, it means no let nor application could occur nested within a type expression.
+            Another limitation of flex types is that rho-types cannot occur in bounds, meaning that only non-trivial quantified bounds are accepted: this means lets as well as applications
+            cannot support trivial rho-type bindings; in other words only functions can be let-bound or applicated.
+            One solution would be allowing the programmer to let-bind or applicate anything, but when rho-types are involved they are immediately substituted; or, even more generally,
+            when only 1 occurrence of a given let-bound variable appear, it will be immediately inlined; when multiple occurrences appear, in case it's a rho type all occurrenced will be
+            inlined, otherwise it will be kept as a bound.
+            (TODO: try to write some examples)
 
 (+++)   [Imperative blocks] Deal with imperative block wisely: 'do' (both single and do {..} blocks) must behave like a binding and should be mixed with lets without the need for the final 'in'.
 
@@ -72,7 +71,7 @@ LONG-TERM
             existentially-qualified type variable behaviour there. Among others: when a tyvar occurs in the type signature of a
             datacons but does not appear in the codomain (i.e. the gadt type itself) then it becomes existentially qualified.
 
-(-)     [Subtyping, sub-typesets and active patterns] Design a system which reformulates active patterns as a way for defining subsets of types, i.e. subtypes.
+(-)     [Subtyping, type-sets and active patterns] Design a system which reformulates active patterns as a way for defining subsets of types, i.e. subtypes.
             Consider the following example, where this variant defines the most general representation for types:
                 datatype ty with
                     | T_Forall of var * ty * ty

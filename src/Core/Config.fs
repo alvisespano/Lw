@@ -161,7 +161,7 @@ module Log =
         l.show_datetime <- false
         l.show_urgency <- false
         l.show_thread <- true
-        l.show_header_only_when_changes <- true
+        l.show_header_only_when_changes <- false
         l
 
     let verbose_pretty_location = false

@@ -31,7 +31,16 @@ let flatten_and_trim_strings sep ss = flatten_strings sep (seq { for s : string 
 
 let inline prompt ctx prefixes x (t1 : ^t1) t2o =
     let is_top_level = (^a : (member is_top_level : bool) ctx)
-    let log = if is_top_level then L.msg High else L.msg Normal
+    let log =
+        if is_top_level then L.msg Normal
+        else
+            let l =
+                #if DEBUG
+                L
+                #else
+                Globals.null_L
+                #endif
+            l.msg Low
     let prefixes = List.distinct <| if is_top_level then prefixes else Config.Printing.Prompt.nested_decl_prefix :: prefixes
     let header = sprintf "%s %s" (flatten_and_trim_strings Config.Printing.Prompt.header_sep (prefixes @ [x])) (^t1 : (static member binding_separator : string) ())
     use N = var.reset_normalization

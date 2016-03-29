@@ -29,7 +29,7 @@ let print_decl_bindings (Γ : jenv) (Δ : Eval.venv) d =
         let v = Δ.lookup x
         L.log_line (Config.Interactive.pretty_prompt_decl x σ v)
 
-let read_and_interpret_loop (envs : Intrinsic.envs) =
+let read_and_eval_loop (envs : Intrinsic.envs) =
     print_env_diffs Intrinsic.envs.envs0.Γ envs.Γ Intrinsic.envs.envs0.Δ envs.Δ
     L.msg Low "entering interactive mode"
 

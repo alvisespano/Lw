@@ -20,7 +20,7 @@
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
-    <OutputPath>bin\Debug\</OutputPath>
+    <OutputPath>bin\Interpreter Debug\</OutputPath>
     <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT</DefineConstants>
     <WarningLevel>5</WarningLevel>
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -44,21 +44,21 @@
     <DocumentationFile />
     <Prefer32Bit>false</Prefer32Bit>
     <StartArguments>--interactive test/interactive.lw</StartArguments>
-    <OutputPath>bin\Interactive\</OutputPath>
+    <OutputPath>bin\Interactive Release\</OutputPath>
     <StartWorkingDirectory>..\..</StartWorkingDirectory>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'UnitTest|AnyCPU' ">
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'UnitTest Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
-    <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT;UNIT_TEST</DefineConstants>
+    <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT</DefineConstants>
     <WarningLevel>5</WarningLevel>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <DocumentationFile />
     <Prefer32Bit>false</Prefer32Bit>
-    <StartArguments>test\misc.lw</StartArguments>
-    <OutputPath>bin\UnitTest\</OutputPath>
+    <StartArguments>--unit-test</StartArguments>
+    <OutputPath>bin\UnitTest Debug\</OutputPath>
     <StartWorkingDirectory>..\..</StartWorkingDirectory>
   </PropertyGroup>
   <Choose>
@@ -104,6 +104,20 @@
     <StartArguments>test\firstclass_poly.lw</StartArguments>
     <StartWorkingDirectory>..\..</StartWorkingDirectory>
     <OutputPath>bin\Interpreter Release\</OutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'UnitTest Release|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <Tailcalls>false</Tailcalls>
+    <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT</DefineConstants>
+    <WarningLevel>5</WarningLevel>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DocumentationFile />
+    <Prefer32Bit>false</Prefer32Bit>
+    <StartArguments>--unit-test</StartArguments>
+    <StartWorkingDirectory>..\..</StartWorkingDirectory>
+    <OutputPath>bin\UnitTest Release\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
     <None Include="App.config" />

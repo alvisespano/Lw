@@ -11,7 +11,6 @@ open FSharp.Common.Arg
 open FSharp.Common.Log
 open FSharp.Common.X.Assembly
 open System
-open System.Runtime.InteropServices
 open System.Reflection
 open Lw
 
@@ -58,18 +57,24 @@ let private other s =
 
 let private infos =
   [|
-//    Entry.flag "flex-let" (fun b -> Core.Config.Typing.flex_let <- true)  "do not instantiate let-bound inferred flexible types to System-F types"
     Entry.bool "unicode" (fun b -> Core.Config.Printing.dynamic.unicode <- b)  "enable/disable Unicode output" (Some Core.Config.Printing.dynamic.unicode)
     Entry.flag "greek" (fun b -> Core.Config.Printing.dynamic.greek_tyvars <- true)  "enable greek letters for type variables"
-    Entry.flag "interactive" (fun () -> Config.Interactive.interactive_mode <- true)  "enable interactive mode, possibly after interpretation of a given source file"
-    Entry.flag "pedantic" (fun () -> Core.Config.Log.cfg.all_thresholds <- Min)  "set all log thresholds to minimum level"
-    Entry.flag "v" (fun () -> Core.Config.Log.cfg.all_thresholds <- Low) "set all log thresholds to low level"
-    Entry.flag "quiet" (fun () -> Core.Config.Log.cfg.all_thresholds <- High) "set all log thresholds to high level"
+    
+    Entry.flag "interactive" (fun () -> Config.mode <- Config.Mode_Interactive)  "enable interactive mode, possibly after interpretation of a given source file"
+    Entry.flag "unit-test" (fun () -> Config.mode <- Config.Mode_UnitTest)  "switch to unit-test mode, ignoring input files and performing all tests"
+
+    Entry.flag "pedantic" (fun () -> Config.Log.cfg.all_thresholds <- Min)  "set all log thresholds to level Min"
+    Entry.flag "v" (fun () -> Config.Log.cfg.all_thresholds <- Low) "set all log thresholds to level Low"
+    Entry.flag "quiet" (fun () -> Config.Log.cfg.all_thresholds <- High) "set all log thresholds to level High"
+    Entry.flag "silent" (fun () -> Config.Log.cfg.all_thresholds <- Unmaskerable) "set all log thresholds to level Unmaskerable"
+    
     Entry.string "log-file" (fun s -> Core.Config.Log.cfg.filename <- Some s) "set log filename" Core.Config.Log.cfg.filename
+    
     Entry.string "debug-threshold" (fun s -> Core.Config.Log.cfg.debug_threshold <- pri.Parse s) "set debug verbosity threshold" (Some Core.Config.Log.cfg.debug_threshold)
     Entry.string "msg-threshold" (fun s -> Core.Config.Log.cfg.msg_threshold <- pri.Parse s) "set informational messages verbosity threshold" (Some Core.Config.Log.cfg.msg_threshold)
     Entry.string "hint-threshold" (fun s -> Core.Config.Log.cfg.hint_threshold <- pri.Parse s) "set hint messages verbosity threshold" (Some Core.Config.Log.cfg.hint_threshold)
     Entry.string "warn-threshold" (fun s -> Core.Config.Log.cfg.warn_threshold <- pri.Parse s) "set warnings verbosity threshold" (Some Core.Config.Log.cfg.warn_threshold)
+    
     Entry.int "-W" (fun n -> Core.Config.Report.disabled_warnings <- Set.add n Core.Config.Report.disabled_warnings) "suppress specific warning" None
     Entry.int "-H" (fun n -> Core.Config.Report.disabled_hints <- Set.remove n Core.Config.Report.disabled_hints) "suppress specific hint" None
   |] |> Array.concat

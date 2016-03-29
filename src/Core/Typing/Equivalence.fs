@@ -6,18 +6,14 @@
  
 module Lw.Core.Typing.Equivalence
 
-open FSharp.Common.Log
 open FSharp.Common
 open Lw.Core
 open Lw.Core.Absyn
-open Lw.Core.Absyn.Misc
 open Lw.Core.Absyn.Var
 open Lw.Core.Absyn.Kind
-open Lw.Core.Absyn.Ast
 open Lw.Core.Globals
 open Lw.Core.Typing
 open Lw.Core.Typing.Defs
-open Subst
 
 
 // type equivalence

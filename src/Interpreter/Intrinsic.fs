@@ -171,6 +171,7 @@ with
     static member create_envs () =
         try
             L.msg Low "populating intrinsics..."
+            let thresholds = L.cfg.thresholds
             Config.Log.Presets.set_thresholds_for_intrinsics () // TODOL: define a logger.save_state method supporting undo and use this for changing thresholds temporarily
             // pupulate Γ and Δ with types and values of builtin functions
             let Γ01, Δ01 =
@@ -204,6 +205,7 @@ with
 
             let Δ0 = Δ01    // no more values to add to Δ environment, so it's just rebound as is
             let r = { Γ = Γ0; Δ = Δ0; γ = γ0; δ = δ0 }
+            L.cfg.thresholds <- thresholds
             #if DEBUG_INTRINSICS
             L.msg Low "intrinsics created\n%O" r
             #endif

@@ -79,24 +79,27 @@ let main _ =
             L.msg Low "%s" (Args.credits ())
             L.debug Min "CWD: %s" System.Environment.CurrentDirectory
             #endif
-            #if UNIT_TEST
-            ignore <| Intrinsic.envs.envs0 // just to trigger intrinsic population so that logger can be set to Unit Test thresholds afterwards
-            Config.Log.Presets.set_thresholds_for_unit_test ()
-            UnitTester.test_sections UnitTest.All.all
-            #else
-            let envs = ref Intrinsic.envs.envs0
-            if Config.Interactive.interactive_mode then
-                Config.Log.Presets.set_thresholds_for_interactive ()
-            else
+
+            let mutable envs = Intrinsic.envs.envs0
+            match Config.mode with
+            | Config.Mode_UnitTest ->
+                Config.Log.Presets.set_thresholds_for_unit_test ()
+                UnitTester.test_sections UnitTest.All.all
+
+            | Config.Mode_Interpreter ->
                 Config.Log.Presets.set_thresholds_for_interpreter ()
-            try
                 if not (String.IsNullOrWhiteSpace Args.filename) then
-                    envs := interpret !envs Args.filename
-            with e -> handle_exn_and_return e |> ignore
-            if Config.Interactive.interactive_mode then
-                Interactive.read_and_interpret_loop !envs
-            0
-            #endif
+                    envs <- interpret envs Args.filename
+                    0
+                else failwith "no input source file specified"
+
+            | Config.Mode_Interactive ->
+                Config.Log.Presets.set_thresholds_for_interactive ()
+                if not (String.IsNullOrWhiteSpace Args.filename) then
+                    envs <- interpret envs Args.filename
+                Interactive.read_and_eval_loop envs
+                0
+
         with e -> handle_exn_and_return e
 
     exit code

@@ -29,8 +29,8 @@ open Lw.Core.Typing.Equivalence
 open PPrint
 
 type logger with
-    member this.test pri fmt = this.log_leveled "TEST" Config.Log.test_color Min pri fmt
-    member this.test_ok fmt = this.log_unleveled "OK" Config.Log.test_ok_color fmt
+    member this.testing pri fmt = this.log_leveled "TEST" Config.Log.test_color this.cfg.debug_threshold pri fmt
+    member this.test_ok fmt = this.log_leveled "OK" Config.Log.test_ok_color this.cfg.debug_threshold Low fmt
     member this.test_weak_ok fmt = this.log_unleveled "WEAK" Config.Log.test_weak_ok_color fmt
     member this.test_failed fmt = this.log_unleveled "FAIL" Config.Log.test_failed_color fmt
 
@@ -83,7 +83,6 @@ type typechecker () =
     
     member __.auto_generalize loc (t : ty) = t.auto_generalize loc st.Γ
     member __.lookup_var_Γ x = (st.Γ.lookup (jenv_key.Var x)).scheme.fxty
-//    member __.remove_var_Γ x = st <- { st with Γ = st.Γ.remove (jenv_key.Var x) }
 
     member __.envs
         with get () = st.Γ, st.γ, st.δ
@@ -171,7 +170,7 @@ let test_failed msg infs = L.pp L.test_failed (pp_infos (["reason", txt msg] @ i
 
 let test_weak_ok esit infs = L.pp L.test_weak_ok (pp_infos (["esit", txt esit] @ infs)); score.Weak
 
-let testing pri doc = L.pp (L.test pri) doc
+let testing pri doc = L.pp (L.testing pri) doc
 
 
 // testers
@@ -339,7 +338,7 @@ let score_infos scores =
     [score.Ok; score.Weak; score.Failed] @ scores   // trick for making countBy always count at least 1 for each kind of score
     |> List.countBy id
     |> List.sortBy (fst >> function score.Ok -> 1 | score.Weak -> 2 | score.Failed -> 3)
-    |> List.map (fun (score, n) -> sprintf "%O" score, fmt "%d" (n  - 1))   // n-1 because of the trick above
+    |> List.map (fun (score, n) -> sprintf "%O" score, fmt "%d" (n  - 1))
 
 let section_infos sec (span : TimeSpan) (scores : score list) =
     ["section", txt sec; "entries", fmt "%d" scores.Length; "cpu time", txt span.pretty; "results", pp_infos (score_infos scores)]

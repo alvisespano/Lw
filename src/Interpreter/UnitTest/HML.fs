@@ -31,13 +31,13 @@ let hml =
     "map poly ids, append (single inc) ids",    type_ok "list (int * bool) * list (int -> int)"
 
     "let ids : list (forall 'a. 'a -> 'a) = ids
-        in
+     in
         map poly ids",                          type_ok "list (int * bool)"
     "let ids : forall 'a. list ('a -> 'a) = ids
-        in
+     in
         map poly ids",                          type_ok "list (int * bool)"
     "let ids : forall 'a. list ('a -> 'a) = ids
-        in
+     in
         map poly ids, append (single inc) ids", type_ok "list (int * bool) * list (int -> int)" // ids is bound as an F-type
     ]
 
