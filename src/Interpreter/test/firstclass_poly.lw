@@ -5,13 +5,20 @@
 
 namespace Test 
  
+let id x = x
 
-let rec append l1 l2 =
-    match l1 with
-    | [] -> l2
-    | x :: xs -> x :: append xs l2
+let ids = [id]
 
-let append1 l x = append l [x]
+// let ids : list ('a -> 'a) = ids
+
+let rec map f = function
+    | [] -> []
+    | x :: xs -> f x :: map f xs
+            
+let tmp1 () =
+    let ids : list (forall 'a. 'a -> 'a) = ids
+    in
+        map poly ids
 
 
 (*

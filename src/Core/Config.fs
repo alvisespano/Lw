@@ -128,7 +128,8 @@ module Printing =
     let constraint_id_fmt : StringFormat<string -> int -> string> = "%s#%X"
     let fresh_reserved_id : StringFormat<int -> string> = "?%d"
     let row_based_tuple_label_fmt : StringFormat<int -> string> = "#%d"
-    let already_existing_named_var_fmt : StringFormat<string -> int -> string> = "%s%d" // this is needed for disambiguating the name of a named var that already existed and whose name conflicted
+//    let already_existing_named_var_fmt : StringFormat<string -> int -> string> = "%s%d" // these are needed for disambiguating the name of a named var that already existed and whose name conflicted
+//    let already_existing_named_var_scanf_fmt () : PrintfFormat<s, _, _, _, string * int> = "%s%d" 
     #if DEBUG_VAR_NAMES
     let anonymous_var_fmt : StringFormat<string -> int -> string> = "%s?%d"
     let named_var_fmt : StringFormat<string -> int -> string> = "<%s>?%d"
@@ -181,6 +182,11 @@ module Parsing =
 
 module Report = 
     let syntax_error_code = 1
-    let mutable disabled_warnings : int Set = Set.empty
+    let mutable disabled_warnings : int Set = Set.empty       
     let mutable disabled_hints : int Set = Set.empty
+
+    let disable_warning n = disabled_warnings <- Set.add n disabled_warnings
+    let enable_warning n = disabled_warnings <- Set.remove n disabled_warnings
+    let disable_hint n = disabled_hints <- Set.add n disabled_hints
+    let enable_hint n = disabled_hints <- Set.remove n disabled_hints
 

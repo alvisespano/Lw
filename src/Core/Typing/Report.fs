@@ -22,10 +22,12 @@ open Printf
 open System
 
 type type_error (msg, n, loc) =
-    inherit static_error ("type error", msg, n, loc)
+    inherit static_error (type_error.error_name, msg, n, loc)
+    static member error_name = "type error"
 
 type kind_error (msg, n, loc) =
-    inherit static_error ("kind error", msg, n, loc)
+    inherit static_error (kind_error.error_name, msg, n, loc)
+    static member error_name = "kind error"
 
 let flatten_and_trim_strings sep ss = flatten_strings sep (seq { for s : string in ss do let s = s.Trim () in if not <| String.IsNullOrWhiteSpace s then yield s })
 
@@ -34,13 +36,11 @@ let inline prompt ctx prefixes x (t1 : ^t1) t2o =
     let log =
         if is_top_level then L.msg Normal
         else
-            let l =
-                #if DEBUG
-                L
-                #else
-                Globals.null_L
-                #endif
-            l.msg Low
+            #if DEBUG
+            L.msg Low
+            #else
+            null_L.msg Low
+            #endif
     let prefixes = List.distinct <| if is_top_level then prefixes else Config.Printing.Prompt.nested_decl_prefix :: prefixes
     let header = sprintf "%s %s" (flatten_and_trim_strings Config.Printing.Prompt.header_sep (prefixes @ [x])) (^t1 : (static member binding_separator : string) ())
     use N = var.reset_normalization

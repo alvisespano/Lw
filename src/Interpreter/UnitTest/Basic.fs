@@ -65,7 +65,7 @@ let lists =
         | [] -> l2
         | x :: xs -> x :: append xs l2",        type_ok "list 'a -> list 'a -> list 'a"
     "let append1 l x = append l [x]",           type_ok "list 'a -> 'a -> list 'a"
-    "let single x = [x]",                       type_ok "forall 'a. 'a -> list 'a"
+    "let single x = [x]",                       type_ok "'a -> list 'a"
     ]
 
 let hindley_milner =
@@ -79,18 +79,18 @@ let hindley_milner =
     "let i = fun x -> x in i i",                type_ok "forall 'a. 'a -> 'a"
     "fun i -> i i",                             type_errn 203
     "fun i -> (i 1, i true)",                   type_errn 200
-    "let id x = x",                             type_ok "forall 'a. 'a -> 'a"
     "let app f x = f x",                        type_ok "('a -> 'b) -> 'a -> 'b"
     "let revapp x f = f x",                     type_ok "'a -> ('a -> 'b) -> 'b"
     "let poly f = f 1, f true",                 wrong_type
     "let rec map f = function
             | [] -> []
             | x :: xs -> f x :: map2 f xs
-        and map2 = id map
-        and id x = x
-        in
-            id",                                type_ok_ "(('a -> 'b) -> list 'a -> list 'b) -> ('a -> 'b) -> list 'a -> list 'b" [flag.RemoveBindings]
+     and map2 = id map
+     and id x = x
+     in
+         id",                                   type_ok "(('a -> 'b) -> list 'a -> list 'b) -> ('a -> 'b) -> list 'a -> list 'b"
     "map2",                                     unbound_error        
+    "let id x = x",                             type_ok "forall 'a. 'a -> 'a"
     ]
 
 

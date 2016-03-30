@@ -484,8 +484,13 @@ let pretty_kinded_wrapper R' t =
 
 let pretty_forall pretty_item forall (qs, t) =
     use A = var.add_quantifieds (Seq.map fst qs)
-    let t = sprintf "%O" t
-    let ts = qs (*|> Seq.sortBy (fst >> sprintf "%O")*) |> mappen_strings pretty_item Config.Printing.forall_prefix_sep
+    let t = sprintf "%O" t  // pretty the body first, so var names will appear normalized in order from left to right; then prefix is sorted
+    let ts =
+        qs
+        #if !DEBUG_VAR_NAMES
+        |> Seq.sortBy (fst >> sprintf "%O")
+        #endif
+        |> mappen_strings pretty_item Config.Printing.forall_prefix_sep
     in
         sprintf "%s %s. %s" forall ts t
 

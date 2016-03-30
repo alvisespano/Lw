@@ -14,6 +14,9 @@ open System
 open System.Reflection
 open Lw
 
+module C = Config
+module CC = Core.Config
+
 let mutable filename = ""
 
 let credits () =
@@ -57,26 +60,30 @@ let private other s =
 
 let private infos =
   [|
-    Entry.bool "unicode" (fun b -> Core.Config.Printing.dynamic.unicode <- b)  "enable/disable Unicode output" (Some Core.Config.Printing.dynamic.unicode)
-    Entry.flag "greek" (fun b -> Core.Config.Printing.dynamic.greek_tyvars <- true)  "enable greek letters for type variables"
+    Entry.bool "unicode" (fun b -> CC.Printing.dynamic.unicode <- b) "enable/disable Unicode output" (Some CC.Printing.dynamic.unicode)
+    Entry.flag "greek" (fun b -> CC.Printing.dynamic.greek_tyvars <- true) "enable greek letters for type variables"
     
-    Entry.flag "interactive" (fun () -> Config.mode <- Config.Mode_Interactive)  "enable interactive mode, possibly after interpretation of a given source file"
-    Entry.flag "unit-test" (fun () -> Config.mode <- Config.Mode_UnitTest)  "switch to unit-test mode, ignoring input files and performing all tests"
+    Entry.flag "interactive" (fun () -> C.mode <- C.Mode_Interactive) "enable interactive mode, possibly after interpretation of a given source file"
+    Entry.flag "unit-test" (fun () -> C.mode <- C.Mode_UnitTest) "switch to unit-test mode, ignoring input files and performing all tests"
 
-    Entry.flag "pedantic" (fun () -> Config.Log.cfg.all_thresholds <- Min)  "set all log thresholds to level Min"
-    Entry.flag "v" (fun () -> Config.Log.cfg.all_thresholds <- Low) "set all log thresholds to level Low"
-    Entry.flag "quiet" (fun () -> Config.Log.cfg.all_thresholds <- High) "set all log thresholds to level High"
-    Entry.flag "silent" (fun () -> Config.Log.cfg.all_thresholds <- Unmaskerable) "set all log thresholds to level Unmaskerable"
+    Entry.flag "pedantic" (fun () -> C.Log.cfg.all_thresholds <- Min) "set all log thresholds to level Min"
+    Entry.synonyms_no_def [|"verbose"; "v"|] Entry.flag (fun () -> C.Log.cfg.all_thresholds <- Low) "set all log thresholds to level Low"
+    Entry.synonyms_no_def [|"quiet"; "q"|] Entry.flag (fun () -> C.Log.cfg.all_thresholds <- High) "set all log thresholds to level High"
+    Entry.flag "silent" (fun () -> C.Log.cfg.all_thresholds <- Unmaskerable) "set all log thresholds to level Unmaskerable"
     
-    Entry.string "log-file" (fun s -> Core.Config.Log.cfg.filename <- Some s) "set log filename" Core.Config.Log.cfg.filename
+    Entry.string "log-file" (fun s -> CC.Log.cfg.filename <- Some s) "set log filename" CC.Log.cfg.filename
     
-    Entry.string "debug-threshold" (fun s -> Core.Config.Log.cfg.debug_threshold <- pri.Parse s) "set debug verbosity threshold" (Some Core.Config.Log.cfg.debug_threshold)
-    Entry.string "msg-threshold" (fun s -> Core.Config.Log.cfg.msg_threshold <- pri.Parse s) "set informational messages verbosity threshold" (Some Core.Config.Log.cfg.msg_threshold)
-    Entry.string "hint-threshold" (fun s -> Core.Config.Log.cfg.hint_threshold <- pri.Parse s) "set hint messages verbosity threshold" (Some Core.Config.Log.cfg.hint_threshold)
-    Entry.string "warn-threshold" (fun s -> Core.Config.Log.cfg.warn_threshold <- pri.Parse s) "set warnings verbosity threshold" (Some Core.Config.Log.cfg.warn_threshold)
+    Entry.string "debug-threshold" (fun s -> CC.Log.cfg.debug_threshold <- pri.Parse s) "set debug verbosity threshold" (Some CC.Log.cfg.debug_threshold)
+    Entry.string "msg-threshold" (fun s -> CC.Log.cfg.msg_threshold <- pri.Parse s) "set informational messages verbosity threshold" (Some CC.Log.cfg.msg_threshold)
+    Entry.string "hint-threshold" (fun s -> CC.Log.cfg.hint_threshold <- pri.Parse s) "set hint messages verbosity threshold" (Some CC.Log.cfg.hint_threshold)
+    Entry.string "warn-threshold" (fun s -> CC.Log.cfg.warn_threshold <- pri.Parse s) "set warnings verbosity threshold" (Some CC.Log.cfg.warn_threshold)
     
-    Entry.int "-W" (fun n -> Core.Config.Report.disabled_warnings <- Set.add n Core.Config.Report.disabled_warnings) "suppress specific warning" None
-    Entry.int "-H" (fun n -> Core.Config.Report.disabled_hints <- Set.remove n Core.Config.Report.disabled_hints) "suppress specific hint" None
+    Entry.int "-W" CC.Report.disable_warning "suppress specific warning" None
+    Entry.int "-H" CC.Report.disable_hint "suppress specific hint" None
+    Entry.int "+W" CC.Report.enable_warning "enable specific warning" None
+    Entry.int "+H" CC.Report.enable_hint "enable specific hint" None
+    Entry.int "Wall" (fun n -> CC.Report.disabled_warnings <- Set.empty) "activate all warnings" None
+    Entry.int "Hall" (fun n -> CC.Report.disabled_hints <- Set.empty) "activate all hints" None
   |] |> Array.concat
 
 let parse () = ArgParser.Parse (infos, other, usage ())

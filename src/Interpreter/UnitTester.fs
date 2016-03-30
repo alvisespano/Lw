@@ -122,6 +122,9 @@ with
         | Decl d -> sprintf "<DECL> %s" (p d)
         
 
+let error_name_of_type (T : Type) : string = T.GetProperty("error_name").GetGetMethod().Invoke(T, [||]) |> unbox
+//let inline error_name_of_exn (_ : ^e) = (^e : (static member error_name : string) ())
+let error_name_of_exn (e : static_error) = error_name_of_type (e.GetType ())
 
 // PPrint extensions
 //
@@ -151,7 +154,7 @@ let static_error_infos (input : string) (e : static_error) =
         in
             input.Substring (x, y - x)
     in
-      [ "raised", txt (e.header.ToUpper ())
+      [ "raised", txt (error_name_of_exn e)
         "code", fmt "%d" e.code
         "at", fmt "%O" e.location
         "term", txt term
@@ -211,8 +214,6 @@ type section_data = {
     num : int
     flags : flag list
 }
-//with
-//    member this.is_enabled flag = List.contains flag this.flags
 
 type entry_data = {
     input : string
@@ -310,28 +311,30 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
                     | false, true, false -> test_failed "type is ok but kind is not" (infs1 @ infs2)
                     | _                  -> test_failed "types expected to be equal" (infs1 @ infs2)
             with :? static_error as e ->
-                test_failed "unwanted static error" <| infs0 @ static_error_infos s1 e @ expected_infos ϕok
+                test_failed (sprintf "unwanted %s" (error_name_of_exn e)) <| infs0 @ static_error_infos s1 e @ expected_infos ϕok
                     
     | result.StaticError (T, codeo) ->
         assert (let t = typeof<static_error> in t = T || T.IsSubclassOf t)
         try
             let _, infs1 = typecheck_expr_or_decl tchk sd ed
+            let errname = error_name_of_type T
             in
                 test_failed
-                    (something (sprintf "expected static error %d") "expected a static error" codeo)
-                    (infs0 @ infs1 (false, false, false) @ [something (sprintf "static error %d expected") "any static error expected" codeo, txt T.Name])
+                    (something (sprintf "expected %s code %d" errname) (sprintf "expected some %s" errname) codeo)
+                    (infs0 @ infs1 (false, false, false))
         with :? static_error as e ->
             let tb = let t = e.GetType() in t = T || t.IsSubclassOf T
+            let errname = error_name_of_exn e
             let cb = match codeo with
                      | None   -> true
                      | Some n -> n = e.code
             in
                 (match tb, cb with
                 | true, true   -> test_ok "justly rejected"
-                | true, false  -> test_weak_ok "static error type is right but error code is wrong"
-                | false, true  -> test_weak_ok "error code is right but static error type is wrong"
-                | false, false -> test_failed "wrong static error type and code")
-                    <| infs0 @ static_error_infos s1 e
+                | true, false  -> test_weak_ok (sprintf "%s is right but error code %d is wrong" errname e.code)
+                | false, true  -> test_weak_ok (sprintf "error code %d is right but %s is wrong" e.code errname)
+                | false, false -> test_failed (sprintf "wrong %s and code %d" errname e.code)
+                ) <| infs0 @ static_error_infos s1 e
 
 
 let score_infos scores =

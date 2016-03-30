@@ -1,4 +1,11 @@
 ﻿
+30/3/2016:
+* UP: disabled warnings and hints a little revamped: command line arguments have been introduced for both disabling and enabling either of the two by number;
+      moreover, -Wall and -Hall options have been implemented
+* UP: static_error exception and derived now have a static string property telling the name of the error (header now stubs this)
+* BUG: discovered a small bug in normalization
+
+
 29/3/2016:
 * REFACT: UnitTest solution configuration is no more: now unit testing is triggered via command line argument "--unit-test"
 * REFACT: logger class does not support profile channel anymore, and now has a custom_debug method logging in blue and with its own threshold; header must always be specified though

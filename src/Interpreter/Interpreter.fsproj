@@ -57,7 +57,7 @@
     <PlatformTarget>AnyCPU</PlatformTarget>
     <DocumentationFile />
     <Prefer32Bit>false</Prefer32Bit>
-    <StartArguments>--unit-test</StartArguments>
+    <StartArguments>--unit-test -v</StartArguments>
     <OutputPath>bin\UnitTest Debug\</OutputPath>
     <StartWorkingDirectory>..\..</StartWorkingDirectory>
   </PropertyGroup>

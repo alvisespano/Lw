@@ -139,10 +139,12 @@ type var with
                         R ()
 
                 | Va (_, Some s) ->
-                    let rec R s suffix =
-                        if name_exists s then R (sprintf Config.Printing.already_existing_named_var_fmt s suffix) (suffix + 1) else s
+                    let rec R (root, n) =
+                        let s = sprintf "%s%d" root n   // UNDONE
+                        in
+                            if name_exists s then R (root, n + 1) else s
                     in
-                        R s 0
+                        R (s, 0)
         ctx.env <- env.bind this.uid name
         this.pretty_with_quantification name
 
