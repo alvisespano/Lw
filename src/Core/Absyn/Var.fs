@@ -37,6 +37,8 @@ module var =
     type normalization_context () =
         member val cnt = 0 with get, set
         member val env = Env.empty with get, set
+        override this.ToString () = this.pretty
+        member this.pretty = sprintf "{ cnt = %d; env = { %O } }" this.cnt this.env
 
     let ctx_stack = new Stack<normalization_context> ()
     let forall : Set<var> ref = ref Set.empty
@@ -48,7 +50,7 @@ type var with
       #endif
         Va (fresh_int (), None)
       #if DEBUG_FRESH_VARS
-      L.hint Low "new fresh var: %O" r
+      L.debug Normal "new fresh var: %O" r
       r
       #endif
 
@@ -58,7 +60,7 @@ type var with
       #endif
         Va (fresh_int (), Some s)
       #if DEBUG_FRESH_VARS
-      L.hint Low "new fresh named var: %O" r
+      L.debug Normal "new fresh named var: %O" r
       r
       #endif
 
@@ -76,11 +78,11 @@ type var with
         in
             div n
 
-    static member get_normalization_context = new var.normalization_context ()
+    static member empty_normalization_context = new var.normalization_context ()
 
     static member reset_normalization =
         #if !DISABLE_VAR_NORM
-        var.ctx_stack.Push (var.get_normalization_context)
+        var.ctx_stack.Push (var.empty_normalization_context)
         #endif
         { new IDisposable with
             member __.Dispose () =
@@ -120,10 +122,10 @@ type var with
 
     member this.pretty_normalized ctx =
         let env = ctx.env
-        let name =
-            match env.search this.uid with
-            | Some s -> s
-            | None ->
+        match env.search this.uid with
+        | Some s -> s
+        | None ->
+            let name =
                 let name_exists s = env.exists (fun _ s' -> s' = s)
                 let next_fresh_name () =
                     let r = var.letterize ctx.cnt
@@ -138,15 +140,14 @@ type var with
                     in
                         R ()
 
-                | Va (_, Some s) ->
-                    let rec R (root, n) =
-                        let s = sprintf "%s%d" root n   // UNDONE
-                        in
-                            if name_exists s then R (root, n + 1) else s
+                | Va (_, Some root) ->
+                    let rec R n s =
+                        if name_exists s then R (n + 1) (sprintf Config.Printing.already_existing_named_var_fmt root n) else s
                     in
-                        R (s, 0)
-        ctx.env <- env.bind this.uid name
-        this.pretty_with_quantification name
+                        R 0 root
+            ctx.env <- env.bind this.uid name
+            name
+        |> this.pretty_with_quantification
 
     member this.pretty_with_quantification name =
         #if DEBUG_VAR_NAMES
@@ -160,4 +161,4 @@ type var with
         #endif
         |> sprintf (if not this.is_quantification_enabled || Set.exists (fun (α : var) -> α.uid = this.uid) !var.forall then Config.Printing.dynamic.tyvar_quantified_fmt
                     else Config.Printing.dynamic.tyvar_unquantified_fmt)
-
+            

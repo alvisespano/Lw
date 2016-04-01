@@ -15,7 +15,7 @@ open Lw.Core.Absyn.Misc
 open Lw.Core.Absyn.Var
 open Lw.Core.Absyn.Kind
 open Lw.Core.Absyn.Sugar
-open Lw.Core.Absyn.Ast
+open Lw.Core.Typing.Equivalence
 open Lw.Core.Typing.Defs
 open Lw.Core.Globals
 open Printf
@@ -65,16 +65,42 @@ let private Es n loc fmt = E (fun (a, b, c) -> new static_error (a, b, c)) n loc
 let private Et n loc fmt = E (fun args -> new type_error (args)) n loc fmt
 let private Ek n loc fmt = E (fun args -> new kind_error (args)) n loc fmt
    
-let private mismatch E (n : int) (loc : location) what1 what2 expected1 got1 expected2 got2 =
-    let expected1 = sprintf "%O" expected1
-    let expected2 = sprintf "%O" expected2
-    let got1 = sprintf "%O" got1
-    let got2 = sprintf "%O" got2
+let private mismatch E (n : int) (loc : location) is_equivalent what1 what2 expected1 got1 expected2 got2 =
     use N = var.reset_normalization
-    let s = sprintf "%s was expected to have %s %s but got %s %s" what1 what2 expected1 what2 got1
-    let s = s + if expected1 <> expected2 && got1 <> got2 then sprintf ", because %s %s is not compatible with %s" what2 expected2 got2 else ""
+    let s =
+        sprintf "%s was expected to have %s %O but got %s %O" what1 what2 expected1 what2 got1
+        + (if not (is_equivalent expected1 expected2) && not (is_equivalent got1 got2) then
+            sprintf ", because %s %O is not compatible with %O" what2 expected2 got2
+           else "")
     in
         E n loc ("%s" : StringFormat<_, _>) s
+
+//let private mismatch1 E (n : int) (loc : location) what1 what2 expected1 got1 expected2 got2 =
+//    use N = var.reset_normalization
+//    let expected1 = sprintf "%O" expected1
+//    let expected2 = sprintf "%O" expected2
+//    let got1 = sprintf "%O" got1
+//    let got2 = sprintf "%O" got2
+//    let s = sprintf "%s was expected to have %s %s but got %s %s" what1 what2 expected1 what2 got1
+//    let s = s + if expected1 <> expected2 && got1 <> got2 then sprintf ", because %s %s is not compatible with %s" what2 expected2 got2 else ""
+//    in
+//        E n loc ("%s" : StringFormat<_, _>) s
+//
+//let inline private mismatch2 E (n : int) (loc : location) what1 what2 (expected1 : ^t) (got1 : ^t) (expected2 : ^t) (got2 : ^t) =
+//    use N = var.reset_normalization
+//    let s =
+//        sprintf "%s was expected to have %s %O but got %s %O" what1 what2 expected1 what2 got1
+//        + (if (^t : (member is_equivalent : ^t -> bool) expected1, expected2) && (^t : (member is_equivalent : ^t -> bool) got1, got2) then
+//            sprintf ", because %s %O is not compatible with %O" what2 expected2 got2
+//           else "")
+//    in
+//        E n loc ("%s" : StringFormat<_, _>) s
+//
+//let inline private mismatch3 E E' (n : int) (loc : location) what1 what2 (expected1 : ^t) (got1 : ^t) (expected2 : ^t) (got2 : ^t) =
+//    if (^t : (member is_equivalent : _) expected1) expected2 && (^t : (member is_equivalent : _) got1) got2 then
+//        E n loc "%s was expected to have %s %O but got %s %s" what1 what2 expected1 what2 got1
+//    else
+//        E' n loc "%s was expected to have %s %O but got %s %s, because %s %s is not compatible with %s" what1 what2 expected1 what2 got1 what2 expected2 got2
 
 let private circularity E n loc what x1 x2 α x =
     use N = var.reset_normalization
@@ -85,6 +111,11 @@ let private circularity E n loc what x1 x2 α x =
 
 [< RequireQualifiedAccess >]
 module Error =            
+    
+    // put here only those codes that need to be caught or detected while typing
+    module Code =
+        let type_mismatch = 200
+
 
     // unbound symbol errors
 
@@ -107,7 +138,7 @@ module Error =
     // type errors
     
     let type_mismatch loc expected1 got1 expected2 got2 =
-        mismatch Et 200 loc "expression" "type" expected1 got1 expected2 got2
+        mismatch Et Code.type_mismatch loc (fun (x : ty) -> x.is_equivalent) "expression" "type" expected1 got1 expected2 got2
 
     let row_tail_circularity loc ρ tθ =
         Et 201 loc "unification fails because row type variable type variable %O occurs in the domain of substituion %O" ρ tθ
@@ -174,7 +205,7 @@ module Error =
     // kind errors
 
     let kind_mismatch loc expected1 got1 expected2 got2 =
-        mismatch Ek 400 loc "type expression" "kind" expected1 got1 expected2 got2
+        mismatch Ek 400 loc (fun (x : kind) -> x.is_equivalent) "type expression" "kind" expected1 got1 expected2 got2
 
     let kind_circularity (loc : location) (k1 : kind) (k2 : kind) kα (k : kind) =
         circularity Ek 401 loc "kind" k1 k2 kα k
@@ -261,3 +292,7 @@ module Hint =
 
     let scoped_tyvar_was_not_generalized loc α =
         H 4 loc Min "scoped type variable %O will not be generalized" α
+
+    let auto_generalization_occurred_in_annotation loc t t' =
+        H 5 loc Low "type annotation %O has been automatically generalized to %O" t t'
+

@@ -21,6 +21,7 @@ open Lw.Core.Typing.Defs
 open Lw.Core.Typing.StateMonad
 open Lw.Core.Typing.Ops
 open Lw.Core.Typing.Subst
+open Lw.Core.Typing.Equivalence
 
 
 // kind unification
@@ -49,15 +50,14 @@ let rec kmgu (ctx : uni_context) k1_ k2_ =
       L.uni Low "[kmgu=] %O == %O\n        %O" k1 k2 θ
       r
       #endif
-    in
-        #if DEBUG_UNI && !DEBUG_UNI_DEEP
-        L.uni Low "[kmgu] %O == %O" k1_ k2_
-        #endif
-        let θ as r = R k1_ k2_
-        #if DEBUG_UNI && !DEBUG_UNI_DEEP
-        L.uni Low "[kmgu=] %O == %O\n        %O" k1_ k2_ θ
-        #endif                    
-        r
+    #if DEBUG_UNI && !DEBUG_UNI_DEEP
+    L.uni Low "[kmgu] %O == %O" k1_ k2_
+    #endif
+    let θ as r = R k1_ k2_
+    #if DEBUG_UNI && !DEBUG_UNI_DEEP
+    L.uni Low "[kmgu=] %O == %O\n        %O" k1_ k2_ θ
+    #endif                    
+    r
 
 type basic_builder with
     member M.kunify loc (k1 : kind) (k2 : kind) =
@@ -88,9 +88,10 @@ module internal Eval =
         M {            
             let rule =
                     match τ0.value with
-                    | Te_Var _  -> "(E-TVAR)"
-                    | Te_App _  -> "(E-TAPP)"
-                    | _         -> "[E-T]   "
+                    | Te_Var _    -> "(E-TVAR)"
+                    | Te_App _    -> "(E-TAPP)"
+                    | Te_Forall _ -> "(E-TFOR)"
+                    | _           -> "[E-T]   "
             let! θ = M.get_θ
             τ0.typed <- subst_kind θ.k τ0.typed // apply latest subst to each typed node
             let! ϕ = ty_expr' ctx τ0
@@ -288,7 +289,7 @@ module internal Eval =
         let k0 = ϕτ0.typed       // this is the kind of the current ty_expr node being evaluated (annotated by previous Wk kind inference algorithm)
         M {
             match ϕτ0.value with
-            | Fxe_Bottom ->
+            | Fxe_Bottom _ ->
                 return Fx_Bottom k0
 
             | Fxe_F_Ty τ ->
@@ -373,7 +374,7 @@ and Wk_ty_expr' (ctx : context) (τ0 : ty_expr) =
 
         | Te_Forall ((x, ko), τ) ->
             let kx = either kind.fresh_var ko
-            return! M.undoable_bind_γα x kx <| M {
+            return! M.undone_bind_γα x kx <| M {
                 yield! R τ
             }
 
@@ -536,8 +537,8 @@ let rec Wk_fxty_expr ctx ϕτ =
     let R = Wk_fxty_expr ctx
     M {
         match ϕτ.value with
-        | Fxe_Bottom ->
-            yield kind.fresh_var
+        | Fxe_Bottom ko ->
+            yield either kind.fresh_var ko
 
         | Fxe_F_Ty τ ->
             yield! Wk_ty_expr ctx τ
@@ -549,9 +550,7 @@ let rec Wk_fxty_expr ctx ϕτ =
             | Some τ1 ->
                 let! k1 = R τ1
                 do! M.kunify τ1.loc k1 kx
-            yield! M.undo_γ << M.undo_scoped_vars <| M {
-                let! _ = M.bind_γ x (KUngeneralized kx)
-                let! _ = M.search_or_add_scoped_var x
+            return! M.undone_bind_γα x kx <| M {
                 yield! R τ2
             }
     }

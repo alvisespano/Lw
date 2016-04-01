@@ -539,7 +539,7 @@ type kind_inference_builder<'e> (τ : node<'e, kind>, ctx) =
         }
 
     // environment γα does not have a full undo but only this one, because scoping of vars is special: vars can be introduced anytime and do not have to be undone
-    member M.undoable_bind_γα x v f =
+    member M.undone_bind_γα x v f =
         M {
             let! _, undo = M.bind_γα x v
             let! r = f

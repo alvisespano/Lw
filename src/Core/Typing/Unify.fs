@@ -31,7 +31,9 @@ open System.Diagnostics
 
 let rec rewrite_row loc t1 t2 r0 l =
     let R = rewrite_row loc t1 t2
-    L.uni Normal "[I] %O ~= %s" r0 l
+    #if DEBUG_UNI
+    L.uni Low "[I] %O ~= %s" r0 l
+    #endif
     match r0 with
     | T_Row_Ext (l', t', r) ->
         if l' = l then t', r, tsubst.empty
@@ -65,13 +67,16 @@ module internal Mgu =
         type var with
             member α.skolemized = sprintf Config.Printing.skolemized_tyvar_fmt α.pretty
 
-        let skolemize_ty αks t =
-            let sks = [ for α : var, k in αks do yield α, α.skolemized, k ]
-            let θ = !> (new tsubst (Env.t.ofSeq <| List.map (fun (α, x, k) -> α, T_Cons (x, k)) sks))
-            in
-                Computation.B.set { for _, x, _ in sks do yield x }, S θ t
-
         type ty with
+            static member fresh_skolem k = let x = var.fresh.skolemized in T_Cons (x, k), x
+
+            member t.skolemize_unquantified αks =
+                assert t.is_unquantified
+                let sks = [ for α : var, k in αks do yield α, α.skolemized, k ]
+                let θ = !> (new tsubst (Env.t.ofSeq <| List.map (fun (α, x, k) -> α, T_Cons (x, k)) sks))
+                in
+                    Computation.B.set { for _, x, _ in sks do yield x }, S θ t
+
             member this.cons =
                 let rec R t =
                   Computation.B.set {
@@ -135,7 +140,7 @@ module internal Mgu =
 
             | T_ForallsK0 (αks, t1), FxU0_ForallsQ (Mapped fxty.instantiate_unquantified (Q', t2)) ->
                 assert Q0.is_disjoint Q'
-                let skcs, t1' = skolemize_ty αks t1
+                let skcs, t1' = t1.skolemize_unquantified αks
                 let Q1, θ1 = mgu ctx (Q0 + Q') t1' t2
                 let Q2, Q3 = Q1.split Q0.dom
                 #if DISABLE_HML_FIXES
@@ -207,10 +212,12 @@ module internal Mgu =
                         Q3, θ3 ** θ2 ** θ1
 
                 | T_ForallK ((α, k1), t1), T_ForallK ((β, k2), t2) ->
-                    let skcs1, t1 = skolemize_ty [α, k1] t1
-                    let skcs2, t2 = skolemize_ty [β, k2] t2
-                    let Q1, θ1 = R Q0 t1 t2
-                    check_skolems_escape ctx (skcs1 + skcs2) (Q1, θ1)
+                    let θ0 = kmgu ctx k1 k2
+                    let tc, c = ty.fresh_skolem k1
+                    let θ1 = !> (new tsubst (α, tc)) ** θ0
+                    let θ2 = !> (new tsubst (β, tc)) ** θ0
+                    let Q1, θ1 = R Q0 (S θ1 t1) (S θ2 t2)
+                    check_skolems_escape ctx [c] (Q1, θ1)
                     Q1, θ1
 
                 | T_Var (α1, k1), T_NamedVar (α2, k2) // prefer propagating named over anonymous vars in substitutions
@@ -252,16 +259,15 @@ module internal Mgu =
               L.uni Low "[mgu=] %O == %O\n       %O\n       Q' = %O" t1 t2 θ Q
               r
               #endif
-            in
-                #if DEBUG_UNI && !DEBUG_UNI_DEEP
-                L.uni Low "[mgu] %O == %O\n      Q = %O" t1_ t2_ Q0
-                #endif
-                let Q, θ as r = R Q0 t1_ t2_
-                assert (Set.intersect Q.dom θ.dom).IsEmpty;
-                #if DEBUG_UNI && !DEBUG_UNI_DEEP
-                L.uni Low "[mgu=] %O == %O\n       %O\n       Q' = %O" t1_ t2_ θ Q
-                #endif                    
-                r
+            #if DEBUG_UNI && !DEBUG_UNI_DEEP
+            L.uni Low "[mgu] %O == %O\n      Q = %O" t1_ t2_ Q0
+            #endif
+            let Q, θ as r = R Q0 t1_ t2_
+            assert (Set.intersect Q.dom θ.dom).IsEmpty;
+            #if DEBUG_UNI && !DEBUG_UNI_DEEP
+            L.uni Low "[mgu=] %O == %O\n       %O\n       Q' = %O" t1_ t2_ θ Q
+            #endif                    
+            r
 
        
 let mgu = Mgu.Pure.mgu

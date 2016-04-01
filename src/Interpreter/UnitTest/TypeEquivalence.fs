@@ -34,6 +34,8 @@ let type_equivalence : section =
     "forall 'a 'b. 'a -> 'b",                   type_neq "forall 'a. 'a -> int"
     "forall 'a 'b. 'a -> 'b",                   type_neq "forall 'a 'b. 'a -> 'c"
 
+    "forall 'a ('b :> _|_). 'a -> 'b",           type_eq "forall 'a. forall 'b. 'a -> 'b"
+
     "forall ('a :> forall 'b. 'b -> 'b). list 'a",                      type_eq "forall ('f :> forall 'f. 'f -> 'f). list 'f"
     "forall ('a :> forall 'b. 'b -> 'b). list 'a",                      type_eq "forall ('a :> forall 'b. 'b -> 'b). list 'a"
     "forall ('a :> forall 'b. 'b -> 'b) 'c. list ('a * 'c)",            type_eq "forall 'c ('a :> forall 'b. 'b -> 'b). list ('a * 'c)"

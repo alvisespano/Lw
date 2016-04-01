@@ -113,21 +113,48 @@ let gen_bind ctx prefixes ({ id = x; qual = dq; expr = e0; to_bind = ϕ } as gb)
     }
 
 
-// use for unifying annotation on bindings
-let W_binding_annot ctx loc (ϕx : fxty) (ϕe : fxty) =
+// deal with annotations
+//
+
+let W_fxty_annot ctx loc (ϕann : fxty) (ϕinf : fxty) =
     let M = new type_inference_builder (loc, ctx)
     M {
         let! ϕ = M {
-            match ϕx.maybe_ftype with
-            | Some tx ->
-                let te = ϕe.ftype
-                do! M.unify loc tx te
-                yield te                      // return an F-type when the annotation is an F-type
+            match ϕann.maybe_ftype with
+            | Some tann ->
+                let tinf = ϕinf.ftype
+                do! M.unify loc tann tinf
+                yield tinf                          // return the inferred F-type when the annotation is an F-type
             | None ->
-                yield! M.unify_fx loc ϕx ϕe   // return the flex unification result when annotation is a flex type instead
+                yield! M.unify_fx loc ϕann ϕinf     // return the flex unification result when annotation is a flex type instead
         }
         return ϕ
     }
+
+let W_fxty_expr_annot ctx (τ : fxty_expr) (ϕinf : fxty) =
+    let loc = τ.loc
+    let M = new type_inference_builder (loc, ctx)
+    M {
+        let! ϕann, k = Wk_and_eval_fxty_expr ctx τ
+        do! M.kunify loc K_Star k
+        return! W_fxty_annot ctx τ.loc ϕann ϕinf
+    }
+
+let W_fxty_expr_annot_in_binding ctx (τ : fxty_expr) (ϕinf : fxty) =
+    let loc = τ.loc
+    let M = new type_inference_builder (loc, ctx)
+    M {
+        let! ϕann, k = Wk_and_eval_fxty_expr ctx τ
+        do! M.kunify loc K_Star k
+        match ϕann.maybe_ftype with
+        | Some tann ->
+            let! tann' = M.auto_geneneralize tann
+            Report.Hint.auto_generalization_occurred_in_annotation loc tann tann'
+            return! W_fxty_annot ctx loc (Fx_F_Ty tann') ϕinf
+        | None ->
+            return! W_fxty_annot ctx loc ϕann ϕinf
+    }
+
 
 let check_rec_value_restriction ctx loc (t : ty) =
     let M = new type_inference_builder (loc, ctx)
@@ -411,10 +438,12 @@ and W_expr' ctx (e0 : expr) =
             yield ϕr
         
         | Annot (e, τ) ->
-            let x = fresh_reserved_id ()
-            let! ϕ = W_desugared_expr (Lo <| App (Lo <| Lambda ((x, Some τ), Lo <| Var x), e))  // TODO: or maybe just use unification of flex types?
-            M.already_translated <- e.translated
-            yield ϕ
+            let! ϕe = W_expr ctx e
+            yield! W_fxty_expr_annot ctx τ ϕe
+//            let x = fresh_reserved_id ()
+//            let! ϕ = W_desugared_expr (Lo <| App (Lo <| Lambda ((x, Some τ), Lo <| Var x), e))  // TODO: or maybe just use unification of flex types?
+//            M.already_translated <- e.translated
+//            yield ϕ
 
         | Combine es ->
             assert (es.Length > 1)
@@ -561,9 +590,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                                     return [{ expr = b.expr; qual = b.qual; id = x; constraints = cs; to_bind = ϕe; inferred = ϕe }]     // by default bind the inferred type as a flex type
 
                                 | B_Annot (x, τ) ->
-                                    let! tx, k = Wk_and_eval_ty_expr ctx τ
-                                    do! M.kunify τ.loc K_Star k
-                                    let! ϕe' = W_binding_annot ctx τ.loc (Fx_F_Ty tx) ϕe    // HACK: temporarily promote the F-type annotation to a fake flex type
+                                    let! ϕe' = W_fxty_expr_annot_in_binding ctx τ ϕe
                                     do! resolve_constraints ctx e
                                     let! cs = M.get_constraints
                                     return [{ expr = b.expr; qual = b.qual; id = x; constraints = cs; to_bind = ϕe'; inferred = ϕe }]
@@ -603,7 +630,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                                 let! _ = M.bind_ungeneralized_var_Γ x tx
                                 return b, tx
                             }) bs
-                    // infer each rec binding and behave like the (LAMBDA) rule
+                    // infer each rec binding and behave as if they were (LAMBDA) parameters
                     for { expr = e; par = x, τo }, tx in l do                        
                         let! ϕe = W_expr ctx e
                         let β, tβ = ty.fresh_star_var_and_ty
@@ -662,7 +689,7 @@ and W_decl' (ctx : context) (d0 : decl) =
             for { id = x; signature = τx } in bs do
                 // the whole inferred kind must be star
                 let! tx, kx = Wk_and_eval_ty_expr ctx τx      // TODO: support flex types for data constructors
-                let! (T_Foralls0 _ as tx) = M.auto_geneneralize tx
+                let! tx = M.auto_geneneralize tx
                 do! M.kunify τx.loc K_Star kx                              
                 // each data constructor's return type must be equal to the type constructor being defined; arguments are not checked to be variables, so it means GADTs can be defined
                 let txcod = tx.return_ty
@@ -722,12 +749,9 @@ and W_patt' ctx (p0 : patt) : M<fxty> =
         | P_Wildcard ->
             yield! W_patt ctx (Lo0 <| P_Var (fresh_reserved_id ()))
 
-        // HACK: this does not use the Lambda-App trick used in Annot rule in W_expr 
         | P_Annot (p, τ) ->
-            let! t, k = Wk_and_eval_ty_expr ctx τ
-            do! M.kunify τ.loc K_Star k
             let! ϕp = W_patt ctx p
-            yield! W_binding_annot ctx τ.loc (Fx_F_Ty t) ϕp
+            yield! W_fxty_expr_annot ctx τ ϕp
 
         | P_Lit lit ->
             yield W_lit lit

@@ -29,7 +29,7 @@ let parse_error_rich = Some (fun ctx -> raise (ParseErrorContextException ctx))
 %token EOF
 
 %right SEMICOLON
-%right THEN ELSE
+%nonassoc THEN ELSE
 %left ASSIGN
 %left AS 
 %left COMMA
@@ -48,6 +48,7 @@ let parse_error_rich = Some (fun ctx -> raise (ParseErrorContextException ctx))
 %nonassoc NOT
 %nonassoc UMINUS
 %nonassoc BANG
+%nonassoc FXFORALL
 
 %type < Lw.Core.Absyn.Ast.ty_patt > ty_patt
 %type < Lw.Core.Absyn.Ast.ty_expr > ty_expr
@@ -74,18 +75,8 @@ interactive_line:
     expr SEMICOLON2 				    { Line_Expr $1 }
   |	top_decl SEMICOLON2  	            { Line_Decl $1 }
 
-/*program__:
-  | namespacee
-    top_decls SEMICOLON2
-    expr EOF                            { { namespacee = Some $1; decls = $2; main = $4 } }
-  | namespacee SEMICOLON2
-    expr EOF                            { { namespacee = Some $1; decls = []; main = $3 } }
-  | top_decls SEMICOLON2                { { namespacee = None; decls = $1; main = Lit Unit } }
-  | top_decls EOF                       { { namespacee = None; decls = $1; main = Lit Unit } }
-  | top_decls SEMICOLON2 expr EOF       { { namespacee = None; decls = $1; main = Lit Unit } }*/
-
 program:
-    program_1                           { let nso, (ds, eo) = $1 in { namespacee = nso; decls = ds; main = eo } }
+    program_1 EOF                       { let nso, (ds, eo) = $1 in { namespacee = nso; decls = ds; main = eo } }
 
 program_1:
     namespacee program_2                { Some $1, $2 }
@@ -153,6 +144,7 @@ let_or_letrec_decl_:
   | let_and_bindings                            { D_Bind (List.map (fun ((q, f), (p, e)) -> { qual = q; patt = p; expr = f e }) $1) }
   | REC letrec_and_bindings                     { D_Rec (List.map (fun ((q, f), (p, e)) -> { qual = q; par = p; expr = f e }) $2) }
 
+
 /* multiple and-bindings */
 
 let_and_bindings:
@@ -194,11 +186,11 @@ let_binding:
   | patt_app_atom fun_patt_params EQ expr       { $1, LambdaFun ($2, $4) }
 
 letrec_binding:
-  | typed_param EQ expr					        { $1, $3 }
-  | typed_param fun_patt_params EQ expr         { $1, LambdaFun ($2, $4) }
+  | ty_param EQ expr					        { $1, $3 }
+  | ty_param fun_patt_params EQ expr            { $1, LambdaFun ($2, $4) }
 
 over_binding:
-    LID COLON ty_expr_annotation                { { id = $1; signature = $3 } }
+    LID COLON ty_annotation                     { { id = $1; signature = $3 } }
 
 ty_expr_binding:
   | ty_patt EQ ty_expr                              { { qual = ty_decl_qual.none; patt = $1; expr = $3 } }
@@ -239,7 +231,7 @@ fun_param_cases_:
     fun_param_case                                  { [$1] }
   | fun_param_case PIPE fun_param_cases_            { $1 :: $3 }
 
-/* in type language */
+/* type-function parameters */
 
 ty_fun_patt_params:
     ty_patt_app_atom                                { [$1] }
@@ -266,9 +258,9 @@ id:
     UID                                 { $1 } 
   | LID                                 { $1 }
 
-typed_param:
+ty_param:
     LID                                 { ($1, None) }  
-  | LID COLON ty_expr_annotation        { ($1, Some $3) }
+  | LID COLON ty_annotation             { ($1, Some $3) }
 
 kinded_param:
     id                                 { ($1, None) }
@@ -317,16 +309,15 @@ kind_args:
  */
 
  fxty_forall_param:
-  | TICK_ID                                             { ($1, None), None }        /* TODOH: this rule and the other one without bound produce reduce/reduce conflics: need fix */
-  | BRA TICK_ID COLON2 kind_annotation KET              { ($2, Some $4), None }
-  | BRA TICK_ID COLONGT fxty_expr KET                   { ($2, None), Some $4 }
-  | BRA TICK_ID COLON2 kind_annotation GEQ fxty_expr KET { ($2, Some $4), Some $6 }
+  | ty_forall_param                                         { $1, None }
+  | BRA TICK_ID COLONGT fxty_expr KET                       { ($2, None), Some $4 }
+  | BRA TICK_ID COLON2 kind_annotation GEQ fxty_expr KET    { ($2, Some $4), Some $6 }
 
 fxty_forall_params:
     fxty_forall_param                                   { [$1] }
   | fxty_forall_param fxty_forall_params                { $1 :: $2 }
 
-ty_forall_param:
+ty_forall_param: 
   | TICK_ID                                             { $1, None }
   | BRA TICK_ID COLON2 kind_annotation KET              { $2, Some $4 }
   
@@ -338,18 +329,21 @@ fxty_expr:
     fxty_expr_                                          { pos parseState 1 $1 }
 
 fxty_expr_:
-  | FORALL fxty_forall_params DOT fxty_expr             { (Fxe_Foralls ($2, $4)).value }
-  | BOTTOM                                              { Fxe_Bottom }
-  | ty_expr                                             { Fxe_F_Ty $1 }
+  | FORALL fxty_forall_params DOT fxty_expr                 { (Fxe_Foralls ($2, $4)).value }
+  | BOTTOM                                                  { Fxe_Bottom None }
+  | BOTTOM COLON2 kind_annotation                           { Fxe_Bottom (Some $3) }
+  | ty_expr_unquantified                                    { Fxe_F_Ty $1 }
 
 
 /*
  * F-type expressions
  */
 
-// TODO: how can this not produce reduce/reduce conflict? annotation should be arrow atom or something
-ty_expr_annotation:
+ty_annotation:
     ty_expr                                 { $1 }
+
+fxty_annotation:
+    fxty_expr                               { $1 }
 
 ty_expr: 
     ty_expr_                                { pos parseState 1 $1 }
@@ -363,9 +357,15 @@ ty_expr_htuple_atom:
 ty_expr_app_atom:
     ty_expr_app_atom_                       { pos parseState 1 $1 }
 
+ty_expr_unquantified:
+    ty_expr_unquantified_                   { pos parseState 1 $1 }
+
 ty_expr_:
-  | FUN ty_fun_param_cases                          { (Te_LambdaCases $2).value }
   | FORALL ty_forall_params DOT ty_expr             { (Te_Foralls ($2, $4)).value }
+  | ty_expr_unquantified_                           { $1 }
+
+ty_expr_unquantified_:
+  | FUN ty_fun_param_cases                          { (Te_LambdaCases $2).value }
   | FUNCTION ty_cases                               { (Te_LambdaFunction $2).value }
   | MATCH ty_expr WITH ty_cases			            { Te_Match ($2, $4) }
   | LET let_ty_decls IN ty_expr                     { (Te_Lets ($2, $4)).value }
@@ -400,8 +400,8 @@ ty_expr_app_atom_:
   | BRA symbol KET                                  { Te_Cons $2 }
 
 ty_expr_record:
-    id COLON ty_expr_annotation                     { [$1, $3] }
-  | id COLON ty_expr_annotation
+    id COLON ty_annotation                     { [$1, $3] }
+  | id COLON ty_annotation
     SEMICOLON ty_expr_record                        { ($1, $3) :: $5 }
 
 let_ty_decls:
@@ -512,7 +512,7 @@ expr_tuple_atom:
 expr_:
   | FUN fun_param_cases        			        { (LambdaCases $2).value }
   | FUNCTION cases						        { (LambdaFunction $2).value }
-  | FUN REC typed_param fun_param_cases         { (RecLambda ($3, $4)).value }
+  | FUN REC ty_param fun_param_cases         { (RecLambda ($3, $4)).value }
   | expr_stmt_atom                              { $1.value }
   | DO CURBRA expr_stmts CURKET                 { Combine $3 }
 
@@ -540,7 +540,7 @@ expr_tuple:
 expr_tuple_atom_:
     expr_app_atom                                           { $1.value }
   | expr_tuple_atom expr_app_atom %prec APP                 { App ($1, $2) }
-  | expr_tuple_atom COLON ty_expr_annotation                { Annot ($1, $3) }
+  | expr_tuple_atom COLON fxty_annotation                   { Annot ($1, $3) }
   | expr_tuple_atom BACKSLASH id                            { Restrict ($1, $3) }  
   | INJECT expr_tuple_atom                                  { Inject $2 }
   | expr_tuple_atom EJECT                                   { Eject $1 }
@@ -683,7 +683,7 @@ patt_tuple_atom_:
   | patt_app_atom                               { $1.value }
   | patt_app_atom AS LID			            { P_As ($1, $3) }
   | patt_tuple_atom patt_app_atom %prec APP     { P_App ($1, $2) }
-  | patt_tuple_atom COLON ty_expr_annotation    { P_Annot ($1, $3) }
+  | patt_tuple_atom COLON fxty_annotation       { P_Annot ($1, $3) }
 
 patt_tuple:
   | patt_tuple_atom                     { [$1] }

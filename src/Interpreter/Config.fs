@@ -73,7 +73,7 @@ module Log =
 
         let set_thresholds_for_unit_test () =
             #if DEBUG
-            cfg.debug_threshold <- High
+            cfg.debug_threshold <- Normal
             cfg.msg_threshold <- Normal
             cfg.warn_threshold <- Min
             cfg.hint_threshold <- Min
@@ -81,7 +81,7 @@ module Log =
             cfg.debug_threshold <- Unmaskerable
             cfg.msg_threshold <- High
             cfg.warn_threshold <- Min
-            cfg.hint_threshold <- Min
+            cfg.hint_threshold <- Normal
             #endif
 
         let set_thresholds_for_interpreter () =

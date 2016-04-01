@@ -98,7 +98,7 @@ with
         member __.annot_sep = Config.Printing.kind_annotation_sep
 
 and [< NoComparison; NoEquality >] fxty_uexpr =
-    | Fxe_Bottom
+    | Fxe_Bottom of kind option
     | Fxe_Forall of (kinded_param * fxty_expr option) * fxty_expr
     | Fxe_F_Ty of ty_expr
 with
@@ -207,8 +207,8 @@ type ty_uexpr with
         let (|Te_Sym|_|) = (|Sym|_|) (function Te_Cons x -> Some (x, x) | _ -> None)
         match this with
             | Te_Sym x                 -> sprintf "(%O)" x
-            | Te_Var x             -> sprintf Config.Printing.dynamic.tyvar_quantified_fmt x
-            | Te_Cons x                  -> x
+            | Te_Var x                 -> sprintf Config.Printing.dynamic.tyvar_quantified_fmt x
+            | Te_Cons x                -> x
             | Te_Tuple ([] | [_])      -> unexpected "empty or unary tuple type expression" __SOURCE_FILE__ __LINE__
             | Te_Tuple es              -> sprintf "(%s)" (flatten_stringables " * " es)
             | Te_Record row            -> sprintf "{ %s }" (pretty_row "; " Config.Printing.type_annotation_sep row)
@@ -218,7 +218,7 @@ type ty_uexpr with
 
             // arrow must be matched BEFORE app 
             | Te_Arrow (ULo (Te_Arrow _ as t1), t2) -> sprintf "(%O) -> %Os" t1 t2
-            | Te_Arrow (t1, t2)               -> sprintf "%O -> %O" t1 t2
+            | Te_Arrow (t1, t2)                     -> sprintf "%O -> %O" t1 t2
 
             | Te_App (App s)           -> s
             | Te_Lambda (kpar, τ)      -> sprintf "fun %s -> %O" (pretty_param Config.Printing.kind_annotation_sep kpar) τ
@@ -226,19 +226,19 @@ type ty_uexpr with
             | Te_Let (d, e)            -> sprintf "let %O in %O" d e
             | Te_Match (e, cases)      -> sprintf "match %O with\n| %s" e (pretty_cases cases)
             | Te_Row (bs, o)           -> sprintf "(| %s |)" (pretty_row " | " Config.Printing.type_annotation_sep (bs, o))
-            | Te_Forall ((x, ko), τ2)  -> sprintf "forall %s. %O" (pretty_param Config.Printing.kind_annotation_sep (var.fresh_named x, ko)) τ2
+            | Te_Forall ((x, ko), τ2)  -> sprintf "forall %s. %O" (pretty_param Config.Printing.kind_annotation_sep (x, ko)) τ2
 
 type fxty_uexpr with
     override this.ToString () = this.pretty
 
     member this.pretty =
         match this with
-            | Fxe_Bottom -> Config.Printing.dynamic.bottom
-            | Fxe_F_Ty τ -> τ.pretty
-            | Fxe_Forall (((x, ko), None), τ2)    -> sprintf "forall %s. %O" (pretty_param Config.Printing.kind_annotation_sep (var.fresh_named x, ko)) τ2
-            | Fxe_Forall (((x, ko), Some τ1), τ2) -> sprintf "forall (%s >= %O). %O" (pretty_param Config.Printing.kind_annotation_sep (var.fresh_named x, ko)) τ1 τ2
+            | Fxe_Bottom ko                       -> pretty_param Config.Printing.kind_annotation_sep (Config.Printing.dynamic.bottom, ko)
+            | Fxe_F_Ty τ                          -> τ.pretty
+            | Fxe_Forall (((x, ko), None), τ2)    -> sprintf "%s %s. %O" Config.Printing.dynamic.flex_forall (pretty_param Config.Printing.kind_annotation_sep (x, ko)) τ2
+            | Fxe_Forall (((x, ko), Some τ1), τ2) -> sprintf "%s (%s >= %O). %O" Config.Printing.dynamic.flex_forall (pretty_param Config.Printing.kind_annotation_sep (x, ko)) τ1 τ2
 
-type ty_udecl with       
+type ty_udecl with
     override this.ToString () = this.pretty
 
     member this.pretty =
@@ -283,7 +283,7 @@ type [< NoComparison; NoEquality >] upatt =
     | P_PolyCons of ident
     | P_App of (patt * patt)
     | P_Lit of lit
-    | P_Annot of patt * ty_expr
+    | P_Annot of patt * fxty_expr
     | P_As of patt * ident
     | P_Wildcard
     | P_Or of patt * patt
@@ -339,7 +339,7 @@ type [< NoComparison; NoEquality >] uexpr =
     | Match of expr * expr_case list
     | Select of expr * ident
     | Restrict of expr * ident
-    | Annot of expr * ty_expr
+    | Annot of expr * fxty_expr
     | Combine of expr list
     | Val of expr
     | Solve of expr * ty_expr
@@ -403,7 +403,7 @@ let Te_LambdaFunction = make_lambda_patt Te_Lambda Te_Match Te_Cons
 
 let LambdaFun =
     let (|P_Annot|_|) = function
-        | P_Annot (a, b) -> Some (a, b)
+        | P_Annot (x, ULo (Fxe_F_Ty τ)) -> Some (x, τ)
         | _ -> None
     let (|P_Var|_|) = function
         | P_Var r -> Some r

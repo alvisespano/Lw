@@ -224,7 +224,7 @@ type nonTerminalId =
     | NONTERM_ty_fun_param_cases
     | NONTERM_ty_fun_param_cases_
     | NONTERM_id
-    | NONTERM_typed_param
+    | NONTERM_ty_param
     | NONTERM_kinded_param
     | NONTERM_kind_annotation
     | NONTERM_kind
@@ -239,12 +239,15 @@ type nonTerminalId =
     | NONTERM_ty_forall_params
     | NONTERM_fxty_expr
     | NONTERM_fxty_expr_
-    | NONTERM_ty_expr_annotation
+    | NONTERM_ty_annotation
+    | NONTERM_fxty_annotation
     | NONTERM_ty_expr
     | NONTERM_ty_expr_tuple_atom
     | NONTERM_ty_expr_htuple_atom
     | NONTERM_ty_expr_app_atom
+    | NONTERM_ty_expr_unquantified
     | NONTERM_ty_expr_
+    | NONTERM_ty_expr_unquantified_
     | NONTERM_ty_expr_htuple
     | NONTERM_ty_expr_htuple_atom_
     | NONTERM_ty_expr_tuple

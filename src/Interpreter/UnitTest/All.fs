@@ -18,11 +18,15 @@ module private InFSharp =
 
 
 let temp1 : section =
-    "Temp1", [],
+    "Temp1", [flag.ShowSuccessful; flag.ShowInput],
     [
-    "let id x = x",                     type_ok "'a -> 'a"
-    "let ids = [id]",                   type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
-    "let ids : list ('a -> 'a) = ids",  type_ok "forall 'a. list ('a -> 'a)"
+    "forall 'a ('b :> _|_). 'a -> 'b",           type_eq "forall 'a. forall 'b. 'a -> 'b"
+    "forall 'a ('b :> _|_). 'a -> 'b",           type_eq "forall 'a. forall 'b. 'a -> 'b"
+
+
+    "let id x = x",                             type_ok "'a -> 'a"
+    "let ids = [id]",                           type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
+    "let ids : list ('a -> 'a) = ids",          type_ok "forall 'a. list ('a -> 'a)"
 
     "let poly (f : forall 'a. 'a -> 'a) =
         f 1, f true",                           type_ok "(forall 'a. 'a -> 'a) -> int * bool"

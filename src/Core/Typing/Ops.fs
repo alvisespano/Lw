@@ -217,7 +217,7 @@ let (|Ungeneralized|) = function
     | σ -> unexpected "expected an ungeneralized type scheme but got: %O" __SOURCE_FILE__ __LINE__ σ
 
 
-// operations over constraints, schemes and environments
+// operations involving constraints, schemes and environments
 //
 
 type constraintt with
@@ -247,6 +247,14 @@ type ty with
         else
             if not αs.IsEmpty then Report.Warn.unquantified_variables_in_type loc t
             t
+
+//type fxty with
+//    member ϕ.auto_generalize loc Γ =
+//        let αs = ϕ.fv - fv_Γ Γ
+//        if ϕ.is_unquantified then T_Foralls (Set.toList αs, ϕ)
+//        else
+//            if not αs.IsEmpty then Report.Warn.unquantified_variables_in_type loc ϕ
+//            ϕ
 
 
 // operations over kinds

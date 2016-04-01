@@ -29,8 +29,8 @@ open Lw.Core.Typing.Equivalence
 open PPrint
 
 type logger with
-    member this.testing pri fmt = this.log_leveled "TEST" Config.Log.test_color this.cfg.debug_threshold pri fmt
-    member this.test_ok fmt = this.log_leveled "OK" Config.Log.test_ok_color this.cfg.debug_threshold Low fmt
+    member this.testing fmt = this.log_unleveled "TEST" Config.Log.test_color fmt
+    member this.test_ok fmt = this.log_unleveled "OK" Config.Log.test_ok_color fmt
     member this.test_weak_ok fmt = this.log_unleveled "WEAK" Config.Log.test_weak_ok_color fmt
     member this.test_failed fmt = this.log_unleveled "FAIL" Config.Log.test_failed_color fmt
 
@@ -39,6 +39,8 @@ type flag =
     | Verbatim
     | RemoveBindings
     | KeepBindingsAtEnd
+    | ShowSuccessful
+    | ShowInput
     | No of flag
 with
     static member private fold_flags p flag flags =
@@ -95,12 +97,12 @@ type typechecker () =
         let st1 = st
         let ϕ, _ = this.Wk_and_eval_fxty_expr τ
         st <- st1
-        ϕ
+        τ, ϕ
 
     member this.parse_ty_expr_and_auto_gen s =
         match this.parse_fxty_expr s with
-        | Fx_F_Ty t -> Fx_F_Ty <| this.auto_generalize (new location ()) t
-        | ϕ         -> ϕ
+        | τ, Fx_F_Ty t -> τ, Fx_F_Ty <| this.auto_generalize (new location ()) t
+        | r            -> r
 
 
 
@@ -161,22 +163,53 @@ let static_error_infos (input : string) (e : static_error) =
         "message", txt e.message_body ]
 
 
+// entries and sections
+//
+
+let decl_dummy_ty = Fx_F_Ty T_Unit
+
+type entry = string * (result * flag list)
+type section = string * flag list * entry list
+
+type section_data = {
+    name : string
+    num : int
+    flags : flag list
+}
+
+type entry_data = {
+    section : section_data
+    input : string
+    flags : flag list
+}
+with
+    member this.is_enabled fl = flag.is_enabled fl (this.flags @ this.section.flags)
+
+let entry_info sec n = "entry", txt (sprintf "#%d in section \"%s\"" (n + 1) sec)
+let ok_or_no_info b doc = (txt (sprintf "(%s)" (if b then "OK" else "NO"))) <+> doc
+
+
 // logging and pprint shorcuts
 //
 
 type logger with
     member __.pp (L : PrintfFormat<_, _, _, _> -> _) doc = L "%s" <| render None doc
 
-let test_ok esit infs = L.pp L.test_ok (pp_infos (["esist", txt esit] @ infs)); score.Ok
+let test_ok (ed : entry_data) esit infs =
+    if ed.is_enabled flag.ShowSuccessful then
+        L.pp L.test_ok (pp_infos (["esist", txt esit] @ infs))
+    score.Ok
 
 let test_failed msg infs = L.pp L.test_failed (pp_infos (["reason", txt msg] @ infs)); score.Failed
 
 let test_weak_ok esit infs = L.pp L.test_weak_ok (pp_infos (["esit", txt esit] @ infs)); score.Weak
 
-let testing pri doc = L.pp (L.testing pri) doc
+let testing (ed : entry_data) doc =
+    if ed.is_enabled flag.ShowInput then
+        L.pp L.testing doc
 
 
-// testers
+// compares
 //
 
 let compare_test eq_fxty eq_ty eq_kind (ϕres : fxty) (ϕok : fxty) =
@@ -204,26 +237,8 @@ let compare_test_verbatim =
         compare_test (===) (===) (===)
 
 
-let decl_dummy_ty = Fx_F_Ty T_Unit
-
-type entry = string * (result * flag list)
-type section = string * flag list * entry list
-
-type section_data = {
-    name : string
-    num : int
-    flags : flag list
-}
-
-type entry_data = {
-    input : string
-    flags : flag list
-}
-with
-    member this.is_enabled fl = flag.is_enabled fl this.flags
-
-let entry_info sec n = "entry", txt (sprintf "#%d in section \"%s\"" (n + 1) sec)
-let ok_or_no_info b doc = (txt (sprintf "(%s)" (if b then "OK" else "NO"))) <+> doc
+// testers
+//
                                  
 let parse_expr_or_decl s =
     try parsed.Expr (parse_expr s)
@@ -232,40 +247,44 @@ let parse_expr_or_decl s =
         with :? syntax_error -> reraise ()
            | e               -> unexpected "syntax error while parsing expression or declaration: %s\n%O" __SOURCE_FILE__ __LINE__ s e
 
-let typecheck_expr_or_decl (tchk : typechecker) sd ed =
-    testing Min (txt "input:" </> txt ed.input)
-    let p = parse_expr_or_decl ed.input
-    testing Low (txt "parsed:" </> fmt "%O" p)
-    let ϕ =
-        match p with
-        | parsed.Expr e -> tchk.W_expr e
-        | parsed.Decl d ->
-            tchk.W_decl d
-            match d.value with
-            | D_Rec [{ par = x, _ }]
-            | D_Bind [{ patt = ULo (P_Var x) | ULo (P_Annot (ULo (P_Var x), _)) }] ->
-                let envs0 = tchk.envs
-                let r = tchk.lookup_var_Γ x
-                if ed.is_enabled flag.RemoveBindings then
-                    tchk.envs <- envs0
-                r
-
-            | _ -> decl_dummy_ty
-    in
-        ϕ, fun (ϕb, tb, kb) -> [ "translated", txt p.pretty_translated
-                                 "inferred", pp_infos <| typed_infos (ok_or_no_info ϕb (fxty ϕ), 
-                                                                      ok_or_no_info tb (ty ϕ.ftype),
-                                                                      ok_or_no_info kb (kind ϕ.kind)) ]
 
 let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
     let infs0 = [ entry_info sd.name sd.num ]
-    let ed = { input = s1; flags = sd.flags @ flags }
+    let ed = { section = sd; input = s1; flags = flags }
+    let test_ok = test_ok ed
+    let testing = testing ed
+    
+    let typecheck_expr_or_decl () =
+        testing (txt "input:" </> txt ed.input)
+        let p = parse_expr_or_decl ed.input
+        testing (txt "parsed:" </> fmt "%O" p)
+        let ϕ =
+            match p with
+            | parsed.Expr e -> tchk.W_expr e
+            | parsed.Decl d ->
+                tchk.W_decl d
+                match d.value with
+                | D_Rec [{ par = x, _ }]
+                | D_Bind [{ patt = ULo (P_Var x) | ULo (P_Annot (ULo (P_Var x), _)) }] ->
+                    let envs0 = tchk.envs
+                    let r = tchk.lookup_var_Γ x
+                    if ed.is_enabled flag.RemoveBindings then
+                        tchk.envs <- envs0
+                    r
+
+                | _ -> decl_dummy_ty
+        in
+            ϕ, fun (ϕb, tb, kb) -> [ "translated", txt p.pretty_translated
+                                     "inferred", pp_infos <| typed_infos (ok_or_no_info ϕb (fxty ϕ), 
+                                                                          ok_or_no_info tb (ty ϕ.ftype),
+                                                                          ok_or_no_info kb (kind ϕ.kind)) ]
+
     match res with
     | result.TypeEq (s2, is_eq) ->
-        testing Low (txt s1 <+> txt "=" <+> txt s2)
-        let ϕ1 = tchk.parse_fxty_expr s1
-        let ϕ2 = tchk.parse_fxty_expr s2
-        testing Low (fxty ϕ1 <+> txt "=" <+> fxty ϕ2)
+        testing (txt "input:" </> txt s1 <+> txt "=" <+> txt s2)
+        let τ1, ϕ1 = tchk.parse_fxty_expr s1
+        let τ2, ϕ2 = tchk.parse_fxty_expr s2
+        testing (txt "parsed:" </> fmt "%O" τ1 <+> txt "=" <+> fmt "%O" τ2)
         let t1 = ϕ1.ftype
         let t2 = ϕ2.ftype
         let k1 = ϕ1.kind
@@ -292,12 +311,12 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
     | result.TypedOk so ->        
         let ϕok =
             match so with
-            | Some s -> try tchk.parse_ty_expr_and_auto_gen s
+            | Some s -> try tchk.parse_ty_expr_and_auto_gen s |> snd
                         with e -> unexpected "%s" __SOURCE_FILE__ __LINE__ (pretty_exn_and_inners e)   
             | None   -> decl_dummy_ty
         in
             try
-                let ϕres, infs1 = typecheck_expr_or_decl tchk sd ed
+                let ϕres, infs1 = typecheck_expr_or_decl ()
                 let compare_test = if ed.is_enabled flag.Verbatim then compare_test_verbatim else compare_test_eq
                 let b3 = compare_test ϕres ϕok
                 let infs1 = infs0 @ infs1 b3
@@ -309,14 +328,14 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
                     | false, true, true -> test_weak_ok "flex types are different" (infs1 @ infs2)
                     | true, false, false
                     | false, true, false -> test_failed "type is ok but kind is not" (infs1 @ infs2)
-                    | _                  -> test_failed "types expected to be equal" (infs1 @ infs2)
+                    | _                  -> test_failed "types are different" (infs1 @ infs2)
             with :? static_error as e ->
                 test_failed (sprintf "unwanted %s" (error_name_of_exn e)) <| infs0 @ static_error_infos s1 e @ expected_infos ϕok
                     
     | result.StaticError (T, codeo) ->
         assert (let t = typeof<static_error> in t = T || T.IsSubclassOf t)
         try
-            let _, infs1 = typecheck_expr_or_decl tchk sd ed
+            let _, infs1 = typecheck_expr_or_decl ()
             let errname = error_name_of_type T
             in
                 test_failed

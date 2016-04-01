@@ -128,8 +128,7 @@ module Printing =
     let constraint_id_fmt : StringFormat<string -> int -> string> = "%s#%X"
     let fresh_reserved_id : StringFormat<int -> string> = "?%d"
     let row_based_tuple_label_fmt : StringFormat<int -> string> = "#%d"
-//    let already_existing_named_var_fmt : StringFormat<string -> int -> string> = "%s%d" // these are needed for disambiguating the name of a named var that already existed and whose name conflicted
-//    let already_existing_named_var_scanf_fmt () : PrintfFormat<s, _, _, _, string * int> = "%s%d" 
+    let already_existing_named_var_fmt : StringFormat<string -> int -> string> = "%s%d" // these are needed for disambiguating the name of a named var that already existed and whose name conflicted
     #if DEBUG_VAR_NAMES
     let anonymous_var_fmt : StringFormat<string -> int -> string> = "%s?%d"
     let named_var_fmt : StringFormat<string -> int -> string> = "<%s>?%d"
