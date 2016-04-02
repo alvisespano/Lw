@@ -324,11 +324,11 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
                 in
                     match b3 with
                     | true, true, true  -> test_ok "all ok" infs1
-                    | true, false, true -> test_weak_ok "F-types are different" (infs1 @ infs2)
-                    | false, true, true -> test_weak_ok "flex types are different" (infs1 @ infs2)
+                    | true, false, true -> test_weak_ok "F-type is wrong" (infs1 @ infs2)
+                    | false, true, true -> test_weak_ok "flex type is wrong" (infs1 @ infs2)
                     | true, false, false
-                    | false, true, false -> test_failed "type is ok but kind is not" (infs1 @ infs2)
-                    | _                  -> test_failed "types are different" (infs1 @ infs2)
+                    | false, true, false -> test_failed "types are ok but kind is wrong" (infs1 @ infs2)
+                    | _                  -> test_failed "types are wrong" (infs1 @ infs2)
             with :? static_error as e ->
                 test_failed (sprintf "unwanted %s" (error_name_of_exn e)) <| infs0 @ static_error_infos s1 e @ expected_infos ϕok
                     

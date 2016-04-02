@@ -20,13 +20,13 @@ module private InFSharp =
 let temp1 : section =
     "Temp1", [flag.ShowSuccessful; flag.ShowInput],
     [
-    "forall 'a ('b :> _|_). 'a -> 'b",           type_eq "forall 'a. forall 'b. 'a -> 'b"
-    "forall 'a ('b :> _|_). 'a -> 'b",           type_eq "forall 'a. forall 'b. 'a -> 'b"
+    "forall 'a ('b :> _|_). 'a -> 'b",          type_eq "forall 'a. forall 'b. 'a -> 'b"
+    "forall 'a ('b :> _|_). 'a -> 'b",          type_eq "forall 'a. forall 'b. 'a -> 'b"
 
 
     "let id x = x",                             type_ok "'a -> 'a"
     "let ids = [id]",                           type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
-    "let ids : list ('a -> 'a) = ids",          type_ok "forall 'a. list ('a -> 'a)"
+    "let ids : list ('a -> 'a) = ids in ids",   type_ok "forall 'a. list ('a -> 'a)"
 
     "let poly (f : forall 'a. 'a -> 'a) =
         f 1, f true",                           type_ok "(forall 'a. 'a -> 'a) -> int * bool"
@@ -39,11 +39,14 @@ let temp1 : section =
      in
         map poly ids",                          type_ok "list (int * bool)"
 
-    "let ids : list (forall 'a. 'a -> 'a) = ids
+    "let ids : list ('a -> 'a) = ids
      in
         map poly ids",                          type_ok "list (int * bool)"
 
-    "let ids : list (forall 'a. 'a -> 'a) = ids
+    "let ids : forall 'a. list ('a -> 'a) = ids
+     in
+        map poly ids",                          type_ok "list (int * bool)"
+    "let ids : forall ('a :> forall 'b. 'b -> 'b) . list 'a = ids
      in
         map poly ids",                          type_ok "list (int * bool)"
     ]

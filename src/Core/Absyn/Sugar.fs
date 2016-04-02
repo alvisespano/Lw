@@ -131,9 +131,9 @@ let make_rows rowed ((|Rowed|_|) : ident -> _ -> _) =
         Record, Variant, Tuple, (|Record|_|), (|Variant|_|), (|Tuple|_|)
 
 
-// lambda with pattern matching on argument creator
+// lambda with cases on argument creator
 
-let make_lambda_patt lambda matchh id cases =
+let make_lambda_function lambda matchh id cases =
     let loc = let (p : node<_, _>), _, _ = List.head cases in p.loc
     let L = Lo loc
     let x = fresh_reserved_id ()
@@ -157,6 +157,8 @@ let make_lambdas (|P_Annot|_|) (|P_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Cu
                 in
                     f p.value)
             ps e
+
+// lambda with cases over multiple curried arguments
 
 let make_lambda_cases lambdas p_var var matchh tuple p_tuple =
     let tuple = function

@@ -27,7 +27,7 @@ open Lw.Core.Typing.Unify
 open Lw.Core.Typing.Resolve
 open Lw.Core.Typing.Ops
 open Lw.Core.Typing.Meta
-open Lw.Core.Typing.Subst
+open Lw.Core.Typing.Equivalence
 
 
 type translatable_type_inference_builder<'e> with
@@ -122,9 +122,18 @@ let W_fxty_annot ctx loc (ϕann : fxty) (ϕinf : fxty) =
         let! ϕ = M {
             match ϕann.maybe_ftype with
             | Some tann ->
-                let tinf = ϕinf.ftype
-                do! M.unify loc tann tinf
-                yield tinf                          // return the inferred F-type when the annotation is an F-type
+                match ϕinf.maybe_ftype with
+                | Some tinf ->
+                    do! M.unify loc tann tinf
+                    yield tinf                          // return the inferred F-type when the annotation is an F-type
+                | None      -> 
+                    try
+                        do! M.subsume loc tann ϕinf
+                        Report.Hint.subsumption_in_annotated_binding loc tann ϕinf
+                    with :? Report.type_error -> ()
+                    let tinf = ϕinf.ftype
+                    do! M.unify loc tann tinf
+                    yield tinf
             | None ->
                 yield! M.unify_fx loc ϕann ϕinf     // return the flex unification result when annotation is a flex type instead
         }
@@ -146,13 +155,16 @@ let W_fxty_expr_annot_in_binding ctx (τ : fxty_expr) (ϕinf : fxty) =
     M {
         let! ϕann, k = Wk_and_eval_fxty_expr ctx τ
         do! M.kunify loc K_Star k
-        match ϕann.maybe_ftype with
-        | Some tann ->
-            let! tann' = M.auto_geneneralize tann
-            Report.Hint.auto_generalization_occurred_in_annotation loc tann tann'
-            return! W_fxty_annot ctx loc (Fx_F_Ty tann') ϕinf
-        | None ->
-            return! W_fxty_annot ctx loc ϕann ϕinf
+        let! ϕann = M {
+            match ϕann.maybe_ftype with
+            | Some tann ->
+                let! tann' = M.auto_geneneralize tann
+                if not (tann.is_equivalent tann') then Report.Hint.auto_generalization_occurred_in_annotation loc tann tann'
+                return (Fx_F_Ty tann')
+            | None ->
+                return ϕann
+        }
+        return! W_fxty_annot ctx loc ϕann ϕinf
     }
 
 
@@ -355,11 +367,13 @@ and W_expr' ctx (e0 : expr) =
                 match τo with
                 | None -> return ty.fresh_star_var
                 | Some τ ->
-                    let! t, k = Wk_and_eval_ty_expr ctx τ
-                    do! M.kunify τ.loc K_Star k
-                    return t
+                    let! ϕ, k = Wk_and_eval_fxty_expr ctx τ
+                    match ϕ.maybe_ftype with
+                    | None   -> return Report.Error.annotated_lambda_parameter_is_flex τ.loc x ϕ
+                    | Some t -> do! M.kunify τ.loc K_Star k
+                                return t
             }
-            // whether annotated or not, all free vars are added to the prefix
+            // annotated or not, all free vars are added to the prefix
             for α in tx.ftv do
                 do! M.extend (α, Fx_Bottom K_Star)
             let! ϕ1 = M.undo_Γ <| M {

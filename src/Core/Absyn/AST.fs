@@ -119,7 +119,7 @@ and ty_patt = node<ty_upatt, kind>
 and ty_decl = node<ty_udecl, kind>
 and ty_case = case<ty_upatt, ty_uexpr, kind>
 
-and typed_param = ty_expr id_param
+and typed_param = fxty_expr id_param
 
 let private Te_Primitive name = Te_Cons name
 let Te_Unit = Te_Primitive Config.Typing.Names.Type.unit
@@ -151,6 +151,8 @@ let Te_Record, Te_Variant, Te_Tuple, (|Te_Record|_|), (|Te_Variant|_|), (|Te_Tup
     in
         make_rows Te_Rowed (|Te_Rowed|_|)
 
+let Te_LambdaFunction = make_lambda_function Te_Lambda Te_Match Te_Cons
+
 let Tp_Apps, (|Tp_Apps1|), (|Tp_Apps|_|) = nodify make_apps_by Tp_App (function Tp_App (τ1, τ2) -> Some (τ1, τ2) | _ -> None)
 let Tp_Arrow, (|Tp_Arrow|_|) = let A = Config.Typing.Names.Type.arrow in make_arrow_by_apps (ULo (Tp_Cons A)) Tp_Apps (function ULo (Tp_Cons x) when x = A -> Some () | _ -> None) (|Tp_Apps|_|)
 let Tp_Arrows, (|Tp_Arrows1|), (|Tp_Arrows|_|) = nodify make_arrows_by Tp_Arrow (|Tp_Arrow|_|)
@@ -164,6 +166,25 @@ let Tp_Record, Tp_Variant, Tp_Tuple, (|Tp_Record|_|), (|Tp_Variant|_|), (|Tp_Tup
         | _ -> None
     in
         make_rows Tp_Rowed (|Tp_Rowed|_|)
+
+let Te_LambdaFun =
+    let (|P_Annot|_|) = function
+        | Tp_Annot (a, b) -> Some (a, b)
+        | _ -> None
+    let (|P_Var|_|) = function
+        | Tp_Var r -> Some r
+        | _ -> None
+    let (|P_Wildcard|_|) = function
+        | Tp_Wildcard -> Some ()
+        | _ -> None
+    let (|P_Custom|_|) _ _ _ = None
+    in
+        make_lambdas (|P_Annot|_|) (|Tp_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) Te_Lambda Te_LambdaFunction
+
+let Te_LambdaCases x = make_lambda_cases Te_LambdaFun Tp_Var Te_Cons Te_Match Te_Tuple Tp_Tuple  x
+
+let Te_Lets x = make_lets Te_Let x
+
 
 type ty_upatt with
     override this.ToString () = this.pretty
@@ -398,12 +419,11 @@ let P_List_Nil = P_Cons N.Data.list_nil
 let P_List_Cons (p1, p2) = P_Apps [ULo (P_Cons N.Data.list_cons); p1; p2]
 let P_List_Seq (ps : patt list) = List.foldBack (fun p z -> P_List_Cons (p, Lo p.loc z)) ps P_List_Nil
 
-let LambdaFunction = make_lambda_patt Lambda Match Id
-let Te_LambdaFunction = make_lambda_patt Te_Lambda Te_Match Te_Cons
+let LambdaFunction = make_lambda_function Lambda Match Id
 
 let LambdaFun =
     let (|P_Annot|_|) = function
-        | P_Annot (x, ULo (Fxe_F_Ty τ)) -> Some (x, τ)
+        | P_Annot (x, τ) -> Some (x, τ)
         | _ -> None
     let (|P_Var|_|) = function
         | P_Var r -> Some r
@@ -411,28 +431,15 @@ let LambdaFun =
     let (|P_Wildcard|_|) = function
         | P_Wildcard -> Some ()
         | _ -> None
-    let (|P_Custom|_|) (p : node<_, _>) (e : node<_, _>) = function
-        | P_Lit lit.Unit -> Some (Lambda ((fresh_reserved_id (), Some (Lo p.loc Te_Unit)), e))
+    let (|P_Custom|_|) (p : node<_, _>) (e : node<_, _>) =
+        let L x = Lo p.loc x
+        function
+        | P_Lit lit.Unit -> Some (Lambda ((fresh_reserved_id (), Some (L <| Fxe_F_Ty (L <| Te_Unit))), e))
         | _ -> None
     in
         make_lambdas (|P_Annot|_|) (|P_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) Lambda LambdaFunction
-
-let Te_LambdaFun =
-    let (|P_Annot|_|) = function
-        | Tp_Annot (a, b) -> Some (a, b)
-        | _ -> None
-    let (|P_Var|_|) = function
-        | Tp_Var r -> Some r
-        | _ -> None
-    let (|P_Wildcard|_|) = function
-        | Tp_Wildcard -> Some ()
-        | _ -> None
-    let (|P_Custom|_|) _ _ _ = None
-    in
-        make_lambdas (|P_Annot|_|) (|Tp_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) Te_Lambda Te_LambdaFunction
           
 let LambdaCases x = make_lambda_cases LambdaFun P_Var Id Match Tuple P_Tuple x
-let Te_LambdaCases x = make_lambda_cases Te_LambdaFun Tp_Var Te_Cons Te_Match Te_Tuple Tp_Tuple  x
             
 let RecLambda ((x, t), cases) =
     let e = LambdaCases cases
@@ -441,7 +448,6 @@ let RecLambda ((x, t), cases) =
         L <| Let (L <| D_Rec [{ qual = decl_qual.none; par = (x, t); expr = e }], L <| Id x)
 
 let Lets x = make_lets Let x
-let Te_Lets x = make_lets Te_Let x
 
 
 type uexpr with

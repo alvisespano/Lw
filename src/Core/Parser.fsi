@@ -215,6 +215,7 @@ type nonTerminalId =
     | NONTERM_ty_expr_rec_binding
     | NONTERM_kind_binding
     | NONTERM_kind_params
+    | NONTERM_fun_patt_param
     | NONTERM_fun_patt_params
     | NONTERM_fun_param_case
     | NONTERM_fun_param_cases
@@ -234,8 +235,8 @@ type nonTerminalId =
     | NONTERM_kind_arg
     | NONTERM_kind_args
     | NONTERM_fxty_forall_param
-    | NONTERM_fxty_forall_params
     | NONTERM_ty_forall_param
+    | NONTERM_fxty_forall_params
     | NONTERM_ty_forall_params
     | NONTERM_fxty_expr
     | NONTERM_fxty_expr_

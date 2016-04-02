@@ -1,4 +1,10 @@
 ﻿
+2/4/2016:
+* UP: all annotations, except let rec bindings, are now flex types
+* FIX: annotated lambda parameters are syntactically patt_app_atoms, which means flex types are accepted by the parser: F-type check is done at typing-time
+* UP: UnitTest flags now support showing input and parsed input, and forcing show of successful esits
+
+
 1/4/2016:
 * FIX: parser does not have reduce/reduce conflicts anymore when dealing with foralls
 * UP: typing of annotations revamped and polished

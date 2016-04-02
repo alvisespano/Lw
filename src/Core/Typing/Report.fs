@@ -174,6 +174,9 @@ module Error =
     let inferred_rec_definition_is_not_monomorphic loc x t =
         Et 211 loc "recursive definition is used polymorphically without an explicit annotation: %s : %O" x t
 
+    let annotated_lambda_parameter_is_flex loc x (ϕ : fxty) =
+        Et 212 loc "annotated function parameter %s : %O is a flexible type, but it must be a System-F type" x ϕ
+
 
     // pattern-related errors
 
@@ -218,6 +221,7 @@ module Error =
 [< RequireQualifiedAccess >]
 module Warn =
     let private W n loc pri (fmt : StringFormat<'a, _>) =
+        use N = var.reset_normalization
         if Set.contains n Config.Report.disabled_warnings then null_L.warn Min fmt
         else L.nwarn n pri (StringFormat<location -> 'a, _> ("%O: " + fmt.Value)) loc
 
@@ -271,6 +275,7 @@ module Warn =
 [< RequireQualifiedAccess >]
 module Hint =
     let private H n loc pri (fmt : StringFormat<'a, _>) =
+        use N = var.reset_normalization
         if Set.contains n Config.Report.disabled_hints then null_L.hint Unmaskerable fmt
         else L.nhint n pri (StringFormat<location -> 'a, _> ("%O: " + fmt.Value)) loc
 
@@ -296,3 +301,5 @@ module Hint =
     let auto_generalization_occurred_in_annotation loc t t' =
         H 5 loc Low "type annotation %O has been automatically generalized to %O" t t'
 
+    let subsumption_in_annotated_binding loc tann ϕinf =
+        H 6 loc High "type annotation %O is an instance of the inferred flex type %O, which may lead to a loss of type information, possibly introducing the need of additional type annotations in further code" tann ϕinf

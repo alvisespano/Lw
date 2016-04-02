@@ -215,9 +215,12 @@ kind_params:
  * function parameters as patterns
  */
 
+fun_patt_param:
+    patt_app_atom                                   { $1 }
+
 fun_patt_params:
-    patt_app_atom					                { [$1] }
-  | patt_app_atom fun_patt_params                   { $1 :: $2 }
+    fun_patt_param					                { [$1] }
+  | fun_patt_param fun_patt_params                  { $1 :: $2 }
 
 fun_param_case:
   |  fun_patt_params ARROW expr_stmt_atom           { $1, None, $3 }
@@ -271,7 +274,6 @@ kinded_param:
  * kinds
  */
 
-// TODO: how can this not produce reduce/reduce conflict? annotation should be kind_arrow_atom
 kind_annotation:
     kind                                        { $1 }
 
@@ -308,25 +310,25 @@ kind_args:
  * flex type expressions
  */
 
- fxty_forall_param:
-  | ty_forall_param                                         { $1, None }
-  | BRA TICK_ID COLONGT fxty_expr KET                       { ($2, None), Some $4 }
-  | BRA TICK_ID COLON2 kind_annotation GEQ fxty_expr KET    { ($2, Some $4), Some $6 }
-
-fxty_forall_params:
-    fxty_forall_param                                   { [$1] }
-  | fxty_forall_param fxty_forall_params                { $1 :: $2 }
+fxty_forall_param:
+  | BRA TICK_ID COLONGT fxty_expr KET                           { ($2, None), Some $4 }
+  | BRA TICK_ID COLON2 kind_annotation COLONGT fxty_expr KET    { ($2, Some $4), Some $6 }
+  | ty_forall_param                                             { $1, None }
 
 ty_forall_param: 
-  | TICK_ID                                             { $1, None }
-  | BRA TICK_ID COLON2 kind_annotation KET              { $2, Some $4 }
+  | TICK_ID                                                     { $1, None }
+  | BRA TICK_ID COLON2 kind_annotation KET                      { $2, Some $4 }
   
+fxty_forall_params:
+    fxty_forall_param                                           { [$1] }
+  | fxty_forall_param fxty_forall_params                        { $1 :: $2 }
+
 ty_forall_params:
-    ty_forall_param                                     { [$1] }
-  | ty_forall_param ty_forall_params                    { $1 :: $2 }
+    ty_forall_param                                             { [$1] }
+  | ty_forall_param ty_forall_params                            { $1 :: $2 }
 
 fxty_expr: 
-    fxty_expr_                                          { pos parseState 1 $1 }
+    fxty_expr_                                              { pos parseState 1 $1 }
 
 fxty_expr_:
   | FORALL fxty_forall_params DOT fxty_expr                 { (Fxe_Foralls ($2, $4)).value }
