@@ -40,7 +40,7 @@ with
 
 let private search_best_candidate ctx p cx ct jkσs =
     [ for jk, σ : tscheme in jkσs do
-            let { constraints = csi; fxty = ϕi } = σ.instantiate
+            let { constraints = csi; fxty = ϕi } = σ.instantiated
             let ti = ϕi.ftype // TODO: can we use flex types here?
             match ti.try_instance_of ctx ct with
             | Some θ ->
@@ -94,7 +94,7 @@ let rec resolve_constraints (ctx : context) e0 =
                             let p = P_CId c
                             let e1 = E_Jk candidate.jk
                             let e2 = e0.value
-                            M.translate <- Let (L0 (D_Bind [{ qual = decl_qual.none; patt = L0 p; expr = L0 e1 }]), L0 e2)
+                            M.translate <- Let (L0 (D_Let [{ qual = decl_qual.none; patt = L0 p; expr = L0 e1 }]), L0 e2)
                             do! M.add_constraints candidate.constraints
                             if candidate.constraints.exists (fun c' -> x = c'.name && t.is_equivalent c'.ty) then
                                 return Report.Warn.cyclic_constraint loc c t

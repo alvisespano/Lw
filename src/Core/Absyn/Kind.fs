@@ -24,8 +24,8 @@ type [< NoComparison; NoEquality; Diagnostics.DebuggerDisplay("{ToString()}") >]
     | K_Var of var
     | K_Cons of ident * kind list
 with
-    interface annotable with
-        member __.annot_sep = Config.Printing.kind_annotation_sep
+    interface annotation with
+        member __.annotation_sep = Config.Printing.kind_annotation_sep
 
 
 // kind active patterns
@@ -99,9 +99,9 @@ type kind with
 
     static member fresh_var = K_Var var.fresh
 
-type kinded_param = kind id_param
+type kinded_param = kind annotated_ident
 
-type kinded_var_param = param<var, kind>
+type kinded_var_param = annotated<var, kind>
 
 let pretty_row sep binder = function
     | [], Some x -> sprintf "%O :: %O" x K_Row

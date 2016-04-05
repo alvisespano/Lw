@@ -72,18 +72,24 @@ with
 // TODO: reuse this for interactive as well
 type typechecker () =
     let mutable st = Typing.StateMonad.state.state0
+    let ctx0 = context.as_top_level_decl
 
     member private __.unM f x =
-        let ctx0 = context.as_top_level_decl
         let r, st1 = f ctx0 x st
         st <- st1
         r
                 
+    member private __.unM_member f =
+        let M = new type_inference_builder (ctx0)
+        let r, st1 = f M st
+        st <- st1
+        r
+
     member this.W_expr e = this.unM W_expr e
     member this.W_decl d = this.unM W_decl d
     member this.Wk_and_eval_fxty_expr τ = this.unM Wk_and_eval_fxty_expr τ
     
-    member __.auto_generalize loc (t : ty) = t.auto_generalize loc st.Γ
+    member this.auto_generalize (t : ty) = this.unM_member <| fun M -> M.auto_geneneralize t
     member __.lookup_var_Γ x = (st.Γ.lookup (jenv_key.Var x)).scheme.fxty
 
     member __.envs
@@ -101,7 +107,7 @@ type typechecker () =
 
     member this.parse_ty_expr_and_auto_gen s =
         match this.parse_fxty_expr s with
-        | τ, Fx_F_Ty t -> τ, Fx_F_Ty <| this.auto_generalize (new location ()) t
+        | τ, Fx_F_Ty t -> τ, Fx_F_Ty <| this.auto_generalize t
         | r            -> r
 
 

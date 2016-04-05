@@ -127,13 +127,9 @@ let W_fxty_annot ctx loc (ϕann : fxty) (ϕinf : fxty) =
                     do! M.unify loc tann tinf
                     yield tinf                          // return the inferred F-type when the annotation is an F-type
                 | None      -> 
-                    try
-                        do! M.subsume loc tann ϕinf
-                        Report.Hint.subsumption_in_annotated_binding loc tann ϕinf
-                    with :? Report.type_error -> ()
-                    let tinf = ϕinf.ftype
-                    do! M.unify loc tann tinf
-                    yield tinf
+                    do! M.subsume loc tann ϕinf
+                    Report.Hint.type_annotation_is_instantiation loc tann ϕinf
+                    yield tann
             | None ->
                 yield! M.unify_fx loc ϕann ϕinf     // return the flex unification result when annotation is a flex type instead
         }
@@ -516,7 +512,7 @@ and W_expr' ctx (e0 : expr) =
             let e1 =
                 let bs = [ for c in cs -> let xi = c.name in { qual = decl_qual.none; patt = Lo <| P_Var xi; expr = Lo <| Select (Lo <| Id x, xi) } ]
                 in
-                    Let (Lo <| D_Bind bs, e)
+                    Let (Lo <| D_Let bs, e)
             yield! W_desugared_expr (Lo <| Lambda ((x, None), Lo e1))
 
         | Eject e ->
@@ -534,7 +530,7 @@ and W_expr' ctx (e0 : expr) =
             let x = fresh_reserved_id ()
             let e1 = Record ([ for { name = y } in cs -> y, Lo <| Id y ], None)
             let e2 = App (e, Lo <| Id x)
-            yield! W_desugared_expr (Lo <| Let (Lo <| D_Bind [{ qual = decl_qual.none; patt = Lo <| P_Var x; expr = Lo e1 }], Lo e2))    // TODO: infer the type of the desugared expression?
+            yield! W_desugared_expr (Lo <| Let (Lo <| D_Let [{ qual = decl_qual.none; patt = Lo <| P_Var x; expr = Lo e1 }], Lo e2))    // TODO: infer the type of the desugared expression?
 
         | Solve (e, τ) ->
             let! te = W_expr_F ctx e
@@ -573,8 +569,8 @@ and W_decl' (ctx : context) (d0 : decl) =
     M {
         match d0.value with
         | D_Overload []
-        | D_Bind []
-        | D_Rec []
+        | D_Let []
+        | D_LetRec []
         | D_Reserved_Multi [] ->
             return unexpected "empty declaration list" __SOURCE_FILE__ __LINE__
 
@@ -585,7 +581,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                 let! _ = M.bind_Γ (jenv_key.Var x) { mode = jenv_mode.Overload; scheme = Ungeneralized t }
                 Report.prompt ctx Config.Printing.Prompt.overload_decl_prefixes x t None
 
-        | D_Bind bs ->
+        | D_Let bs ->
             do! M.undo_constraints <| M {
                 // infer type for each binding in the let..and block
                 let! l = M.List.collect (fun ({ patt = p; expr = e } as b) -> M {
@@ -621,10 +617,10 @@ and W_decl' (ctx : context) (d0 : decl) =
                             }
                         }) bs
                 let! bs' = M.List.map (fun gb -> M { let! () = M.set_constraints gb.constraints in return! gen_bind ctx Config.Printing.Prompt.value_decl_prefixes gb }) l
-                M.translate <- D_Bind [for jk, e in bs' -> { qual = decl_qual.none; patt = Lo e.loc (P_Jk jk); expr = e }]
+                M.translate <- D_Let [for jk, e in bs' -> { qual = decl_qual.none; patt = Lo e.loc (P_Jk jk); expr = e }]
             }
 
-        | D_Rec bs ->
+        | D_LetRec bs ->
             do! M.undo_constraints <| M {
                 let! Q0 = M.get_Q
                 let! l = M.undo_Γ <| M {
@@ -663,7 +659,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                                 let ϕ = ϕx.nf
                                 return! gen_bind ctx Config.Printing.Prompt.rec_value_decl_prefixes { expr = b.expr; qual = b.qual; id = x; constraints = cs; inferred = ϕ; to_bind = ϕ }
                             })
-                M.translate <- D_Rec [for jk, e in bs' -> { qual = decl_qual.none; par = jk.pretty, None; expr = e }]
+                M.translate <- D_LetRec [for jk, e in bs' -> { qual = decl_qual.none; par = jk.pretty, None; expr = e }]
             }
 
         | D_Open (q, e) ->
@@ -674,8 +670,8 @@ and W_decl' (ctx : context) (d0 : decl) =
             | T_Record (bs, _) ->
                 let rec_id = fresh_reserved_id ()
                 let sel x = Select (Lo (Id rec_id), x)
-                let d1 = D_Bind [{ qual = decl_qual.none; patt = Lo (P_Var rec_id); expr = e }]
-                let d2 = D_Bind [ for x, _ in bs -> { qual = q; patt = Lo (P_Var x); expr = Lo (sel x) } ]
+                let d1 = D_Let [{ qual = decl_qual.none; patt = Lo (P_Var rec_id); expr = e }]
+                let d2 = D_Let [ for x, _ in bs -> { qual = q; patt = Lo (P_Var x); expr = Lo (sel x) } ]
                 do! desugar (Lo <| D_Reserved_Multi [Lo d1; Lo d2])
                         
             | _ -> return unexpected "non-record type: %O" __SOURCE_FILE__ __LINE__ t

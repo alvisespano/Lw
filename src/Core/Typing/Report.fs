@@ -75,33 +75,6 @@ let private mismatch E (n : int) (loc : location) is_equivalent what1 what2 expe
     in
         E n loc ("%s" : StringFormat<_, _>) s
 
-//let private mismatch1 E (n : int) (loc : location) what1 what2 expected1 got1 expected2 got2 =
-//    use N = var.reset_normalization
-//    let expected1 = sprintf "%O" expected1
-//    let expected2 = sprintf "%O" expected2
-//    let got1 = sprintf "%O" got1
-//    let got2 = sprintf "%O" got2
-//    let s = sprintf "%s was expected to have %s %s but got %s %s" what1 what2 expected1 what2 got1
-//    let s = s + if expected1 <> expected2 && got1 <> got2 then sprintf ", because %s %s is not compatible with %s" what2 expected2 got2 else ""
-//    in
-//        E n loc ("%s" : StringFormat<_, _>) s
-//
-//let inline private mismatch2 E (n : int) (loc : location) what1 what2 (expected1 : ^t) (got1 : ^t) (expected2 : ^t) (got2 : ^t) =
-//    use N = var.reset_normalization
-//    let s =
-//        sprintf "%s was expected to have %s %O but got %s %O" what1 what2 expected1 what2 got1
-//        + (if (^t : (member is_equivalent : ^t -> bool) expected1, expected2) && (^t : (member is_equivalent : ^t -> bool) got1, got2) then
-//            sprintf ", because %s %O is not compatible with %O" what2 expected2 got2
-//           else "")
-//    in
-//        E n loc ("%s" : StringFormat<_, _>) s
-//
-//let inline private mismatch3 E E' (n : int) (loc : location) what1 what2 (expected1 : ^t) (got1 : ^t) (expected2 : ^t) (got2 : ^t) =
-//    if (^t : (member is_equivalent : _) expected1) expected2 && (^t : (member is_equivalent : _) got1) got2 then
-//        E n loc "%s was expected to have %s %O but got %s %s" what1 what2 expected1 what2 got1
-//    else
-//        E' n loc "%s was expected to have %s %O but got %s %s, because %s %s is not compatible with %s" what1 what2 expected1 what2 got1 what2 expected2 got2
-
 let private circularity E n loc what x1 x2 α x =
     use N = var.reset_normalization
     let s = sprintf "unification between %ss %O and %O failed because %s variable %O occurs in %s %O and unification would produce an infinite %s" what x1 x2 what α what x what
@@ -274,10 +247,10 @@ module Warn =
 
 [< RequireQualifiedAccess >]
 module Hint =
-    let private H n loc pri (fmt : StringFormat<'a, _>) =
+    let private H n loc pri (fmt : StringFormat<'a, unit>) =
         use N = var.reset_normalization
         if Set.contains n Config.Report.disabled_hints then null_L.hint Unmaskerable fmt
-        else L.nhint n pri (StringFormat<location -> 'a, _> ("%O: " + fmt.Value)) loc
+        else L.nhint n pri (new StringFormat<location -> 'a, unit> ("%O: " + fmt.Value)) loc
 
     let unsolvable_constraint loc x t cx ct αs = 
         H 1 loc High "constraint `%s : %O` is unsolvable because type variables %s do not appear in %O : %O. This prevents automatic resolution to determine instances, therefore \
@@ -295,11 +268,11 @@ module Hint =
     let datacons_contains_env_fv loc c x tx =
         H 3 loc Normal "datatype %s defines a data constructor %s whose type %O has type variables that cannot be generalized" c x tx
 
-    let scoped_tyvar_was_not_generalized loc α =
+    let scoped_tyvar_wont_be_generalized loc α =
         H 4 loc Min "scoped type variable %O will not be generalized" α
 
     let auto_generalization_occurred_in_annotation loc t t' =
         H 5 loc Low "type annotation %O has been automatically generalized to %O" t t'
 
-    let subsumption_in_annotated_binding loc tann ϕinf =
+    let type_annotation_is_instantiation loc tann ϕinf =
         H 6 loc High "type annotation %O is an instance of the inferred flex type %O, which may lead to a loss of type information, possibly introducing the need of additional type annotations in further code" tann ϕinf

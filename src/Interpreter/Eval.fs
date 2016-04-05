@@ -185,13 +185,13 @@ and eval_patt ctx Δ p v =
 
 and eval_decl ctx Δ0 (d0 : decl) =
     match d0.value with
-    | D_Bind bs ->
+    | D_Let bs ->
         let bs = bs |> List.map (function { patt = ULo (P_Var x); expr = e } -> x, eval_expr ctx Δ0 e
                                         | { patt = p }                       -> not_implemented "pattern in let-bindings: %O" __SOURCE_FILE__ __LINE__ p)
         in            
             Δ0.binds bs
 
-    | D_Rec bs ->
+    | D_LetRec bs ->
         let rec Δ' = 
             List.fold (fun (Δ : venv) { par = (x, _); expr = e } -> Δ.bind x (V_Redux (Config.Interactive.pretty_rec_closure (x, e, Δ),
                                                                                       fun ctx v -> beta_redux ctx e.loc (eval_expr ctx Δ' e) v)))   // DO NOT CURRY variable 'v' or recursion won't stop

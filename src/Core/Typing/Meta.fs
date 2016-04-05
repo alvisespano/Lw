@@ -350,7 +350,7 @@ and Wk_ty_expr' (ctx : context) (τ0 : ty_expr) =
 
         | Te_Cons x ->
             let! kσ = M.lookup_γ x
-            yield kσ.instantiate
+            yield kσ.instantiated
 
         | Te_Lambda ((x, ko), τ) ->
             let kx = either kind.fresh_var ko
@@ -472,7 +472,7 @@ and Wk_ty_patt ctx (p0 : ty_patt) =
         match p0.value with
         | Tp_Cons x ->
             let! kσ = K.lookup_γ x
-            yield kσ.instantiate
+            yield kσ.instantiated
 
         | Tp_Var x ->
             let α = kind.fresh_var

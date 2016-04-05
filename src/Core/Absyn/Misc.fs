@@ -35,7 +35,7 @@ let (|Sym|_|) (|Id|_|) = function
     | _ -> None
 
 
-// nodes, params and located stuff
+// nodes and located stuff
 //
 
 type 'a translated = Translated of 'a
@@ -68,14 +68,17 @@ let (|Lo|) (l : node<'a, _>) = l.value, l.loc
 let (|ULo|) = function Lo (x, _) -> x
 
 
-type annotable =
-    abstract annot_sep : string
+// annotations
+//
 
-type param<'id, 'n>  = 'id * 'n option
+type annotation =
+    abstract annotation_sep : string
 
-type 'n id_param = param<ident, 'n>
+type annotated<'id, 'n when 'n :> annotation>  = 'id * 'n option
 
-let pretty_param sep (id, tyo) =
+type annotated_ident<'n when 'n :> annotation> = annotated<ident, 'n>
+
+let pretty_annotated (id, tyo) =
     match tyo with
-        | None   -> sprintf "%O" id
-        | Some a -> sprintf "(%O %s %O)" id sep a
+    | None   -> sprintf "%O" id
+    | Some t -> sprintf "(%O %s %O)" id (t :> annotation).annotation_sep t

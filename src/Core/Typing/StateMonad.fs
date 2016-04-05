@@ -377,10 +377,10 @@ type type_inference_builder (loc, ctx) =
             return! M.bind_ungeneralized_Γ (jenv_key.Var x) jenv_mode.Normal t
         }
 
-    member M.bind_generalized_var_Γ x ϕ =
-        M {
-            return! M.bind_generalized_Γ (jenv_key.Var x) jenv_mode.Normal ϕ
-        }
+//    member M.bind_generalized_var_Γ x ϕ =
+//        M {
+//            return! M.bind_generalized_Γ (jenv_key.Var x) jenv_mode.Normal ϕ
+//        }
 
     member M.bind_ungeneralized_Γ jk jm (t : ty) =
         M {
@@ -391,20 +391,26 @@ type type_inference_builder (loc, ctx) =
         M {           
             let! αs = M.get_ungeneralizable_vars
             match ϕ with
-            | FxU0_ForallsQ (Q, _) -> assert (Set.intersect Q.dom αs).IsEmpty   // no quantified vars must be ungeneralizable
+            | FxU0_ForallsQ (Q, _) -> assert (Set.intersect Q.dom αs).IsEmpty   // no quantified vars must be among the ungeneralizables
             | FxU0_Bottom _        -> ()                                        // TODOL: is there something to check with kind vars?
             assert ϕ.fv.IsSubsetOf αs                                           // dual check: free vars must be among the ungeneralizable ones
-            let! Q = M.get_Q
             for α in Set.intersect ϕ.fv αs do
-                Report.Hint.scoped_tyvar_was_not_generalized loc α
+                Report.Hint.scoped_tyvar_wont_be_generalized loc α
             let! cs = M.get_constraints
             return! M.bind_Γ jk { mode = jm; scheme = { constraints = cs; fxty = ϕ } }
         }
 
     member M.auto_geneneralize (t : ty) =
         M {
-            let! Γ = M.get_Γ
-            return t.auto_generalize loc Γ
+            let! ungeneralizables = M.get_ungeneralizable_vars
+            let αs = t.fv - ungeneralizables
+            let t' =
+                if t.is_unquantified then T_Foralls (Set.toList αs, t)
+                else
+                    if not αs.IsEmpty then Report.Warn.unquantified_variables_in_type loc t
+                    t
+            do! M.lift_scoped_vars (fun αs -> αs - t'.fv)  // remove quantified vars from scoped vars, as if a Te_Forall was evaluated
+            return t'
         }
 
     member M.extend_fresh_star =
@@ -431,7 +437,7 @@ type type_inference_builder (loc, ctx) =
 
     member M.instantiate_and_inherit_constraints (σ : tscheme) =
         M {            
-            let σ = σ.instantiate
+            let σ = σ.instantiated
             do! M.add_constraints σ.constraints
             return σ
         }

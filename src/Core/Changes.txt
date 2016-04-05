@@ -1,4 +1,12 @@
-﻿
+﻿4-5/4/2016:
+* FIX: some fixes in typing annotations at binding site
+* REFACT: AST annotation subsystem is under redesign
+* REFACT: factories for lambdas have been polished
+* REFACT: various renamings and refactors in AST
+* REFACT: qbinding record type has been extended to support return type annotations and rec bindings alike; rec_qbinding does not exist anymore
+* UP: let bindings support
+
+
 2/4/2016:
 * UP: all annotations, except let rec bindings, are now flex types
 * FIX: annotated lambda parameters are syntactically patt_app_atoms, which means flex types are accepted by the parser: F-type check is done at typing-time

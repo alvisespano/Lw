@@ -86,8 +86,8 @@ let rec vars_in_decl (d : decl) =
     in
         B {
             match d.value with
-            | D_Bind bs     -> for b in bs do yield! vars_in_patt b.patt
-            | D_Rec bs      -> yield! pars bs
+            | D_Let bs     -> for b in bs do yield! vars_in_patt b.patt
+            | D_LetRec bs      -> yield! pars bs
             | D_Type bs     -> yield! pars bs
             | D_Kind bs     -> yield! ids bs
             | D_Overload bs -> yield! ids bs
@@ -134,7 +134,7 @@ type ty with
         in
             S t
 
-    member t.instantiate = t.instantiate_wrt t.fv
+    member t.instantiated = t.instantiate_wrt t.fv
 
     member t.nf =
         match t with
@@ -234,27 +234,11 @@ type tscheme with
         in
             cs.fv + t.fv
 
-    member σ.instantiate = σ    // TODOH: there must be something to do with constraints and quantified variables
+    member σ.instantiated = σ    // TODOH: there must be something to do with constraints and quantified variables
 
 let internal fv_env fv (env : Env.t<_, _>) = env.fold (fun αs _ v -> Set.union αs (fv v)) Set.empty
 
 let fv_Γ (Γ : jenv) = fv_env (fun { scheme = σ } -> σ.fv) Γ
-
-type ty with
-    member t.auto_generalize loc Γ =
-        let αs = t.fv - fv_Γ Γ
-        if t.is_unquantified then T_Foralls (Set.toList αs, t)
-        else
-            if not αs.IsEmpty then Report.Warn.unquantified_variables_in_type loc t
-            t
-
-//type fxty with
-//    member ϕ.auto_generalize loc Γ =
-//        let αs = ϕ.fv - fv_Γ Γ
-//        if ϕ.is_unquantified then T_Foralls (Set.toList αs, ϕ)
-//        else
-//            if not αs.IsEmpty then Report.Warn.unquantified_variables_in_type loc ϕ
-//            ϕ
 
 
 // operations over kinds
@@ -263,7 +247,7 @@ type ty with
 let fv_γ (γ : kjenv) = fv_env (fun (kσ : kscheme) -> kσ.fv) γ
 
 type kscheme with
-    member this.instantiate =
+    member this.instantiated =
         let { forall = αs; kind = k } = this
         let kθ = new ksubst (Env.t.B { for α in αs do yield α, K_Var α.refresh })
         in

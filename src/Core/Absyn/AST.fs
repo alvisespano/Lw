@@ -25,26 +25,44 @@ open Lw.Core.Absyn.Sugar
 //
 
 let pretty_and_bindings bs = flatten_stringables "\nand " bs
+//
+//type [< NoEquality; NoComparison >] qbinding<'q, 'p, 'e, 'a> = { qual : 'q; patt : node<'p, 'a>; expr : node<'e, 'a> }
+//with
+//    override this.ToString () = this.pretty
+//    member this.pretty = sprintf "%O%O = %O" this.qual this.patt this.expr
+//
+//type [< NoComparison; NoEquality >] rec_qbinding<'q, 'par, 'e, 'a when 'e :> annotable> = { qual : 'q; par : 'par id_param; expr : node<'e, 'a> }
+//with
+//    override this.ToString () = this.pretty
+//    member this.pretty = sprintf "%O%O = %O" this.qual (pretty_param this.expr.value.annot_sep this.par) this.expr
 
-type [< NoEquality; NoComparison >] qbinding<'q, 'p, 'e, 'a> = { qual : 'q; patt : node<'p, 'a>; expr : node<'e, 'a> }
+
+type [< NoEquality; NoComparison >] qbinding_form<'p, 't when 't :> annotation> =
+    | B_Patt of 'p
+    | B_Simple of 't annotated_ident
 with
     override this.ToString () = this.pretty
-    member this.pretty = sprintf "%O%O = %O" this.qual this.patt this.expr
+    member this.pretty =
+        match this with
+        | B_Patt p     -> sprintf "%O" p
+        | B_Simple par -> pretty_annotated par
 
-type [< NoComparison; NoEquality >] rec_qbinding<'q, 'par, 'e, 'a when 'e :> annotable> = { qual : 'q; par : 'par id_param; expr : node<'e, 'a> }
+type [< NoEquality; NoComparison >] qbinding<'q, 'p, 't, 'e, 'a when 't :> annotation> = { qual : 'q; form : qbinding_form<'p, 't>; (*result : node<'t, 'a> option;*) expr : node<'e, 'a> }
 with
     override this.ToString () = this.pretty
-    member this.pretty = sprintf "%O%O = %O" this.qual (pretty_param this.expr.value.annot_sep this.par) this.expr
+    member this.pretty = sprintf "%O%O = %O" this.qual this.form this.expr
+
+//type rec_qbinding<'q, 'p, 't, 'e, 'a when 't :> annotable> = qbinding<'q, 'p, 't, 'e, 'a>
 
 type [< NoComparison; NoEquality >] kind_binding = { id : ident; pars : var list; kind : kind }
 with
     override this.ToString () = this.pretty
     member this.pretty = sprintf "%s%s = %O" this.id (soprintf " (%s)" (match this.pars with [] -> None | αs -> Some (flatten_stringables ", " αs))) this.kind
 
-type [< NoComparison; NoEquality >] signature_binding<'e, 'a when 'e :> annotable> = { id : ident; signature : node<'e, 'a> }
+type [< NoComparison; NoEquality >] signature_binding<'e, 'a when 'e :> annotation> = { id : ident; signature : node<'e, 'a> }
 with
     override this.ToString () = this.pretty
-    member this.pretty = sprintf "%O %s %O" this.id this.signature.value.annot_sep this.signature
+    member this.pretty = sprintf "%O %s %O" this.id this.signature.value.annotation_sep this.signature
 
 type [< NoComparison; NoEquality >] case<'p, 'e, 't > = node<'p, 't> * node<'e, 't> option * node<'e, 't>
 
@@ -79,8 +97,8 @@ type [< NoComparison; NoEquality >] ty_upatt =
     | Tp_Wildcard
     | Tp_Row of (ident * ty_patt) list * ty_patt option
 with
-    interface annotable with
-        member __.annot_sep = Config.Printing.kind_annotation_sep
+    interface annotation with
+        member __.annotation_sep = Config.Printing.kind_annotation_sep
 
 and [< NoComparison; NoEquality >] ty_uexpr =
     | Te_Var of ident
@@ -94,32 +112,30 @@ and [< NoComparison; NoEquality >] ty_uexpr =
     | Te_Row of (ident * ty_expr) list * ty_expr option
     | Te_Forall of kinded_param * ty_expr
 with
-    interface annotable with
-        member __.annot_sep = Config.Printing.kind_annotation_sep
+    interface annotation with
+        member __.annotation_sep = Config.Printing.kind_annotation_sep
 
 and [< NoComparison; NoEquality >] fxty_uexpr =
     | Fxe_Bottom of kind option
     | Fxe_Forall of (kinded_param * fxty_expr option) * fxty_expr
     | Fxe_F_Ty of ty_expr
 with
-    interface annotable with
-        member __.annot_sep = Config.Printing.kind_annotation_sep
+    interface annotation with
+        member __.annotation_sep = Config.Printing.kind_annotation_sep
 
 and [< NoComparison; NoEquality >] ty_udecl =
     | Td_Bind of ty_binding list
-    | Td_Rec of ty_rec_binding list
+    | Td_Rec of ty_binding list
     | Td_Kind of kind_binding list
 
-and ty_binding = qbinding<ty_decl_qual, ty_upatt, ty_uexpr, kind>
-and ty_rec_binding = rec_qbinding<ty_decl_qual, kind, ty_uexpr, kind>
+and ty_binding = qbinding<ty_decl_qual, ty_upatt, kind, ty_uexpr, kind>
+//and ty_rec_binding = rec_qbinding<ty_decl_qual, ty_upatt, kind, ty_uexpr, kind>
 
 and ty_expr = node<ty_uexpr, kind>
 and fxty_expr = node<fxty_uexpr, kind>
 and ty_patt = node<ty_upatt, kind>
 and ty_decl = node<ty_udecl, kind>
 and ty_case = case<ty_upatt, ty_uexpr, kind>
-
-and typed_param = fxty_expr id_param
 
 let private Te_Primitive name = Te_Cons name
 let Te_Unit = Te_Primitive Config.Typing.Names.Type.unit
@@ -151,7 +167,7 @@ let Te_Record, Te_Variant, Te_Tuple, (|Te_Record|_|), (|Te_Variant|_|), (|Te_Tup
     in
         make_rows Te_Rowed (|Te_Rowed|_|)
 
-let Te_LambdaFunction = make_lambda_function Te_Lambda Te_Match Te_Cons
+let Te_LambdaFunction = make_lambda_with_cases Te_Lambda Te_Match Te_Cons
 
 let Tp_Apps, (|Tp_Apps1|), (|Tp_Apps|_|) = nodify make_apps_by Tp_App (function Tp_App (τ1, τ2) -> Some (τ1, τ2) | _ -> None)
 let Tp_Arrow, (|Tp_Arrow|_|) = let A = Config.Typing.Names.Type.arrow in make_arrow_by_apps (ULo (Tp_Cons A)) Tp_Apps (function ULo (Tp_Cons x) when x = A -> Some () | _ -> None) (|Tp_Apps|_|)
@@ -179,9 +195,9 @@ let Te_LambdaFun =
         | _ -> None
     let (|P_Custom|_|) _ _ _ = None
     in
-        make_lambdas (|P_Annot|_|) (|Tp_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) Te_Lambda Te_LambdaFunction
+        make_lambda_with_multiple_curried_args (|P_Annot|_|) (|Tp_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) Te_Lambda Te_LambdaFunction
 
-let Te_LambdaCases x = make_lambda_cases Te_LambdaFun Tp_Var Te_Cons Te_Match Te_Tuple Tp_Tuple  x
+let Te_LambdaCases x = make_lambda_with_curried_cases Te_LambdaFun Tp_Var Te_Cons Te_Match Te_Tuple Tp_Tuple  x
 
 let Te_Lets x = make_lets Te_Let x
 
@@ -242,22 +258,22 @@ type ty_uexpr with
             | Te_Arrow (t1, t2)                     -> sprintf "%O -> %O" t1 t2
 
             | Te_App (App s)           -> s
-            | Te_Lambda (kpar, τ)      -> sprintf "fun %s -> %O" (pretty_param Config.Printing.kind_annotation_sep kpar) τ
+            | Te_Lambda (kpar, τ)      -> sprintf "fun %s -> %O" (pretty_annotated kpar) τ
             | Te_Annot (e, ty)         -> sprintf "(%O : %O)" e ty
             | Te_Let (d, e)            -> sprintf "let %O in %O" d e
             | Te_Match (e, cases)      -> sprintf "match %O with\n| %s" e (pretty_cases cases)
             | Te_Row (bs, o)           -> sprintf "(| %s |)" (pretty_row " | " Config.Printing.type_annotation_sep (bs, o))
-            | Te_Forall ((x, ko), τ2)  -> sprintf "forall %s. %O" (pretty_param Config.Printing.kind_annotation_sep (x, ko)) τ2
+            | Te_Forall ((x, ko), τ2)  -> sprintf "forall %s. %O" (pretty_annotated (x, ko)) τ2
 
 type fxty_uexpr with
     override this.ToString () = this.pretty
 
     member this.pretty =
         match this with
-            | Fxe_Bottom ko                       -> pretty_param Config.Printing.kind_annotation_sep (Config.Printing.dynamic.bottom, ko)
+            | Fxe_Bottom ko                       -> pretty_annotated (Config.Printing.dynamic.bottom, ko)
             | Fxe_F_Ty τ                          -> τ.pretty
-            | Fxe_Forall (((x, ko), None), τ2)    -> sprintf "%s %s. %O" Config.Printing.dynamic.flex_forall (pretty_param Config.Printing.kind_annotation_sep (x, ko)) τ2
-            | Fxe_Forall (((x, ko), Some τ1), τ2) -> sprintf "%s (%s >= %O). %O" Config.Printing.dynamic.flex_forall (pretty_param Config.Printing.kind_annotation_sep (x, ko)) τ1 τ2
+            | Fxe_Forall (((x, ko), None), τ2)    -> sprintf "%s %s. %O" Config.Printing.dynamic.flex_forall (pretty_annotated (x, ko)) τ2
+            | Fxe_Forall (((x, ko), Some τ1), τ2) -> sprintf "%s (%s >= %O). %O" Config.Printing.dynamic.flex_forall (pretty_annotated (x, ko)) τ1 τ2
 
 type ty_udecl with
     override this.ToString () = this.pretty
@@ -353,7 +369,7 @@ type [< NoComparison; NoEquality >] uexpr =
     | PolyCons of ident
     | Loosen of expr
     | Record of (ident * expr) list * expr option
-    | Lambda of typed_param * expr
+    | Lambda of ty_expr annotated_ident * expr
     | If of expr * expr * expr
     | App of (expr * expr)
     | Let of decl * expr
@@ -366,19 +382,19 @@ type [< NoComparison; NoEquality >] uexpr =
     | Solve of expr * ty_expr
     | Inject of expr
     | Eject of expr
-with
-    interface annotable with
-        member __.annot_sep = Config.Printing.type_annotation_sep
+//with
+//    interface annotable with
+//        member __.annot_sep = Config.Printing.type_annotation_sep
  
-and binding = qbinding<decl_qual, upatt, uexpr, unit>
-and rec_binding = rec_qbinding<decl_qual, ty_expr, uexpr, unit>
+and binding = qbinding<decl_qual, upatt, ty_uexpr, uexpr, unit>
+//and rec_binding = rec_qbinding<decl_qual, ty_expr, uexpr, unit>
 and overload_binding = signature_binding<ty_uexpr, kind>
 and [< NoComparison; NoEquality >] datatype_binding = { id : ident; kind : kind; datacons : signature_binding<ty_uexpr, kind> list }
 
 and [< NoComparison; NoEquality >] udecl =
-    | D_Bind of binding list
-    | D_Rec of rec_binding list
-    | D_Type of ty_rec_binding list
+    | D_Let of binding list
+    | D_LetRec of binding list
+    | D_Type of ty_binding list
     | D_Kind of kind_binding list
     | D_Overload of overload_binding list
     | D_Open of decl_qual * expr
@@ -419,9 +435,9 @@ let P_List_Nil = P_Cons N.Data.list_nil
 let P_List_Cons (p1, p2) = P_Apps [ULo (P_Cons N.Data.list_cons); p1; p2]
 let P_List_Seq (ps : patt list) = List.foldBack (fun p z -> P_List_Cons (p, Lo p.loc z)) ps P_List_Nil
 
-let LambdaFunction = make_lambda_function Lambda Match Id
+let LambdaCases = make_lambda_with_cases Lambda Match Id
 
-let LambdaFun =
+let LambdaCurriedArgs =
     let (|P_Annot|_|) = function
         | P_Annot (x, τ) -> Some (x, τ)
         | _ -> None
@@ -437,15 +453,15 @@ let LambdaFun =
         | P_Lit lit.Unit -> Some (Lambda ((fresh_reserved_id (), Some (L <| Fxe_F_Ty (L <| Te_Unit))), e))
         | _ -> None
     in
-        make_lambdas (|P_Annot|_|) (|P_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) Lambda LambdaFunction
+        make_lambda_with_multiple_curried_args (|P_Annot|_|) (|P_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) Lambda LambdaCases
           
-let LambdaCases x = make_lambda_cases LambdaFun P_Var Id Match Tuple P_Tuple x
+let LambdaCurriedCases x = make_lambda_with_curried_cases LambdaCurriedArgs P_Var Id Match Tuple P_Tuple x
             
 let RecLambda ((x, t), cases) =
-    let e = LambdaCases cases
+    let e = LambdaCurriedCases cases
     let L x = Lo (let _, _, e = cases.[0] in e.loc) x
     in
-        L <| Let (L <| D_Rec [{ qual = decl_qual.none; par = (x, t); expr = e }], L <| Id x)
+        L <| Let (L <| D_LetRec [{ qual = decl_qual.none; form = B_Simple (x, t); expr = e }], L <| Id x)
 
 let Lets x = make_lets Let x
 
@@ -477,7 +493,7 @@ type uexpr with
             | FreeVar x             -> sprintf Config.Printing.freevar_fmt x
             | PolyCons x            -> sprintf Config.Printing.polycons_fmt x
             | App (A s)             -> s
-            | Lambda (tpar, e)      -> sprintf "fun %s -> %O" (pretty_param Config.Printing.type_annotation_sep tpar) e
+            | Lambda (tann, e)      -> sprintf "fun %s -> %O" (pretty_annotated tann) e
             | Select (e, id)        -> sprintf "%O.%s" e id
             | Restrict (e, id)      -> sprintf "%O \\ %s" e id
             | If (e1, e2, e3)       -> sprintf "if %O then %O else %O" e1 e2 e3
@@ -502,14 +518,14 @@ type udecl with
         match this with
             | D_Type []
             | D_Kind []
-            | D_Bind []
-            | D_Rec []
+            | D_Let []
+            | D_LetRec []
             | D_Overload []
             | D_Reserved_Multi [] -> unexpected "empty declaration list" __SOURCE_FILE__ __LINE__
             | D_Type bs           -> sprintf "type %s" (pretty_and_bindings bs)
             | D_Kind bs           -> sprintf "kind %s" (pretty_and_bindings bs)
-            | D_Bind bs           -> sprintf "let %s" (pretty_and_bindings bs)
-            | D_Rec bs            -> sprintf "let rec %s" (pretty_and_bindings bs)
+            | D_Let bs           -> sprintf "let %s" (pretty_and_bindings bs)
+            | D_LetRec bs            -> sprintf "let rec %s" (pretty_and_bindings bs)
             | D_Overload bs       -> sprintf "overload %s" (pretty_and_bindings bs)
             | D_Open (q, e)       -> sprintf "open %O%O" q e
             | D_Datatype dt       -> sprintf "datatype %s :: %O with %s" dt.id dt.kind (flatten_stringables " | " dt.datacons)
