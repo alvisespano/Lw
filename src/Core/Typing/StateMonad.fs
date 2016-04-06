@@ -454,7 +454,7 @@ type type_inference_builder (loc, ctx) =
 // specialized monad for translation while inferring types
 //
 
-type translatable_type_inference_builder<'e> (e : node<'e, unit>, ctx) =
+type translatable_type_inference_builder<'e> (e : node<'e>, ctx) =
     inherit type_inference_builder (e.loc, ctx)
     member val current_node = e
     member __.translate
@@ -468,7 +468,7 @@ type translatable_type_inference_builder<'e> (e : node<'e, unit>, ctx) =
 // specialized monad for type evaluation
 //
 
-type type_eval_builder<'e> (τ : node<'e, kind>) =
+type type_eval_builder<'e> (τ : node<'e>) =
     inherit basic_builder (τ.loc)
 
     member M.search_δ x =
@@ -497,7 +497,7 @@ type type_eval_builder<'e> (τ : node<'e, kind>) =
 //
 
 // yield decorates node
-type kind_inference_builder<'e> (τ : node<'e, kind>, ctx) =
+type kind_inference_builder<'e> (τ : node<'e>, ctx) =
     inherit inference_builder (τ.loc, ctx)
 
     member M.Yield (k : kind) =

@@ -34,7 +34,7 @@ let vars_in_term (|Var|Leaf|Nodes|) =
                     let xs = Set.intersect set set'
                     in
                         if Set.isEmpty xs then Set.union set set'
-                        else Report.Error.variables_already_bound_in_pattern (p : node<_, _>).loc xs p0)
+                        else Report.Error.variables_already_bound_in_pattern (p : node<_>).loc xs p0)
                 Set.empty ps
     in
         R
@@ -81,14 +81,13 @@ let vars_in_ty_patt : ty_patt -> _ =
 
 let rec vars_in_decl (d : decl) =
     let B = Computation.B.set
-    let pars bs = B { for b in bs do let x, _ = b.par in yield x }
     let inline ids bs = B { for b in bs do yield (^x : (member id : ident) b) }
     in
         B {
             match d.value with
-            | D_Let bs     -> for b in bs do yield! vars_in_patt b.patt
-            | D_LetRec bs      -> yield! pars bs
-            | D_Type bs     -> yield! pars bs
+            | D_Bind bs     
+            | D_RecBind bs  -> for b in bs do yield! vars_in_patt b.patt
+            | D_Type bs     -> for b in bs do yield! vars_in_ty_patt b.patt
             | D_Kind bs     -> yield! ids bs
             | D_Overload bs -> yield! ids bs
             | D_Open _      -> ()

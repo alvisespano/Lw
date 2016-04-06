@@ -1,4 +1,9 @@
-﻿4-5/4/2016:
+﻿
+6/4/2016:
+* REFACT: big refactor of AST, annotations, cases, patterns and so on
+
+
+4-5/4/2016:
 * FIX: some fixes in typing annotations at binding site
 * REFACT: AST annotation subsystem is under redesign
 * REFACT: factories for lambdas have been polished

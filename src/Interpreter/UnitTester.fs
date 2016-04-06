@@ -270,8 +270,8 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
             | parsed.Decl d ->
                 tchk.W_decl d
                 match d.value with
-                | D_Rec [{ par = x, _ }]
-                | D_Bind [{ patt = ULo (P_Var x) | ULo (P_Annot (ULo (P_Var x), _)) }] ->
+                | D_LetRec [{ par = x, _ }]
+                | D_Let [{ patt = ULo (P_Var x) | ULo (P_Annot (ULo (P_Var x), _)) }] ->
                     let envs0 = tchk.envs
                     let r = tchk.lookup_var_Γ x
                     if ed.is_enabled flag.RemoveBindings then

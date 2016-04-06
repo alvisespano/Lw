@@ -99,15 +99,7 @@ type kind with
 
     static member fresh_var = K_Var var.fresh
 
-type kinded_param = kind annotated_ident
+type kind_annotated = kind annotated_ident
 
-type kinded_var_param = annotated<var, kind>
+let pretty_kind_annotated (x, ko : kind option) = pretty_annotated Config.Printing.kind_annotation_sep (x, ko)
 
-let pretty_row sep binder = function
-    | [], Some x -> sprintf "%O :: %O" x K_Row
-    | xes, xo ->
-        let s = mappen_strings (fun (x, e) -> sprintf "%s %s %O" x binder e) sep xes
-        in
-            match xo with
-                | None   -> s
-                | Some x -> sprintf "%s | %O" s x

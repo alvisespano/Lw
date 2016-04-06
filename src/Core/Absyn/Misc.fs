@@ -38,12 +38,15 @@ let (|Sym|_|) (|Id|_|) = function
 // nodes and located stuff
 //
 
+type annotation =
+    abstract annotation_sep : string
+
 type 'a translated = Translated of 'a
 with
     override this.ToString () = match this with Translated x -> x.ToString ()
 
-type [< NoEquality; NoComparison >] node<'a, 't> (value : 'a, ?loc : location) =
-    let mutable _typed : 't option = None
+type [< NoEquality; NoComparison >] node<'a> (value : 'a, ?loc : location) =
+    let mutable _typed : obj option = None
     let mutable _translated : 'a translated option = None
 
     member this.translated
@@ -59,26 +62,40 @@ type [< NoEquality; NoComparison >] node<'a, 't> (value : 'a, ?loc : location) =
     abstract pretty : string
     default this.pretty = sprintf "%O" this.value
     override this.ToString () = this.pretty
-    static member op_Implicit (this : node<'a, 't>) = this.value
+//    static member op_Implicit (this : node<'a>) = this.value
+//    interface annotation with
+//        member this.annotation_sep = this.value.annotation_sep 
 
 
-let Lo loc (x : 'a) = new node<_, _> (x, loc)
-let ULo x = new node<_, _> (x)
-let (|Lo|) (l : node<'a, _>) = l.value, l.loc
+let Lo loc (x : 'a) = new node<_> (x, loc)
+let ULo x = new node<_> (x)
+let (|Lo|) (l : #node<'a>) = l.value, l.loc
 let (|ULo|) = function Lo (x, _) -> x
 
 
 // annotations
 //
 
-type annotation =
-    abstract annotation_sep : string
+//type annotation_node<'a when 'a :> annotation> (value : 'a, ?loc : location) =
+//    inherit node<'a> (value, ?loc = loc)
+//    interface annotation with
+//        member this.annotation_sep = this.value.annotation_sep 
 
-type annotated<'id, 'n when 'n :> annotation>  = 'id * 'n option
+//type annotated<'id, 'n when 'n :> annotation>  = 'id * option<'n>
+//
+//type annotated_ident<'n when 'n :> annotation> = annotated<ident, 'n>
+//
+//let pretty_annotated (id, tyo) =
+//    match tyo with
+//    | None   -> sprintf "%O" id
+//    | Some t -> sprintf "(%O %s %O)" id (t :> annotation).annotation_sep t
 
-type annotated_ident<'n when 'n :> annotation> = annotated<ident, 'n>
 
-let pretty_annotated (id, tyo) =
+type annotated<'id, 'n>  = 'id * option<'n>
+
+type annotated_ident<'n> = annotated<ident, 'n>
+
+let pretty_annotated sep (id, tyo) =
     match tyo with
     | None   -> sprintf "%O" id
-    | Some t -> sprintf "(%O %s %O)" id (t :> annotation).annotation_sep t
+    | Some t -> sprintf "(%O %s %O)" id sep t

@@ -201,18 +201,13 @@ type nonTerminalId =
     | NONTERM_let_or_letrec_decl
     | NONTERM_let_or_letrec_decl_
     | NONTERM_let_and_bindings
-    | NONTERM_letrec_and_bindings
     | NONTERM_over_and_bindings
     | NONTERM_ty_expr_and_bindings
-    | NONTERM_ty_expr_rec_and_bindings
     | NONTERM_kind_and_bindings
-    | NONTERM_let_qbinding
-    | NONTERM_letrec_qbinding
     | NONTERM_let_binding
-    | NONTERM_letrec_binding
+    | NONTERM_let_binding_no_qual
     | NONTERM_over_binding
     | NONTERM_ty_expr_binding
-    | NONTERM_ty_expr_rec_binding
     | NONTERM_kind_binding
     | NONTERM_kind_params
     | NONTERM_fun_patt_param
@@ -225,9 +220,8 @@ type nonTerminalId =
     | NONTERM_ty_fun_param_cases
     | NONTERM_ty_fun_param_cases_
     | NONTERM_id
-    | NONTERM_ty_param
-    | NONTERM_kinded_param
-    | NONTERM_kind_annotation
+    | NONTERM_type_annotated
+    | NONTERM_kind_annotated
     | NONTERM_kind
     | NONTERM_kind_arrow_atom
     | NONTERM_kind_tuple
@@ -240,8 +234,6 @@ type nonTerminalId =
     | NONTERM_ty_forall_params
     | NONTERM_fxty_expr
     | NONTERM_fxty_expr_
-    | NONTERM_ty_annotation
-    | NONTERM_fxty_annotation
     | NONTERM_ty_expr
     | NONTERM_ty_expr_tuple_atom
     | NONTERM_ty_expr_htuple_atom

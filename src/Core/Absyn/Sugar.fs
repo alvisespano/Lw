@@ -133,8 +133,8 @@ let make_rows rowed ((|Rowed|_|) : ident -> _ -> _) =
 
 // lambda with cases on argument
 
-let make_lambda_with_cases lambda matchh id cases =
-    let loc = let (p : node<_, _>), _, _ = List.head cases in p.loc
+let make_lambda_cases lambda matchh id cases =
+    let loc = let (p : node<_>), _, _ = List.head cases in p.loc
     let L = Lo loc
     let x = fresh_reserved_id ()
     in
@@ -142,10 +142,10 @@ let make_lambda_with_cases lambda matchh id cases =
 
 // lambda with multiples arguments creator
 
-let make_lambda_with_multiple_curried_args (|P_Annot|_|) (|P_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) lambda lambda_with_cases = function
+let make_lambda_curried_args (|P_Annot|_|) (|P_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) lambda lambda_with_cases = function
     | [], _ -> unexpected "empty lambda parameter list" __SOURCE_FILE__ __LINE__
     | ps, e ->
-        List.foldBack (fun (p : node<_, _>) (e : node<_, _>) ->
+        List.foldBack (fun (p : node<_>) (e : node<_>) ->
                 let loc = p.loc
                 let rec f = function
                     | P_Annot (ULo (P_Var x), t) -> Lo loc <| lambda ((x, Some t), e)
@@ -160,23 +160,23 @@ let make_lambda_with_multiple_curried_args (|P_Annot|_|) (|P_Tuple|_|) (|P_Var|_
 
 // lambda with cases over multiple curried arguments
 
-let make_lambda_with_curried_cases lambdas p_var var matchh tuple p_tuple =
+let make_lambda_curried_cases lambdas p_var var matchh tuple p_tuple =
     let tuple = function
-        | [e : node<_, _>] -> e.value
+        | [e : node<_>] -> e.value
         | es  -> tuple es
     let p_tuple = function
-        | [p : node<_, _>] -> p.value
+        | [p : node<_>] -> p.value
         | ps  -> p_tuple ps
     in function
         | [ps, None, e] -> lambdas (ps, e)
-        | (p0 : node<_, _> :: _ as ps0, _, _) :: cases' as cases ->
+        | (p0 : node<_> :: _ as ps0, _, _) :: cases' as cases ->
             let len0 = List.length ps0
             let L0 x = Lo p0.loc x
             for ps, _, _ in cases' do
                 if List.length ps <> len0 then
                     raise (syntax_error (sprintf "number of function parameters expected to be %d across all cases" len0, p0.loc))
             let ids = List.init len0 (fun _ -> fresh_reserved_id ())
-            let pars f = List.mapi (fun i (p : node<_, _>) -> Lo p.loc <| f ids.[i]) ps0
+            let pars f = List.mapi (fun i (p : node<_>) -> Lo p.loc <| f ids.[i]) ps0
             let cases = List.map (fun (ps, weo, e) -> L0 <| p_tuple ps, weo, e) cases
             in
                 lambdas (pars p_var, L0 <| matchh (L0 <| tuple (pars var), cases))
@@ -191,6 +191,6 @@ let make_lets lett (ds, e) = List.foldBack (fun d e -> Lo e.loc <| lett (d, e)) 
 
 let make_rec_lambda lambda_cases lett d_rec var ((x, t), cases) =
     let e = lambda_cases cases
-    let L x = Lo (let _, _, e = List.head cases in (e : node<_, _>).loc) x
+    let L x = Lo (let _, _, e = List.head cases in (e : node<_>).loc) x
     in
         L <| lett (L <| d_rec [(x, t), e], L <| var x)

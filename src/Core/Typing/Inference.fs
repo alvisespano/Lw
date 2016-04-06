@@ -31,7 +31,7 @@ open Lw.Core.Typing.Equivalence
 
 
 type translatable_type_inference_builder<'e> with
-    member M.W_desugared f (e' : node<_, _>) =
+    member M.W_desugared f (e' : node<_>) =
         M {
             L.debug Low "[DESUGAR] %O ~~> %O" M.current_node e'
             let! t = f e'
@@ -108,7 +108,7 @@ let gen_bind ctx prefixes ({ id = x; qual = dq; expr = e0; to_bind = ϕ } as gb)
         Report.prompt ctx (prefixes @ dq.as_tokens) x gb.to_bind (Some (Config.Printing.ftype_instance_of_fxty_sep, gb.inferred))
 
         // translation
-        let e1 = if cs.is_empty then e0 else LambdaFun ([possibly_tuple Lo0 P_CId P_Tuple cs], Lo0 e0.value)
+        let e1 = if cs.is_empty then e0 else LambdaCurriedArgs ([possibly_tuple Lo0 P_CId P_Tuple cs], Lo0 e0.value)
         return jk, e1
     }
 
@@ -512,7 +512,7 @@ and W_expr' ctx (e0 : expr) =
             let e1 =
                 let bs = [ for c in cs -> let xi = c.name in { qual = decl_qual.none; patt = Lo <| P_Var xi; expr = Lo <| Select (Lo <| Id x, xi) } ]
                 in
-                    Let (Lo <| D_Let bs, e)
+                    Let (Lo <| D_Bind bs, e)
             yield! W_desugared_expr (Lo <| Lambda ((x, None), Lo e1))
 
         | Eject e ->
@@ -530,7 +530,7 @@ and W_expr' ctx (e0 : expr) =
             let x = fresh_reserved_id ()
             let e1 = Record ([ for { name = y } in cs -> y, Lo <| Id y ], None)
             let e2 = App (e, Lo <| Id x)
-            yield! W_desugared_expr (Lo <| Let (Lo <| D_Let [{ qual = decl_qual.none; patt = Lo <| P_Var x; expr = Lo e1 }], Lo e2))    // TODO: infer the type of the desugared expression?
+            yield! W_desugared_expr (Lo <| Let (Lo <| D_Bind [{ qual = decl_qual.none; patt = Lo <| P_Var x; expr = Lo e1 }], Lo e2))    // TODO: infer the type of the desugared expression?
 
         | Solve (e, τ) ->
             let! te = W_expr_F ctx e
@@ -565,12 +565,16 @@ and W_expr' ctx (e0 : expr) =
 and W_decl' (ctx : context) (d0 : decl) =
     let M = new translatable_type_inference_builder<_> (d0, ctx)
     let desugar = M.W_desugared (W_decl ctx) 
+    let (|B_Unannot|B_Annot|B_Patt|) = function
+        | ULo (P_Var x)                    -> B_Unannot x
+        | ULo (P_Annot (ULo (P_Var x), τ)) -> B_Annot (x, τ)
+        | p                                -> B_Patt p
     
     M {
         match d0.value with
         | D_Overload []
-        | D_Let []
-        | D_LetRec []
+        | D_Bind []
+        | D_RecBind []
         | D_Reserved_Multi [] ->
             return unexpected "empty declaration list" __SOURCE_FILE__ __LINE__
 
@@ -581,7 +585,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                 let! _ = M.bind_Γ (jenv_key.Var x) { mode = jenv_mode.Overload; scheme = Ungeneralized t }
                 Report.prompt ctx Config.Printing.Prompt.overload_decl_prefixes x t None
 
-        | D_Let bs ->
+        | D_Bind bs ->
             do! M.undo_constraints <| M {
                 // infer type for each binding in the let..and block
                 let! l = M.List.collect (fun ({ patt = p; expr = e } as b) -> M {
@@ -589,10 +593,6 @@ and W_decl' (ctx : context) (d0 : decl) =
                             let! ϕe = W_expr ctx e
                             return! M.undo_Γ <| M {
                                 // TODOL: support return type annotations after parameters like in "let f x y : int = ..."
-                                let (|B_Unannot|B_Annot|B_Patt|) = function
-                                    | ULo (P_Var x)                    -> B_Unannot x
-                                    | ULo (P_Annot (ULo (P_Var x), τ)) -> B_Annot (x, τ)
-                                    | p                                -> B_Patt p
                                 match p with
                                 | B_Unannot x ->
                                     do! resolve_constraints ctx e
@@ -617,31 +617,36 @@ and W_decl' (ctx : context) (d0 : decl) =
                             }
                         }) bs
                 let! bs' = M.List.map (fun gb -> M { let! () = M.set_constraints gb.constraints in return! gen_bind ctx Config.Printing.Prompt.value_decl_prefixes gb }) l
-                M.translate <- D_Let [for jk, e in bs' -> { qual = decl_qual.none; patt = Lo e.loc (P_Jk jk); expr = e }]
+                M.translate <- D_Bind [for jk, e in bs' -> { qual = decl_qual.none; patt = Lo e.loc (P_Jk jk); expr = e }]
             }
 
-        | D_LetRec bs ->
+        | D_RecBind bs ->
             do! M.undo_constraints <| M {
                 let! Q0 = M.get_Q
                 let! l = M.undo_Γ <| M {
                     do! M.clear_constraints
                     // introduce fresh type variables or the annotated type for each rec binding
-                    let! l = M.List.map (fun ({ par = x, τo } as b) -> M {
+                    let! l = M.List.map (fun ({ patt = p } as b) -> M {
+                                let x, τo =
+                                    match p with
+                                    | B_Unannot x       -> x, None
+                                    | B_Annot (x, τ)    -> x, Some τ
+                                    | B_Patt _          -> Report.Error.illegal_letrec_binding p.loc 
                                 let! tx = M {
                                     match τo with
                                     | None -> return ty.fresh_star_var
                                     | Some τ -> 
-                                        let! t, k = Wk_and_eval_ty_expr ctx τ
+                                        let! t, k = Wk_and_eval_ty_expr ctx τ   // UNDONE: generalize annotations over fxty and define a shortcut for when F-types are expected
                                         do! M.kunify τ.loc K_Star k
                                         return t
                                 }
                                 for α in tx.fv do
                                     do! M.extend (α, Fx_Bottom K_Star)
                                 let! _ = M.bind_ungeneralized_var_Γ x tx
-                                return b, tx
+                                return b, x, τo, tx
                             }) bs
                     // infer each rec binding and behave as if they were (LAMBDA) parameters
-                    for { expr = e; par = x, τo }, tx in l do                        
+                    for { expr = e }, x, τo, tx in l do                        
                         let! ϕe = W_expr ctx e
                         let β, tβ = ty.fresh_star_var_and_ty
                         do! M.extend (β, ϕe)
@@ -654,12 +659,12 @@ and W_decl' (ctx : context) (d0 : decl) =
                 // rebind all rec bindings with proper generalization
                 let! Q = M.split_for_gen Q0
                 let! cs = M.get_constraints
-                let! bs' = l |> M.List.map (fun ({ par = x, _ } as b, tx) -> M {
+                let! bs' = l |> M.List.map (fun (b, x, _ , tx) -> M {
                                 let! ϕx = M { yield Q, tx } // same prefix for each rec binding, but normal form will clean up useless quantifications
                                 let ϕ = ϕx.nf
                                 return! gen_bind ctx Config.Printing.Prompt.rec_value_decl_prefixes { expr = b.expr; qual = b.qual; id = x; constraints = cs; inferred = ϕ; to_bind = ϕ }
                             })
-                M.translate <- D_LetRec [for jk, e in bs' -> { qual = decl_qual.none; par = jk.pretty, None; expr = e }]
+                M.translate <- D_RecBind [for jk, e in bs' -> { qual = decl_qual.none; patt = B_Unannot jk.pretty; expr = e }]
             }
 
         | D_Open (q, e) ->
@@ -670,8 +675,8 @@ and W_decl' (ctx : context) (d0 : decl) =
             | T_Record (bs, _) ->
                 let rec_id = fresh_reserved_id ()
                 let sel x = Select (Lo (Id rec_id), x)
-                let d1 = D_Let [{ qual = decl_qual.none; patt = Lo (P_Var rec_id); expr = e }]
-                let d2 = D_Let [ for x, _ in bs -> { qual = q; patt = Lo (P_Var x); expr = Lo (sel x) } ]
+                let d1 = D_Bind [{ qual = decl_qual.none; patt = Lo (P_Var rec_id); expr = e }]
+                let d2 = D_Bind [ for x, _ in bs -> { qual = q; patt = Lo (P_Var x); expr = Lo (sel x) } ]
                 do! desugar (Lo <| D_Reserved_Multi [Lo d1; Lo d2])
                         
             | _ -> return unexpected "non-record type: %O" __SOURCE_FILE__ __LINE__ t
@@ -681,7 +686,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                 do! W_decl ctx d
 
         | D_Type bs ->
-            let d = Lo d0.loc <| Td_Rec bs
+            let d = Lo d0.loc <| Td_RecBind bs
             do! Wk_and_eval_ty_rec_bindings ctx d bs
 
         // TODO: support the alternate datatype declaration syntax, for example:
@@ -692,7 +697,7 @@ and W_decl' (ctx : context) (d0 : decl) =
         //          datatype list : * -> *
         //          data Nil : list 'a
         //          data Cons : 'a -> list 'a -> list 'a
-        | D_Datatype { id = c; kind = kc; datacons = bs } ->
+        | D_Datatype { id = c; kind = kc; dataconss = bs } ->
             let! kσ, _ = M.gen_and_bind_γ c kc
             let! _ = M.bind_δ c (T_Cons (c, kc))
             Report.prompt ctx Config.Printing.Prompt.datatype_decl_prefixes c kσ None
