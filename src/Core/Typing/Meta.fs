@@ -94,7 +94,7 @@ module internal Eval =
                     | _           -> "[E-T]   "
             let! θ = M.get_θ
 //            τ0.typed <- subst_kind θ.k τ0.typed // apply latest subst to each typed node
-            do! M.typed <- subst_kind θ.k τ0.typed // UNDONE: define a method for dealing with node.typed in a typed way; use builder type parameters
+            do! M.kinded <| subst_kind θ.k τ0.typed // UNDONE: define a method for dealing with node.typed in a typed way; use builder type parameters
             let! ϕ = ty_expr' ctx τ0
             L.debug Min "%s %O\n[::k]    %O\n[T*]     %O" rule τ0 τ0.typed ϕ
             return ϕ

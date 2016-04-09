@@ -138,17 +138,17 @@ module Error =
         // TODO: print a better message, just refer to the notion of closed-world overloading, without mentioning constraints
         Et 208 loc "when generalizing symbol `%O : %O` the constraint `%s : %O` has not been resolved and was referring to a closed-world overloaded symbol" x t cx ct
 
-    let inferred_lambda_parameter_is_not_monomorphic loc x t =
-        Et 209 loc "function parameter is used polymorphically without an explicit annotation: %s : %O" x t
+    let inferred_type_is_not_monomoprhic loc what t =
+        Et 209 loc "type inferred for %s is %O, which is not monomorphic: if you intented to use it polymorphically add an explicit annotation" what t
+
+    let annotation_is_flex_but_expected_an_F_type loc (ϕ : fxty) =
+        Et 210 loc "annotated type %O is a flexible type, but a System-F type was expected" ϕ
 
     let skolemized_type_variable_escaped loc tsk =
-        Et 210 loc "skolem type variable %O escaped" tsk
+        Et 211 loc "skolem type variable %O escaped" tsk
 
-    let inferred_rec_definition_is_not_monomorphic loc x t =
-        Et 211 loc "recursive definition is used polymorphically without an explicit annotation: %s : %O" x t
-
-    let annotated_lambda_parameter_is_flex loc x (ϕ : fxty) =
-        Et 212 loc "annotated function parameter %s : %O is a flexible type, but it must be a System-F type" x ϕ
+    let illegal_letrec_binding loc p =
+        Et 212 loc "illegal form of recursive binding: pattern %O" p
 
 
     // pattern-related errors

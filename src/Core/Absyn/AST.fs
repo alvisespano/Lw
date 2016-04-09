@@ -368,6 +368,16 @@ let (|P_ConsApps1|_|) = function
     | _ -> None
 
 
+// let-binding sugars over patterns
+
+let B_Unannot loc x = let Lo = Lo loc in Lo (P_Var x)
+let B_Annot loc (x, τ) = let Lo = Lo loc in Lo (P_Annot (Lo (P_Var x), τ))  // B_Patt constructor is not defined because it'd actually be just a wrapper for any pattern
+
+let (|B_Unannot|B_Annot|B_Patt|) = function
+    | ULo (P_Var x)                    -> B_Unannot x
+    | ULo (P_Annot (ULo (P_Var x), τ)) -> B_Annot (x, τ)
+    | p                                -> B_Patt p
+
 
 
 // expressions and declarations

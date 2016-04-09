@@ -30,7 +30,7 @@ open Lw.Core.Typing.Meta
 open Lw.Core.Typing.Equivalence
 
 
-type translatable_type_inference_builder<'e> with
+type node_type_inference_builder<'e> with
     member M.W_desugared f (e' : node<_>) =
         M {
             L.debug Low "[DESUGAR] %O ~~> %O" M.current_node e'
@@ -63,7 +63,7 @@ let W_lit = function
 let auto_jk decl_qual x (ϕ : fxty) = if decl_qual.over then jenv_key.Inst (x, ϕ.pretty.GetHashCode ()) else jenv_key.Var x
 
 let gen_bind ctx prefixes ({ id = x; qual = dq; expr = e0; to_bind = ϕ } as gb) =
-    let M = new translatable_type_inference_builder<_> (e0, ctx)
+    let M = new node_type_inference_builder<_> (e0, ctx)
     let loc0 = e0.loc
     let Lo0 x = Lo loc0 x
     M {
@@ -113,7 +113,7 @@ let gen_bind ctx prefixes ({ id = x; qual = dq; expr = e0; to_bind = ϕ } as gb)
     }
 
 
-// deal with annotations
+// annotations stuff
 //
 
 let W_fxty_annot ctx loc (ϕann : fxty) (ϕinf : fxty) =
@@ -163,6 +163,22 @@ let W_fxty_expr_annot_in_binding ctx (τ : fxty_expr) (ϕinf : fxty) =
         return! W_fxty_annot ctx loc ϕann ϕinf
     }
 
+let W_F_ty_annotation ctx τo =
+    let M = new type_inference_builder (ctx)
+    M {
+        match τo with
+        | None -> return ty.fresh_star_var
+        | Some τ ->
+            let! ϕ, k = Wk_and_eval_fxty_expr ctx τ
+            do! M.kunify τ.loc K_Star k
+            match ϕ.maybe_ftype with
+            | None   -> return Report.Error.annotation_is_flex_but_expected_an_F_type τ.loc ϕ
+            | Some t -> return t
+    }
+
+let check_monomorphic what loc (τo : fxty_expr option) (tx : ty) =
+    if τo.IsNone && not tx.is_monomorphic then Report.Error.inferred_type_is_not_monomoprhic loc what tx
+
 
 let check_rec_value_restriction ctx loc (t : ty) =
     let M = new type_inference_builder (loc, ctx)
@@ -177,7 +193,7 @@ let check_rec_value_restriction ctx loc (t : ty) =
 //
 
 let rec W_expr (ctx : context) (e0 : expr) =
-    let M = new translatable_type_inference_builder<_> (e0, ctx)
+    let M = new node_type_inference_builder<_> (e0, ctx)
     M {
         L.tabulate 2
         try
@@ -214,7 +230,7 @@ let rec W_expr (ctx : context) (e0 : expr) =
     } 
 
 and W_decl ctx d =
-    let M = new translatable_type_inference_builder<_> (d, ctx)
+    let M = new node_type_inference_builder<_> (d, ctx)
     M {
         L.debug Low "[decl] %O" d
         if ctx.is_top_level then
@@ -274,7 +290,7 @@ and W_patt_F ctx (p0 : patt) =
 
 
 and W_expr_F ctx e0 =
-    let M = new translatable_type_inference_builder< _> (e0, ctx)
+    let M = new node_type_inference_builder< _> (e0, ctx)
     M {
         let! ϕ = W_expr ctx e0
         return ϕ.ftype
@@ -286,7 +302,7 @@ and W_expr_F ctx e0 =
 
 and W_expr' ctx (e0 : expr) =
     let Lo x = Lo e0.loc x
-    let M = new translatable_type_inference_builder< _> (e0, ctx)
+    let M = new node_type_inference_builder< _> (e0, ctx)
     let W_desugared_expr = M.W_desugared (W_expr ctx)
     M {
         match e0.value with
@@ -359,16 +375,7 @@ and W_expr' ctx (e0 : expr) =
 
         | Lambda ((x, τo), e) ->
             let! Q0 = M.get_Q
-            let! tx = M {
-                match τo with
-                | None -> return ty.fresh_star_var
-                | Some τ ->
-                    let! ϕ, k = Wk_and_eval_fxty_expr ctx τ
-                    match ϕ.maybe_ftype with
-                    | None   -> return Report.Error.annotated_lambda_parameter_is_flex τ.loc x ϕ
-                    | Some t -> do! M.kunify τ.loc K_Star k
-                                return t
-            }
+            let! tx = W_F_ty_annotation ctx τo
             // annotated or not, all free vars are added to the prefix
             for α in tx.ftv do
                 do! M.extend (α, Fx_Bottom K_Star)
@@ -377,8 +384,7 @@ and W_expr' ctx (e0 : expr) =
                 return! W_expr ctx e
             }            
             let! tx = M.updated tx
-            // check that the inferred type of parameter is a monotype when no annotation was provided
-            if τo.IsNone && not tx.is_monomorphic then Report.Error.inferred_lambda_parameter_is_not_monomorphic e0.loc x tx
+            check_monomorphic (sprintf "lambda parameter %s" x) e0.loc τo tx
             let β, tβ = ty.fresh_star_var_and_ty
             #if ENABLE_HML_OPTS
             do! M.extend (β, ϕ1)
@@ -563,13 +569,8 @@ and W_expr' ctx (e0 : expr) =
     
 
 and W_decl' (ctx : context) (d0 : decl) =
-    let M = new translatable_type_inference_builder<_> (d0, ctx)
+    let M = new node_type_inference_builder<_> (d0, ctx)
     let desugar = M.W_desugared (W_decl ctx) 
-    let (|B_Unannot|B_Annot|B_Patt|) = function
-        | ULo (P_Var x)                    -> B_Unannot x
-        | ULo (P_Annot (ULo (P_Var x), τ)) -> B_Annot (x, τ)
-        | p                                -> B_Patt p
-    
     M {
         match d0.value with
         | D_Overload []
@@ -631,15 +632,8 @@ and W_decl' (ctx : context) (d0 : decl) =
                                     match p with
                                     | B_Unannot x       -> x, None
                                     | B_Annot (x, τ)    -> x, Some τ
-                                    | B_Patt _          -> Report.Error.illegal_letrec_binding p.loc 
-                                let! tx = M {
-                                    match τo with
-                                    | None -> return ty.fresh_star_var
-                                    | Some τ -> 
-                                        let! t, k = Wk_and_eval_ty_expr ctx τ   // UNDONE: generalize annotations over fxty and define a shortcut for when F-types are expected
-                                        do! M.kunify τ.loc K_Star k
-                                        return t
-                                }
+                                    | B_Patt p          -> Report.Error.illegal_letrec_binding p.loc p
+                                let! tx = W_F_ty_annotation ctx τo
                                 for α in tx.fv do
                                     do! M.extend (α, Fx_Bottom K_Star)
                                 let! _ = M.bind_ungeneralized_var_Γ x tx
@@ -652,7 +646,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                         do! M.extend (β, ϕe)
                         do! M.unify e.loc tx tβ
                         let! tx = M.updated tx
-                        if τo.IsNone && not tx.is_monomorphic then Report.Error.inferred_rec_definition_is_not_monomorphic e.loc x tx
+                        check_monomorphic (sprintf "let-rec binding %s" x) e.loc τo tx
                         do! check_rec_value_restriction ctx e.loc tx
                     return l
                 }
@@ -664,7 +658,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                                 let ϕ = ϕx.nf
                                 return! gen_bind ctx Config.Printing.Prompt.rec_value_decl_prefixes { expr = b.expr; qual = b.qual; id = x; constraints = cs; inferred = ϕ; to_bind = ϕ }
                             })
-                M.translate <- D_RecBind [for jk, e in bs' -> { qual = decl_qual.none; patt = B_Unannot jk.pretty; expr = e }]
+                M.translate <- D_RecBind [for jk, e in bs' -> { qual = decl_qual.none; patt = B_Unannot e.loc jk.pretty; expr = e }]
             }
 
         | D_Open (q, e) ->
