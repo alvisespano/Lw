@@ -24,7 +24,6 @@ open System.Threading
 
 type [< NoComparison; NoEquality >] context = {
     cancellation_token : CancellationToken
-
 }
 with
     static member uncancellable = { cancellation_token = CancellationToken.None }
@@ -169,9 +168,8 @@ and eval_patt ctx Δ p v =
     | P_Var x, v                                            -> Some (Δ.bind x v)
     | P_Or (p1, p2), v                                      -> match R p1 v with None -> R p2 v | Some _ as r -> r
     | P_And (p1, p2), v                                     -> match R p1 v, R p2 v with Some Δ1, Some Δ2 -> Some (Δ1 + Δ2) | _ -> None  
-//    | P_Cons x, V_Cons (x', []) when x = x'                 -> Some Δ   // TODO: this case is probably unneeded because the case below includes this one as well
     | P_Apps1 (ULo (P_Cons x) :: ps), V_Cons (x', vs)
-        when x = x' && List.length ps = List.length vs      -> Some (List.fold2 (fun Δ p v -> either Δ (R (ULo p) v)) Δ (List.map (!>) ps) vs)
+        when x = x' && List.length ps = List.length vs      -> Some (List.fold2 (fun Δ p v -> either Δ (R p v)) Δ ps vs)
     | P_Lit lit, V_Const lit' when lit = lit'               -> Some Δ
     | P_Tuple ps, V_Tuple vs when ps.Length = vs.Length     -> Some (List.fold2 (fun Δ p v -> either Δ (R p v)) Δ ps vs)
     | P_Annot (p, _), v                                     -> R p v
@@ -185,16 +183,17 @@ and eval_patt ctx Δ p v =
 
 and eval_decl ctx Δ0 (d0 : decl) =
     match d0.value with
-    | D_Let bs ->
+    | D_Bind bs ->
         let bs = bs |> List.map (function { patt = ULo (P_Var x); expr = e } -> x, eval_expr ctx Δ0 e
-                                        | { patt = p }                       -> not_implemented "pattern in let-bindings: %O" __SOURCE_FILE__ __LINE__ p)
+                                        | { patt = p }                       -> unexpected_case __SOURCE_FILE__ __LINE__ p)
         in            
             Δ0.binds bs
 
-    | D_LetRec bs ->
+    | D_RecBind bs ->
         let rec Δ' = 
-            List.fold (fun (Δ : venv) { par = (x, _); expr = e } -> Δ.bind x (V_Redux (Config.Interactive.pretty_rec_closure (x, e, Δ),
-                                                                                      fun ctx v -> beta_redux ctx e.loc (eval_expr ctx Δ' e) v)))   // DO NOT CURRY variable 'v' or recursion won't stop
+            List.fold (fun (Δ : venv) -> function
+                    | { patt = ULo (P_Var x); expr = e } -> Δ.bind x (V_Redux (Config.Interactive.pretty_rec_closure (x, e, Δ), fun ctx v -> beta_redux ctx e.loc (eval_expr ctx Δ' e) v)) // DO NOT CURRY variable 'v' or recursion won't stop
+                    | b -> unexpected_case __SOURCE_FILE__ __LINE__ b.patt)
                 Δ0 bs
         in
             Δ'
@@ -202,8 +201,8 @@ and eval_decl ctx Δ0 (d0 : decl) =
     | D_Reserved_Multi ds ->
         List.fold (eval_decl ctx) Δ0 ds
 
-    | D_Datatype { datacons = bs } ->
-        Δ0.binds (List.map (fun (b : signature_binding<_, _>) -> b.id, V_Cons (b.id, [])) bs)
+    | D_Datatype { dataconss = bs } ->
+        Δ0.binds (List.map (fun (b : signature_binding<_>) -> b.id, V_Cons (b.id, [])) bs)
 
     | D_Overload _
     | D_Kind _   
@@ -211,6 +210,7 @@ and eval_decl ctx Δ0 (d0 : decl) =
 
     | D_Open _ -> Report.unexpected_after_translation d0.loc  __SOURCE_FILE__ __LINE__ d0
                 
+
 let eval_prg ctx Δ0 prg =
     let Δ = List.fold (eval_decl ctx) Δ0 prg.decls
     in

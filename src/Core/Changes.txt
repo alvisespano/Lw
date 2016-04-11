@@ -1,4 +1,12 @@
 ﻿
+11/4/2016:
+* FIX: parser reduce/reduce conflicts fixed
+* UP: type function definition now supports co-domain kind annotation, similarly to type annotation of return type in function bindings
+* REFACT: monad builders polished and added methods for annotating inferred kind or type into nodes
+* REFACT: node class now has only 1 type parameter; member 'typed' has now type object and can be freely used for annotating whatever stuff for the price of one dynamic cast
+* UP: both kind inference and type inference now annotate the inferred kind (or type) within the node
+
+
 6/4/2016:
 * REFACT: big refactor of AST, annotations, cases, patterns and so on
 

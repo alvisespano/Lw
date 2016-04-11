@@ -136,7 +136,7 @@ module Builtin =
              [
                 // put native datatypes here
                 { id = T.list; kind = K_Arrows [K_Star; K_Star] // list datatype cannot be parsed and must be defined as a data structure, because constructor names are reserved ids which cannot be lexed
-                  datacons =
+                  dataconss =
                     [
                         { id = D.list_nil; signature = t (sprintf "%s 'a" T.list) }
                         { id = D.list_cons; signature = t (sprintf "'a -> %s 'a -> %s 'a" T.list T.list) }

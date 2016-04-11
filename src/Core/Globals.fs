@@ -38,8 +38,6 @@ type numeric_error (header, msg, code : int, loc) =
 type static_error (header, msg, n, loc) =
     inherit numeric_error (header, msg, n, loc)
     new (msg, n, loc) = new static_error (static_error.error_name, msg, n, loc)
-//    abstract error_name : string with get
-//    default this.error_name with get () = static_error.error_name
     static member error_name = "static error"
 
 type syntax_error (message, loc) =
@@ -52,6 +50,19 @@ type runtime_error (header, message, loc) =
     inherit located_error (header, message, loc)
     new (msg, loc) = new runtime_error (runtime_error.error_name, msg, loc)
     static member error_name = "runtime error"
+
+
+// some global errors
+//
+
+module Report =
+
+    module Error =
+        let private E (loc : location) fmt = throw_formatted (fun msg -> new syntax_error (msg, loc)) fmt
+    
+        let invalid_pattern_in_function_binding loc p =
+            E loc "invalid pattern form for function binding: %O" p
+
 
 
 // log and profiling

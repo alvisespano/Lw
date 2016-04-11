@@ -71,7 +71,7 @@ let private restrict_overloaded x (Γ : jenv) =
 let rec resolve_constraints (ctx : context) e0 =
     let M = new node_type_inference_builder<_> (e0, ctx)
     let loc = e0.loc
-    let L0 x = Lo loc x
+    let Lo0 x = Lo loc x
     M {
         if ctx.resolution <> Res_No then
             let! Γ = M.get_Γ
@@ -94,7 +94,7 @@ let rec resolve_constraints (ctx : context) e0 =
                             let p = P_CId c
                             let e1 = E_Jk candidate.jk
                             let e2 = e0.value
-                            M.translate <- Let (L0 (D_Let [{ qual = decl_qual.none; patt = L0 p; expr = L0 e1 }]), L0 e2)
+                            M.translate <- Let (Lo0 (D_Bind [{ qual = decl_qual.none; patt = Lo0 p; expr = Lo0 e1 }]), Lo0 e2)
                             do! M.add_constraints candidate.constraints
                             if candidate.constraints.exists (fun c' -> x = c'.name && t.is_equivalent c'.ty) then
                                 return Report.Warn.cyclic_constraint loc c t

@@ -84,7 +84,7 @@ let private prompt_inferred_kind, prompt_evaluated_type =
 module internal Eval =
 
     let rec ty_expr (ctx : context) (τ0 : ty_expr) =
-        let M = new type_eval_builder<_> (τ0)
+        let M = new node_kind_inference_builder<_> (τ0, ctx)
         M {            
             let rule =
                     match τ0.value with
@@ -92,21 +92,20 @@ module internal Eval =
                     | Te_App _    -> "(E-TAPP)"
                     | Te_Forall _ -> "(E-TFOR)"
                     | _           -> "[E-T]   "
-            let! θ = M.get_θ
-//            τ0.typed <- subst_kind θ.k τ0.typed // apply latest subst to each typed node
-            do! M.kinded <| subst_kind θ.k τ0.typed // UNDONE: define a method for dealing with node.typed in a typed way; use builder type parameters
-            let! ϕ = ty_expr' ctx τ0
-            L.debug Min "%s %O\n[::k]    %O\n[T*]     %O" rule τ0 τ0.typed ϕ
-            return ϕ
+            let! t = ty_expr' ctx τ0
+            L.debug Min "%s %O\n[::k]    %O\n[T*]     %O" rule τ0 τ0.typed t
+            return t
         } 
 
     and ty_expr' (ctx : context) (τ0 : ty_expr) : M<ty> =
-        let M = new type_eval_builder<_> (τ0)
+        let M = new node_kind_inference_builder<_> (τ0, ctx)
         let R = ty_expr ctx
         M {
-            let k0 = τ0.typed       // this is the kind of the current ty_expr node being evaluated (annotated by previous Wk kind inference algorithm)
-            let! k0 = M.updated k0
+            let! k0 = M.get_kinded       // this is the kind of the current ty_expr node being evaluated (annotated by previous Wk kind inference algorithm)
             match τ0.value with
+            | Te_Wildcard ->
+                return ty.fresh_var k0
+
             | Te_Var x ->
                 let! α = M.search_or_add_scoped_var x
                 return T_Var (α, k0)
@@ -175,8 +174,8 @@ module internal Eval =
                 }
         }
 
-    and ty_bindings (ctx : context) d bs =
-        let M = new type_eval_builder<_> (d)
+    and ty_bindings (ctx : context) d (bs : ty_binding list) =
+        let M = new node_kind_inference_builder<_> (d, ctx)
         M {
             for { patt = p; expr = τ } in bs do
                 let! t = ty_expr ctx τ
@@ -187,21 +186,25 @@ module internal Eval =
                     prompt_evaluated_type x (Δ.lookup x)
         }
 
-    and ty_rec_bindings<'e> (ctx : context) (d : node<'e, _>) bs =
-        let M = new type_eval_builder<_> (d)
+    and ty_rec_bindings<'e> (ctx : context) (d : node<'e>) (bs : ty_binding list) =
+        let M = new node_kind_inference_builder<_> (d, ctx)
         M {
             let! Δ = M.get_δ
+            let! γ = M.get_γ
             let Δr = ref Env.empty
-            Δr := List.fold (fun (Δ : tenv) { par = x, _; expr = τ } ->
-                        let t = T_Closure (x, Δr, τ, τ.typed)
-                        prompt_evaluated_type x t
-                        Δ.bind x t) Δ bs
+            Δr := List.fold (fun (Δ : tenv) -> function
+                        | { patt = ULo (Tp_SimpleVar (x, _)); expr = τ } ->
+                            let t = T_Closure (x, Δr, τ, τ.typed)
+                            prompt_evaluated_type x t
+                            Δ.bind x t
+                        | { patt = p } -> unexpected_case __SOURCE_FILE__ __LINE__ p)
+                    Δ bs
             do! M.set_δ !Δr
         }
 
     // like Wk_ty_decl, this must be defined AFTER the functions it calls
     and ty_decl ctx d =
-        let M = new type_eval_builder<_> (d)
+        let M = new node_kind_inference_builder<_> (d, ctx)
         M {
             match d.value with
             | Td_Bind bs ->
@@ -215,7 +218,7 @@ module internal Eval =
         }
 
     and ty_patt ctx (p : ty_patt) (t : ty) =
-        let M = new type_eval_builder<_> (p)
+        let M = new node_kind_inference_builder<_> (p, ctx)
         let R = ty_patt ctx
         M {
             match p.value, t with
@@ -274,21 +277,19 @@ module internal Eval =
         }
 
     let rec fxty_expr (ctx : context) (ϕτ0 : fxty_expr) =
-        let M = new type_eval_builder<_> (ϕτ0)
+        let M = new node_kind_inference_builder<_> (ϕτ0, ctx)
         M {            
             let rule = "[Fx]"
-            let! θ = M.get_θ
-            ϕτ0.typed <- subst_kind θ.k ϕτ0.typed // apply latest subst to each typed node
             let! ϕ = fxty_expr' ctx ϕτ0
             L.debug Min "%s %O\n[::k]   %O\n[T*]    %O" rule ϕτ0 ϕτ0.typed ϕ
             return ϕ
         } 
 
     and fxty_expr' ctx ϕτ0 =
-        let M = new type_eval_builder<_> (ϕτ0)
+        let M = new node_kind_inference_builder<_> (ϕτ0, ctx)
         let R = fxty_expr ctx
-        let k0 = ϕτ0.typed       // this is the kind of the current ty_expr node being evaluated (annotated by previous Wk kind inference algorithm)
         M {
+            let! k0 = M.get_kinded       // this is the kind of the current ty_expr node being evaluated (annotated by previous Wk kind inference algorithm)
             match ϕτ0.value with
             | Fxe_Bottom _ ->
                 return Fx_Bottom k0
@@ -297,7 +298,7 @@ module internal Eval =
                 let! t = ty_expr ctx τ
                 return Fx_F_Ty t
 
-            | Fxe_Forall (((x, ko), τo1), τ2) ->
+            | Fxe_Forall (((x, _), τo1), τ2) ->
                 let! α = M.search_or_add_scoped_var x
                 let! ϕ2 = R τ2                
                 let! ϕ1 = M {
@@ -317,11 +318,12 @@ module internal Eval =
                 return Fx_Forall ((α, ϕ1), ϕ2)                              
         }
 
+
 // kind inference
 //
 
 let rec Wk_ty_expr (ctx : context) (τ0 : ty_expr) =
-    let M = new kind_inference_builder<_> (τ0, ctx)
+    let M = new node_kind_inference_builder<_> (τ0, ctx)
     M {
         let rule =
                 match τ0.value with
@@ -329,15 +331,19 @@ let rec Wk_ty_expr (ctx : context) (τ0 : ty_expr) =
                 | Te_App _      -> "(K-TAPP)"
                 | _             -> "[K-T]   "
         let! k = Wk_ty_expr' ctx τ0
+        do! M.set_kinded k
         L.debug Min "%s %O\n[::k]   %O" rule τ0 k
         return k
     }
 
 and Wk_ty_expr' (ctx : context) (τ0 : ty_expr) =
-    let M = new kind_inference_builder<_> (τ0, ctx)
+    let M = new node_kind_inference_builder<_> (τ0, ctx)
     let R = Wk_ty_expr ctx
     M {
         match τ0.value with
+        | Te_Wildcard ->
+            yield kind.fresh_var
+
         | Te_Var x ->
             let! o = M.search_γα x
             match o with
@@ -416,7 +422,7 @@ and Wk_ty_expr' (ctx : context) (τ0 : ty_expr) =
 
 // TODO: deal with kindvars scoping; should resemble tyvars scoping, with restriction when generalization occurs etc
 and Wk_ty_bindings (ctx : context) d bs =
-    let M = new kind_inference_builder<_> (d, ctx)
+    let M = new node_kind_inference_builder<_> (d, ctx)
     M {
         let! l = M.List.collect (fun { patt = p; expr = τ } -> M {
                     let! ke = Wk_ty_expr ctx τ
@@ -431,29 +437,33 @@ and Wk_ty_bindings (ctx : context) d bs =
             prompt_inferred_kind ctx Config.Printing.Prompt.type_decl_prefixes x kσ
     }   
 
-and Wk_ty_rec_bindings<'e> (ctx : context) (d : node<'e, kind>) bs =
-    let M = new kind_inference_builder<_> (d, ctx)
+and Wk_ty_rec_bindings<'e> (ctx : context) (d : node<'e>) bs =
+    let M = new node_kind_inference_builder<_> (d, ctx)
     M {
         let! bs = M.undo_γ <| M {
-                for { par = x, ko } in bs do
-                    let kx = either kind.fresh_var ko
-                    do! M.ignore <| M.bind_γ x (KUngeneralized kx)
-                return! M.List.map (fun { par = x, _; expr = τ } -> M {
-                                let! KUngeneralized kx = M.lookup_γ x
+            let! l = M.List.map (fun b -> M {
+                                    match b with
+                                    | { patt = ULo (Tp_SimpleVar (x, ko)); expr = τ } ->
+                                        let kx = either kind.fresh_var ko
+                                        do! M.ignore <| M.bind_γ x (KUngeneralized kx)
+                                        return x, kx, τ
+                                    | _ ->
+                                        return Report.Error.pattern_in_letrec b.patt.loc b.patt
+                                }) bs
+            return! M.List.map (fun (x, kx, τ)-> M {
                                 let! k = Wk_ty_expr ctx τ
                                 do! M.kunify τ.loc kx k
                                 return x, kx
-                        }) bs
-            }
+                        }) l
+        }
         for x, kx in bs do
             let! kσ, _ = M.gen_and_bind_γ x kx
-            // TODO: all type definitions should be implicitly recursive?
             prompt_inferred_kind ctx Config.Printing.Prompt.rec_type_decl_prefixes x kσ
     }
 
 // this function must be defined AFTER the functions it recursively calls, otherwise F# type inference won't make them polymorphic
 and Wk_ty_decl ctx d =
-    let M = new kind_inference_builder<_> (d, ctx)
+    let M = new node_kind_inference_builder<_> (d, ctx)
     M {
         match d.value with
         | Td_Bind bs ->
@@ -467,7 +477,7 @@ and Wk_ty_decl ctx d =
     }
 
 and Wk_ty_patt ctx (p0 : ty_patt) =
-    let K = new kind_inference_builder<_> (p0, ctx)
+    let K = new node_kind_inference_builder<_> (p0, ctx)
     let R = Wk_ty_patt ctx
     K {
         match p0.value with
@@ -534,7 +544,7 @@ and Wk_ty_patt ctx (p0 : ty_patt) =
     }
 
 let rec Wk_fxty_expr ctx ϕτ =
-    let M = new kind_inference_builder<_> (ϕτ, ctx)
+    let M = new node_kind_inference_builder<_> (ϕτ, ctx)
     let R = Wk_fxty_expr ctx
     M {
         match ϕτ.value with
@@ -561,7 +571,7 @@ let rec Wk_fxty_expr ctx ϕτ =
 //
 
 let Wk_and_eval_ty_expr (ctx : context) τ =
-    let M = new kind_inference_builder<_> (τ, ctx)
+    let M = new node_kind_inference_builder<_> (τ, ctx)
     M {
         let! k = Wk_ty_expr ctx τ
         let! t = Eval.ty_expr ctx τ
@@ -569,21 +579,21 @@ let Wk_and_eval_ty_expr (ctx : context) τ =
     }
 
 let Wk_and_eval_ty_bindings (ctx : context) d bs =
-    let M = new kind_inference_builder<_> (d, ctx)
+    let M = new node_kind_inference_builder<_> (d, ctx)
     M {
         do! Wk_ty_bindings ctx d bs
         do! Eval.ty_bindings ctx d bs
     }
 
 let Wk_and_eval_ty_rec_bindings (ctx : context) d bs =
-    let M = new kind_inference_builder<_> (d, ctx)
+    let M = new node_kind_inference_builder<_> (d, ctx)
     M {
         do! Wk_ty_rec_bindings ctx d bs
         do! Eval.ty_rec_bindings ctx d bs
     }
 
 let Wk_and_eval_fxty_expr (ctx : context) τ =
-    let M = new kind_inference_builder<_> (τ, ctx)
+    let M = new node_kind_inference_builder<_> (τ, ctx)
     M {
         let! k = Wk_fxty_expr ctx τ
         let! ϕ = Eval.fxty_expr ctx τ

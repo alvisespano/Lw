@@ -46,29 +46,8 @@ let pretty_row_type sep row = pretty_row sep Config.Printing.type_annotation_sep
 
 let pretty_and_bindings bs = flatten_stringables "\nand " bs
 
-//// used by let and letrecs
-//type [< NoEquality; NoComparison >] qbinding<'q, 'p, 'e when 'p :> annotation and 'e :> annotation> = { qual : 'q; patt : node<'p>; (*result : node<'t, 'a> option;*) expr : node<'e> }
-//with
-//    override this.ToString () = this.pretty
-//    member this.pretty = sprintf "%O%O = %O" this.qual this.patt this.expr
-//
-////type rec_qbinding<'q, 'p, 't, 'e, 'a when 't :> annotable> = qbinding<'q, 'p, 't, 'e, 'a>
-//
-//type [< NoComparison; NoEquality >] kind_binding = { id : ident; pars : var list; kind : kind }
-//with
-//    override this.ToString () = this.pretty
-//    member this.pretty = sprintf "%s%s = %O" this.id (soprintf " (%s)" (match this.pars with [] -> None | αs -> Some (flatten_stringables ", " αs))) this.kind
-//
-//// used by overload bindings
-//type [< NoComparison; NoEquality >] signature_binding<'t when 't :> annotation> = { id : ident; signature : node<'t> }
-//with
-//    override this.ToString () = this.pretty
-//    member this.pretty = sprintf "%O %s %O" this.id this.signature.value.annotation_sep this.signature
-//
-//type [< NoComparison; NoEquality >] case<'p, 'e when 'p :> annotation and 'e :> annotation> = node<'p> * node<'e> option * node<'e>
-
 // used by let and letrecs
-type [< NoEquality; NoComparison >] qbinding<'q, 'p, 'e> = { qual : 'q; patt : node<'p>; (*result : node<'t, 'a> option;*) expr : node<'e> }
+type [< NoEquality; NoComparison >] qbinding<'q, 'p, 'e> = { qual : 'q; patt : node<'p>; expr : node<'e> }
 with
     override this.ToString () = this.pretty
     member this.pretty = sprintf "%O%O = %O" this.qual this.patt this.expr
@@ -210,7 +189,10 @@ let Tp_Record, Tp_Variant, Tp_Tuple, (|Tp_Record|_|), (|Tp_Variant|_|), (|Tp_Tup
     in
         make_rows Tp_Rowed (|Tp_Rowed|_|)
 
-let Te_LambdaCurriedArgs =
+let Tp_AnnotVar, Tp_SimpleVar, (|Tp_AnnotVar|_|), (|Tp_SimpleVar|_|) = make_annot_var_pattern Tp_Var Tp_Annot (function Tp_Var x -> Some x | _ -> None) (function Tp_Annot (a, b) -> Some (a, b) | _ -> None)
+
+
+let Te_LambdaPatts =
     let (|P_Annot|_|) = function
         | Tp_Annot (a, b) -> Some (a, b)
         | _ -> None
@@ -222,9 +204,9 @@ let Te_LambdaCurriedArgs =
         | _ -> None
     let (|P_Custom|_|) _ _ _ = None
     in
-        make_lambda_curried_args (|P_Annot|_|) (|Tp_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) Te_Lambda Te_LambdaCases
+        make_lambda_patts (|P_Annot|_|) (|Tp_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) Te_Lambda Te_LambdaCases
 
-let Te_LambdaCurriedCases cases = make_lambda_curried_cases Te_LambdaCurriedArgs Tp_Var Te_Cons Te_Match Te_Tuple Tp_Tuple cases
+let Te_LambdaCurriedCases cases = make_lambda_curried_cases Te_LambdaPatts Tp_Var Te_Cons Te_Match Te_Tuple Tp_Tuple cases
 
 let Te_Lets x = make_lets Te_Let x
 
@@ -367,16 +349,7 @@ let (|P_ConsApps1|_|) = function
     | P_Apps1 (ULo (P_Cons x) :: ts) -> Some (x, ts)
     | _ -> None
 
-
-// let-binding sugars over patterns
-
-let B_Unannot loc x = let Lo = Lo loc in Lo (P_Var x)
-let B_Annot loc (x, τ) = let Lo = Lo loc in Lo (P_Annot (Lo (P_Var x), τ))  // B_Patt constructor is not defined because it'd actually be just a wrapper for any pattern
-
-let (|B_Unannot|B_Annot|B_Patt|) = function
-    | ULo (P_Var x)                    -> B_Unannot x
-    | ULo (P_Annot (ULo (P_Var x), τ)) -> B_Annot (x, τ)
-    | p                                -> B_Patt p
+let P_AnnotVar, P_SimpleVar, (|P_AnnotVar|_|), (|P_SimpleVar|_|) = make_annot_var_pattern P_Var P_Annot (function P_Var x -> Some x | _ -> None) (function P_Annot (a, b) -> Some (a, b) | _ -> None)
 
 
 
@@ -475,7 +448,7 @@ let P_List_Seq (ps : patt list) = List.foldBack (fun p z -> P_List_Cons (p, Lo p
 
 let LambdaCases (cases : expr_case list) = make_lambda_cases Lambda Match Id cases
 
-let LambdaCurriedArgs =
+let LambdaPatts =
     let (|P_Annot|_|) = function
         | P_Annot (x, τ) -> Some (x, τ)
         | _ -> None
@@ -491,9 +464,9 @@ let LambdaCurriedArgs =
         | P_Lit lit.Unit -> Some (Lambda ((fresh_reserved_id (), Some (L <| Fxe_F_Ty (L <| Te_Unit))), e))
         | _ -> None
     in
-        make_lambda_curried_args (|P_Annot|_|) (|P_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) Lambda LambdaCases
+        make_lambda_patts (|P_Annot|_|) (|P_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) Lambda LambdaCases
           
-let LambdaCurriedCases x = make_lambda_curried_cases LambdaCurriedArgs P_Var Id Match Tuple P_Tuple x
+let LambdaCurriedCases x = make_lambda_curried_cases LambdaPatts P_Var Id Match Tuple P_Tuple x
             
 let RecLambda ((x, τo), cases) =
     let e = LambdaCurriedCases cases
@@ -648,8 +621,21 @@ module Aux =
         in
             f x (Lo loc)
 
-    let return_type_annotated x (args : node<_> list) (τr : ty_expr) =  // τr must be an F-type, not a flex type, because it's a codomain
-        let Lr x = Lo τr.loc x
+    let return_type_annotated (p : patt) (args : patt list) (τr : ty_expr) =  // return type annotation must be an F-type, not a flex type, because it's the last part of a series of arrows
+        let x =
+            match p with
+            | ULo (P_SimpleVar (x, _)) -> x
+            | _                        -> Report.Error.invalid_pattern_in_function_binding p.loc p
+        let Lt x = Lo τr.loc x
+        let Lx = Lo p.loc
         in
-            fun Lx -> Lx <| P_Annot (Lx (P_Var x), Lr (Fxe_F_Ty (Lr (Te_Arrows [for p in args do yield Lo p.loc Te_Wildcard; yield τr]))))
+            Lx <| P_Annot (Lx (P_Var x), Lt (Fxe_F_Ty (Lt (Te_Arrows [for p in args do yield Lo p.loc Te_Wildcard; yield τr]))))
 
+    let return_kind_annotated (p : ty_patt) (args : ty_patt list) (kr : kind) =
+        let x =
+            match p with
+            | ULo (Tp_SimpleVar (x, _)) -> x
+            | _                         -> Report.Error.invalid_pattern_in_function_binding p.loc p
+        let Lx = Lo p.loc
+        in
+            Lx <| Tp_Annot (Lx (Tp_Var x), K_Arrows [for _ in args do yield kind.fresh_var; yield kr])

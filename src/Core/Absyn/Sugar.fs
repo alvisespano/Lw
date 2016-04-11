@@ -142,7 +142,7 @@ let make_lambda_cases lambda matchh id cases =
 
 // lambda with multiples arguments creator
 
-let make_lambda_curried_args (|P_Annot|_|) (|P_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) lambda lambda_with_cases = function
+let make_lambda_patts (|P_Annot|_|) (|P_Tuple|_|) (|P_Var|_|) (|P_Wildcard|_|) (|P_Custom|_|) lambda lambda_with_cases = function
     | [], _ -> unexpected "empty lambda parameter list" __SOURCE_FILE__ __LINE__
     | ps, e ->
         List.foldBack (fun (p : node<_>) (e : node<_>) ->
@@ -171,15 +171,15 @@ let make_lambda_curried_cases lambdas p_var var matchh tuple p_tuple =
         | [ps, None, e] -> lambdas (ps, e)
         | (p0 : node<_> :: _ as ps0, _, _) :: cases' as cases ->
             let len0 = List.length ps0
-            let L0 x = Lo p0.loc x
+            let Lo0 x = Lo p0.loc x
             for ps, _, _ in cases' do
                 if List.length ps <> len0 then
                     raise (syntax_error (sprintf "number of function parameters expected to be %d across all cases" len0, p0.loc))
             let ids = List.init len0 (fun _ -> fresh_reserved_id ())
             let pars f = List.mapi (fun i (p : node<_>) -> Lo p.loc <| f ids.[i]) ps0
-            let cases = List.map (fun (ps, weo, e) -> L0 <| p_tuple ps, weo, e) cases
+            let cases = List.map (fun (ps, weo, e) -> Lo0 <| p_tuple ps, weo, e) cases
             in
-                lambdas (pars p_var, L0 <| matchh (L0 <| tuple (pars var), cases))
+                lambdas (pars p_var, Lo0 <| matchh (Lo0 <| tuple (pars var), cases))
 
         | l -> unexpected "ill-formed lambda case list: %O" __SOURCE_FILE__ __LINE__ l
 
@@ -195,4 +195,19 @@ let make_rec_lambda lambda_cases lett d_rec var ((x, t), cases) =
     in
         L <| lett (L <| d_rec [(x, t), e], L <| var x)
 
+// annotated variable patterns (useful for detecting simple let or let-rec bindings)
 
+let make_annot_var_pattern p_var p_annot (|P_Var|_|) (|P_Annot|_|) =
+    let P_AnnotVar (x, τ) = p_annot (ULo (p_var x), τ)
+    let P_SimpleVar = function
+        | x, None   -> p_var x
+        | x, Some τ -> P_AnnotVar (x, τ)
+    let (|P_AnnotVar|_|) = function
+        | P_Annot (ULo (P_Var x), τ) -> Some (x, τ)
+        | _ -> None
+    let (|P_SimpleVar|_|) = function
+        | P_Var x           -> Some (x, None)
+        | P_AnnotVar (x, τ) -> Some (x, Some τ)
+        | _ -> None
+    in
+        P_AnnotVar, P_SimpleVar, (|P_AnnotVar|_|), (|P_SimpleVar|_|)

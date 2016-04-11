@@ -147,8 +147,8 @@ module Error =
     let skolemized_type_variable_escaped loc tsk =
         Et 211 loc "skolem type variable %O escaped" tsk
 
-    let illegal_letrec_binding loc p =
-        Et 212 loc "illegal form of recursive binding: pattern %O" p
+    let illegal_pattern_in_rec_binding loc p =
+        Et 212 loc "illegal pattern form in recursive binding: %O" p
 
 
     // pattern-related errors

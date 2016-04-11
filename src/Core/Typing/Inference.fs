@@ -108,7 +108,7 @@ let gen_bind ctx prefixes ({ id = x; qual = dq; expr = e0; to_bind = ϕ } as gb)
         Report.prompt ctx (prefixes @ dq.as_tokens) x gb.to_bind (Some (Config.Printing.ftype_instance_of_fxty_sep, gb.inferred))
 
         // translation
-        let e1 = if cs.is_empty then e0 else LambdaCurriedArgs ([possibly_tuple Lo0 P_CId P_Tuple cs], Lo0 e0.value)
+        let e1 = if cs.is_empty then e0 else LambdaPatts ([possibly_tuple Lo0 P_CId P_Tuple cs], Lo0 e0.value)
         return jk, e1
     }
 
@@ -593,20 +593,18 @@ and W_decl' (ctx : context) (d0 : decl) =
                             do! M.clear_constraints     // TODOH: probably there's a relation between constraints to keep and the free vars in Γ
                             let! ϕe = W_expr ctx e
                             return! M.undo_Γ <| M {
-                                // TODOL: support return type annotations after parameters like in "let f x y : int = ..."
-                                match p with
-                                | B_Unannot x ->
+                                match p.value with
+                                | P_SimpleVar (x, τo) ->
+                                    let! ϕe' = M {
+                                        match τo with
+                                        | Some τ -> return! W_fxty_expr_annot_in_binding ctx τ ϕe
+                                        | None   -> return ϕe
+                                    }
                                     do! resolve_constraints ctx e
                                     let! cs = M.get_constraints
-                                    return [{ expr = b.expr; qual = b.qual; id = x; constraints = cs; to_bind = ϕe; inferred = ϕe }]     // by default bind the inferred type as a flex type
+                                    return [{ expr = b.expr; qual = b.qual; id = x; constraints = cs; to_bind = ϕe'; inferred = ϕe }]     // by default bind the inferred type as a flex type
 
-                                | B_Annot (x, τ) ->
-                                    let! ϕe' = W_fxty_expr_annot_in_binding ctx τ ϕe
-                                    do! resolve_constraints ctx e
-                                    let! cs = M.get_constraints
-                                    return [{ expr = b.expr; qual = b.qual; id = x; constraints = cs; to_bind = ϕe'; inferred = ϕe }]
-
-                                | B_Patt p ->
+                                | _ ->
                                     let! tp = W_patt_F ctx p
                                     do! M.unify e.loc tp ϕe.ftype                 // HACK: pattern-based let-bindings needs to be written in terms of (LAMBDA) and (APP) rules
                                     do! resolve_constraints ctx e
@@ -629,10 +627,9 @@ and W_decl' (ctx : context) (d0 : decl) =
                     // introduce fresh type variables or the annotated type for each rec binding
                     let! l = M.List.map (fun ({ patt = p } as b) -> M {
                                 let x, τo =
-                                    match p with
-                                    | B_Unannot x       -> x, None
-                                    | B_Annot (x, τ)    -> x, Some τ
-                                    | B_Patt p          -> Report.Error.illegal_letrec_binding p.loc p
+                                    match p.value with
+                                    | P_SimpleVar (x, τo) -> x, τo
+                                    | _                   -> Report.Error.illegal_pattern_in_rec_binding p.loc p
                                 let! tx = W_F_ty_annotation ctx τo
                                 for α in tx.fv do
                                     do! M.extend (α, Fx_Bottom K_Star)
@@ -658,7 +655,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                                 let ϕ = ϕx.nf
                                 return! gen_bind ctx Config.Printing.Prompt.rec_value_decl_prefixes { expr = b.expr; qual = b.qual; id = x; constraints = cs; inferred = ϕ; to_bind = ϕ }
                             })
-                M.translate <- D_RecBind [for jk, e in bs' -> { qual = decl_qual.none; patt = B_Unannot e.loc jk.pretty; expr = e }]
+                M.translate <- D_RecBind [for jk, e in bs' -> { qual = decl_qual.none; patt = Lo e.loc (P_Var jk.pretty); expr = e }]
             }
 
         | D_Open (q, e) ->

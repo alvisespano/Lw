@@ -464,39 +464,10 @@ type node_type_inference_builder<'e> (e : node<'e>, ctx) =
     member __.already_translated
         with set x = e.translated <- x
 
-    member M.typed (t : 't) =
-        M {
-            e.typed <- t
-        }
+    member __.typed
+        with get () = e.typed :?> fxty
+        and set (t : fxty) = e.typed <- t
 
-
-
-// specialized monad for type evaluation
-//
-
-type type_eval_builder<'e> (τ : node<'e>) =
-    inherit basic_builder (τ.loc)
-
-    member M.search_δ x =
-        M {
-            let! Δ = M.get_δ
-            return Δ.search x
-        }
-   
-    member M.undo_δ f =
-        M {
-            let! δ = M.get_δ
-            let! r = f
-            let! δ = M.updated δ
-            do! M.set_δ δ
-            return r
-        }
-
-    member M.updated (δ : tenv) =
-        M {
-            let! θ = M.get_θ
-            return subst_tenv θ δ
-        }
 
 
 // specialized monad kind inference
@@ -504,7 +475,7 @@ type type_eval_builder<'e> (τ : node<'e>) =
 
 // yield decorates node
 type kind_inference_builder (loc, ctx) =
-    inherit inference_builder (ctx)
+    inherit inference_builder (loc, ctx)
 
     member M.Yield (k : kind) =
         M {
@@ -561,8 +532,37 @@ type kind_inference_builder (loc, ctx) =
 type node_kind_inference_builder<'e> (τ : node<'e>, ctx) =
     inherit kind_inference_builder (τ.loc, ctx)
 
-    member M.kinded (k : kind) =
+    member M.set_kinded k =
+        M {            
+            τ.typed <- k
+        }
+
+    member M.get_kinded =
         M {
-            e.typed <- k 
+            let k = τ.typed :?> kind
+            let! k = M.updated k
+            do! M.set_kinded k
+            return k
+        }
+
+    member M.search_δ x =
+        M {
+            let! Δ = M.get_δ
+            return Δ.search x
+        }
+   
+    member M.undo_δ f =
+        M {
+            let! δ = M.get_δ
+            let! r = f
+            let! δ = M.updated δ
+            do! M.set_δ δ
+            return r
+        }
+
+    member M.updated (δ : tenv) =
+        M {
+            let! θ = M.get_θ
+            return subst_tenv θ δ
         }
  

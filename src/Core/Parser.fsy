@@ -23,7 +23,7 @@ let parse_error_rich = Some (fun ctx -> raise (ParseErrorContextException ctx))
 %token TYPE EQ STAR ARROW VAL OVER BRAGT LTKET BRALT GTKET HASH DO INJECT EJECT IMPLIES DATATYPE DATA FORALL BOTTOM
        LET REC IN IF THEN ELSE FUN MATCH WHEN WITH FUNCTION TRUE FALSE AS OF NAMESPACE OPEN WHERE OVERLOAD
        DOUBLEAMP DOUBLEPIPE UNDERSCORE BACKSLASH KIND QUESTION
-       BRA KET CURBRA CURKET SQBRA SQKET 
+       BRA KET CURBRA CURKET SQBRA SQKET  
        PLUS MINUS SLASH PLUSDOT MINUSDOT MOD NEQ LT GT LEQ GEQ AND NOT PIPE AMP BANG COLONGT   
        COLON COLON2 SEMICOLON SEMICOLON2 DOT COMMA ASSIGN 
 %token EOF
@@ -166,21 +166,21 @@ kind_and_bindings:
 /* single bindings */
 
 let_binding:
-    let_binding_no_qual                                 { let p, e = $1 in { qual = decl_qual.none; patt = p; expr = e } }
-  | let_quals let_binding_no_qual                       { let q, f = $1 in let p, e = $2 in { qual = q; patt = p; expr = f e } }
+    let_binding_no_qual                                         { $1 decl_qual.none }
+  | let_quals let_binding_no_qual                               { let q, f = $1 in let b = $2 q in { b with expr = f b.expr } }
 
 let_binding_no_qual:
-  | patt EQ expr                                        { $1, $3 }
-  | id fun_patt_params EQ expr                          { pos parseState 1 (P_Var $1), LambdaCurriedArgs ($2, $4) }
-  | id fun_patt_params COLON ty_expr EQ expr            { return_type_annotated $1 $2 $4 (pos parseState 1), LambdaCurriedArgs ($2, $6) }
+  | patt EQ expr                                                { fun q -> { qual = q; patt = $1; expr = $3 } }
+  | patt_app_atom fun_patt_params EQ expr                       { fun q -> { qual = q; patt = $1; expr = LambdaPatts ($2, $4) } }
+  | patt_app_atom fun_patt_params COLON ty_expr EQ expr         { fun q -> { qual = q; patt = return_type_annotated $1 $2 $4; expr = LambdaPatts ($2, $6) } }
 
 over_binding:
-    LID COLON ty_expr                                   { { id = $1; signature = $3 } }
+    LID COLON ty_expr                                           { { id = $1; signature = $3 } }
 
 ty_expr_binding:
-  | ty_patt EQ ty_expr                                  { { qual = ty_decl_qual.none; patt = $1; expr = $3 } }
-  | ty_patt_app_atom ty_fun_patt_params EQ ty_expr      { { qual = ty_decl_qual.none; patt = $1; expr = Te_LambdaCurriedArgs ($2, $4) } }
-  
+  | ty_patt EQ ty_expr                                          { { qual = ty_decl_qual.none; patt = $1; expr = $3 } }
+  | ty_patt_app_atom ty_fun_patt_params EQ ty_expr              { { qual = ty_decl_qual.none; patt = $1; expr = Te_LambdaPatts ($2, $4) } }
+  | ty_patt_app_atom ty_fun_patt_params COLON2 kind EQ ty_expr  { { qual = ty_decl_qual.none; patt = return_kind_annotated $1 $2 $4; expr = Te_LambdaPatts ($2, $6) } }
 
 kind_binding:
   | id EQ kind                                      { { id = $1; pars = []; kind = $3 } }
@@ -191,19 +191,6 @@ kind_params:
     TICK_ID                                         { [var.fresh_named $1] }
   | TICK_ID COMMA kind_params                       { var.fresh_named $1 :: $3 }
 
-
-/* REMOVE THIS
-letrec_qbinding:
-    let_qbinding                                { $1 }
-  letrec_binding                              { (decl_qual.none, id), $1 }
-  | let_quals letrec_binding                    { $1, $2 }
-letrec_binding:
-  | type_annotated EQ expr					            { $1, $3 }
-  | type_annotated fun_patt_params EQ expr              { $1, LambdaFun ($2, $4) }
-ty_expr_rec_binding:
-    ty_expr_binding                                   { $1 }
-  | kind_annotated EQ ty_expr                         { { qual = ty_decl_qual.none; par = $1; expr = $3 } }
-  | kind_annotated ty_fun_patt_params EQ ty_expr      { { qual = ty_decl_qual.none; par = $1; expr = Te_LambdaFun ($2, $4) } }*/
 
 
 /*
