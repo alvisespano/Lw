@@ -119,6 +119,8 @@ let gen_bind ctx prefixes ({ id = x; qual = dq; expr = e0; to_bind = ϕ } as gb)
 let W_fxty_annot ctx loc (ϕann : fxty) (ϕinf : fxty) =
     let M = new type_inference_builder (loc, ctx)
     M {
+        for α, k in ϕann.kinded_ftv do
+            do! M.extend (α, Fx_Bottom k)
         let! ϕ = M {
             match ϕann.maybe_ftype with
             | Some tann ->

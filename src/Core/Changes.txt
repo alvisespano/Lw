@@ -1,4 +1,10 @@
 ﻿
+12/4/2016:
+* FIX: node kind annotation of type expressions has been fixed
+* FIX: free vars of type annotations are now inserted into the prefix
+* BUG: scoped vars are not generalized at top level
+
+
 11/4/2016:
 * FIX: parser reduce/reduce conflicts fixed
 * UP: type function definition now supports co-domain kind annotation, similarly to type annotation of return type in function bindings

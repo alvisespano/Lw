@@ -20,8 +20,8 @@ module private InFSharp =
 let temp1 : section =
     "Temp1", [flag.ShowSuccessful; flag.ShowInput],
     [
-    "forall 'a ('b :> _|_). 'a -> 'b",          type_eq "forall 'a. forall 'b. 'a -> 'b"
-    "forall 'a ('b :> _|_). 'a -> 'b",          type_eq "forall 'a. forall 'b. 'a -> 'b"
+//    "forall 'a ('b :> _|_). 'a -> 'b",          type_eq "forall 'a. forall 'b. 'a -> 'b"
+//    "forall 'a ('b :> _|_). 'a -> 'b",          type_eq "forall 'a. forall 'b. 'a -> 'b"
 
 
     "let id x = x",                             type_ok "'a -> 'a"

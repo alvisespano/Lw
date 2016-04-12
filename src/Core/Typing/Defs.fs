@@ -621,6 +621,13 @@ type fxty with
         in
             R this
 
+    member this.kinded_ftv =
+        match this with
+        | Fx_F_Ty t               -> t.kinded_ftv
+        | Fx_Bottom _             -> Seq.empty
+        | Fx_Forall ((α, ϕ1), ϕ2) -> let r2 = ϕ2.kinded_ftv in if Seq.exists (fst >> (=) α) r2 then Seq.append ϕ1.kinded_ftv (Seq.filter (fst >> (=) α >> not) r2) else r2
+
+
     member this.fv =
         match this with
         | Fx_Bottom k             -> k.fv

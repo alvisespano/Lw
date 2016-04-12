@@ -230,7 +230,7 @@ module internal Mgu =
                     let check_wrt α t = if check_circularity_wrt α Q0 t then let S = S θ0 in Report.Error.type_circularity loc (S t1_) (S t2_) (T_Var (α, t.kind)) (S t2_)
                     check_wrt α1 ϕ2
                     check_wrt α2 ϕ1
-                    let Q1, θ1, ϕ = let S = subst_fxty in mgu_fx ctx Q0 (S θ0 ϕ1) (S θ0 ϕ2)  // TODO: this θ0 subst should be applied also on the 2 types involved in the 2 updates below?
+                    let Q1, θ1, ϕ = let S = subst_fxty θ0 in mgu_fx ctx Q0 (S ϕ1) (S ϕ2)  // TODO: this θ0 subst should be applied also on the 2 types involved in the 2 updates below?
                     let Q2, θ2 = Q1.update_with_subst (α1, T_Var (α2, k2))   // do not use t2 here! it would always refer to right-hand type of the pattern, and in case of reversed named var it would refer to α1!
                     let Q3, θ3 = Q2.update_with_bound (α2, ϕ)
                     in
@@ -243,16 +243,16 @@ module internal Mgu =
                     // occurs check
                     if check_circularity_wrt α Q0 (Fx_F_Ty t) then let S = S θ0 in Report.Error.type_circularity loc (S t1_) (S t2_) (S (T_Var (α, k))) (S t)
                     let Q1, θ1 = subsume ctx Q0 (S θ0 t) (subst_fxty θ0 ϕ)
-                    let Q2, θ2 = let S = S <| θ1 ** θ0 in Q1.update_with_subst (α, S t)
+                    let Q2, θ2 = let S = S (θ1 ** θ0) in Q1.update_with_subst (α, S t)
                     in
                         Q2, θ2 ** θ1 ** θ0
 
                 | T_App (t1, t2), T_App (t1', t2') ->
-//                    let θ0 = kmgu ctx (K_Arrow (t2.kind, kind.fresh_var)) t1.kind ** kmgu ctx (K_Arrow (t2'.kind, kind.fresh_var)) t1'.kind   // TODOH: is this line needed?
-                    let Q1, θ1 = R Q0 t1 t1'
-                    let Q2, θ2 = let S = S θ1 in R Q1 (S t2) (S t2')
+                    let θ0 = kmgu ctx (K_Arrow (t2.kind, kind.fresh_var)) t1.kind ** kmgu ctx (K_Arrow (t2'.kind, kind.fresh_var)) t1'.kind
+                    let Q1, θ1 = let S = S θ0 in R Q0 (S t1) (S t1')
+                    let Q2, θ2 = let S = S (θ1 ** θ0) in R Q1 (S t2) (S t2')
                     in
-                        Q2, θ2 ** θ1
+                        Q2, θ2 ** θ1 ** θ0
 
                 | t1, t2 -> Report.Error.type_mismatch loc t1_ t2_ t1 t2
               #if DEBUG_UNI && DEBUG_UNI_DEEP
@@ -269,10 +269,7 @@ module internal Mgu =
             #endif                    
             r
 
-       
-let mgu = Mgu.Pure.mgu
-let subsume = Mgu.Pure.subsume
-let mgu_fx = Mgu.Pure.mgu_fx
+open Mgu.Pure
 
 let try_mgu ctx Q t1 t2 =
     try Some (mgu ctx Q t1 t2)

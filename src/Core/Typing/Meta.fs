@@ -189,17 +189,16 @@ module internal Eval =
     and ty_rec_bindings<'e> (ctx : context) (d : node<'e>) (bs : ty_binding list) =
         let M = new node_kind_inference_builder<_> (d, ctx)
         M {
-            let! Δ = M.get_δ
-            let! γ = M.get_γ
-            let Δr = ref Env.empty
-            Δr := List.fold (fun (Δ : tenv) -> function
+            let! δ = M.get_δ
+            let δr = ref Env.empty
+            δr := List.fold (fun (δ : tenv) -> function
                         | { patt = ULo (Tp_SimpleVar (x, _)); expr = τ } ->
-                            let t = T_Closure (x, Δr, τ, τ.typed)
+                            let t = T_Closure (x, δr, τ, τ.typed :?> kind)
                             prompt_evaluated_type x t
-                            Δ.bind x t
+                            δ.bind x t
                         | { patt = p } -> unexpected_case __SOURCE_FILE__ __LINE__ p)
-                    Δ bs
-            do! M.set_δ !Δr
+                    δ bs
+            do! M.set_δ !δr
         }
 
     // like Wk_ty_decl, this must be defined AFTER the functions it calls
@@ -283,13 +282,13 @@ module internal Eval =
             let! ϕ = fxty_expr' ctx ϕτ0
             L.debug Min "%s %O\n[::k]   %O\n[T*]    %O" rule ϕτ0 ϕτ0.typed ϕ
             return ϕ
-        } 
+        }
 
     and fxty_expr' ctx ϕτ0 =
         let M = new node_kind_inference_builder<_> (ϕτ0, ctx)
         let R = fxty_expr ctx
         M {
-            let! k0 = M.get_kinded       // this is the kind of the current ty_expr node being evaluated (annotated by previous Wk kind inference algorithm)
+            let! k0 = M.get_kinded
             match ϕτ0.value with
             | Fxe_Bottom _ ->
                 return Fx_Bottom k0
@@ -543,9 +542,19 @@ and Wk_ty_patt ctx (p0 : ty_patt) =
             yield k         
     }
 
-let rec Wk_fxty_expr ctx ϕτ =
+let rec Wk_fxty_expr (ctx : context) (τ0 : fxty_expr) =
+    let M = new node_kind_inference_builder<_> (τ0, ctx)
+    M {
+        let rule = "[K-Fx]"
+        let! k = Wk_fxty_expr' ctx τ0
+        do! M.set_kinded k
+        L.debug Min "%s %O\n[::k]   %O" rule τ0 k
+        return k
+    }
+
+and Wk_fxty_expr' ctx ϕτ =
     let M = new node_kind_inference_builder<_> (ϕτ, ctx)
-    let R = Wk_fxty_expr ctx
+    let R x = Wk_fxty_expr ctx x
     M {
         match ϕτ.value with
         | Fxe_Bottom ko ->
