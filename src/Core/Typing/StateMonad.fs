@@ -389,13 +389,12 @@ type type_inference_builder (loc, ctx) =
 
     member M.bind_generalized_Γ jk jm (ϕ : fxty) =
         M {           
-            let! αs = M.get_ungeneralizable_vars
+            let! ungeneralizables = M.get_ungeneralizable_vars
             match ϕ with
-            | FxU0_ForallsQ (Q, _) -> assert (Set.intersect Q.dom αs).IsEmpty   // no quantified vars must be among the ungeneralizables
-            | FxU0_Bottom _        -> ()                                        // TODOL: is there something to check with kind vars?
-            assert ϕ.fv.IsSubsetOf αs                                           // dual check: free vars must be among the ungeneralizable ones
-            for α in Set.intersect ϕ.fv αs do
-                Report.Hint.scoped_tyvar_wont_be_generalized loc α
+            | FxU0_ForallsQ (Q, _) -> assert (Set.intersect Q.dom ungeneralizables).IsEmpty     // no quantified vars must be among the ungeneralizables
+            | FxU0_Bottom _        -> ()                                                        // TODOL: is there something to check with kind vars?
+            assert ϕ.fv.IsSubsetOf ungeneralizables                                             // free vars must be among the ungeneralizable ones
+            do let βs = Set.intersect ϕ.fv ungeneralizables in if Set.count βs > 0 then Report.Hint.scoped_tyvars_wont_be_generalized loc βs
             let! cs = M.get_constraints
             return! M.bind_Γ jk { mode = jm; scheme = { constraints = cs; fxty = ϕ } }
         }

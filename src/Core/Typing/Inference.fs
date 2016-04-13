@@ -379,8 +379,8 @@ and W_expr' ctx (e0 : expr) =
             let! Q0 = M.get_Q
             let! tx = W_F_ty_annotation ctx τo
             // annotated or not, all free vars are added to the prefix
-            for α in tx.ftv do
-                do! M.extend (α, Fx_Bottom K_Star)
+//            for α in tx.ftv do
+//                do! M.extend (α, Fx_Bottom K_Star)
             let! ϕ1 = M.undo_Γ <| M {
                 let! _ = M.bind_ungeneralized_var_Γ x tx
                 return! W_expr ctx e
@@ -617,7 +617,8 @@ and W_decl' (ctx : context) (d0 : decl) =
                                         })
                             }
                         }) bs
-                let! bs' = M.List.map (fun gb -> M { let! () = M.set_constraints gb.constraints in return! gen_bind ctx Config.Printing.Prompt.value_decl_prefixes gb }) l
+                let! bs' = M.List.map (fun gb -> M { do! M.set_constraints gb.constraints
+                                                     return! gen_bind ctx Config.Printing.Prompt.value_decl_prefixes gb }) l
                 M.translate <- D_Bind [for jk, e in bs' -> { qual = decl_qual.none; patt = Lo e.loc (P_Jk jk); expr = e }]
             }
 
@@ -633,8 +634,6 @@ and W_decl' (ctx : context) (d0 : decl) =
                                     | P_SimpleVar (x, τo) -> x, τo
                                     | _                   -> Report.Error.illegal_pattern_in_rec_binding p.loc p
                                 let! tx = W_F_ty_annotation ctx τo
-                                for α in tx.fv do
-                                    do! M.extend (α, Fx_Bottom K_Star)
                                 let! _ = M.bind_ungeneralized_var_Γ x tx
                                 return b, x, τo, tx
                             }) bs

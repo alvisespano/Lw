@@ -268,8 +268,8 @@ module Hint =
     let datacons_contains_env_fv loc c x tx =
         H 3 loc Normal "datatype %s defines a data constructor %s whose type %O has type variables that cannot be generalized" c x tx
 
-    let scoped_tyvar_wont_be_generalized loc α =
-        H 4 loc Min "scoped type variable %O will not be generalized" α
+    let scoped_tyvars_wont_be_generalized loc αs =
+        H 4 loc Min "scoped type variable%s %O will not be generalized" (if Set.count αs > 1 then "s" else "") αs
 
     let auto_generalization_occurred_in_annotation loc t t' =
         H 5 loc Low "type annotation %O has been automatically generalized to %O" t t'
