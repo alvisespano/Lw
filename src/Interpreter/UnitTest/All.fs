@@ -53,9 +53,9 @@ let temp1 : section =
 
 let all : section list =
     [
-    [temp1]
-//    TypeEquivalence.all
-//    Basic.all
-//    HML.all
+//    [temp1]
+    TypeEquivalence.all
+    Basic.all
+    HML.all
     ] |> List.concat
     

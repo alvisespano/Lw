@@ -89,7 +89,7 @@ type typechecker () =
     member this.W_decl d = this.unM W_decl d
     member this.Wk_and_eval_fxty_expr τ = this.unM Wk_and_eval_fxty_expr τ
     
-    member this.auto_generalize (t : ty) = this.unM_member <| fun M -> M.auto_geneneralize t
+    member this.auto_generalize (t : ty) = this.unM_member <| fun M -> M.auto_generalize false t
     member __.lookup_var_Γ x = (st.Γ.lookup (jenv_key.Var x)).scheme.fxty
 
     member __.envs

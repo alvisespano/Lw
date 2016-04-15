@@ -85,7 +85,7 @@ let private circularity E n loc what x1 x2 α x =
 [< RequireQualifiedAccess >]
 module Error =            
     
-    // put here only those codes that need to be caught or detected while typing
+    // put here only those codes that need to be caught or detected or reused for some reason
     module Code =
         let type_mismatch = 200
 
@@ -135,8 +135,8 @@ module Error =
         Et 207 loc "data constructor %s does not construct datatype %O because its codomain has type %O" x c t
 
     let closed_world_overload_constraint_not_resolved loc cx ct x t =
-        // TODO: print a better message, just refer to the notion of closed-world overloading, without mentioning constraints
-        Et 208 loc "when generalizing symbol `%O : %O` the constraint `%s : %O` has not been resolved and was referring to a closed-world overloaded symbol" x t cx ct
+        // TODO: print a better message, just refer to closed-world overloading without mentioning constraints
+        Et 208 loc "when generalizing symbol `%O : %O` the closed-world overloading constraint `%s : %O` has not been resolved" x t cx ct
 
     let inferred_type_is_not_monomoprhic loc what t =
         Et 209 loc "type inferred for %s is %O, which is not monomorphic: if you intented to use it polymorphically add an explicit annotation" what t
@@ -238,12 +238,9 @@ module Warn =
 
     let unused_quantified_type_variable loc α t =
         W 13 loc Normal "quantified type variable %O does not occur in type %O" α t
-//
-//    let annot_flex_type_became_Ftype loc ϕ t =
-//        W 14 loc Low "type annotation %O is a flexible type and is reduced to a standard (System-F) type: %O" ϕ t
 
     let unquantified_variables_in_type loc t =
-        W 15 loc Low "type expression has unquantified type variables: %O" t
+        W 14 loc Low "type expression has unquantified type variables: %O" t
 
 [< RequireQualifiedAccess >]
 module Hint =
@@ -269,10 +266,12 @@ module Hint =
         H 3 loc Normal "datatype %s defines a data constructor %s whose type %O has type variables that cannot be generalized" c x tx
 
     let scoped_tyvars_wont_be_generalized loc αs =
-        H 4 loc Min "scoped type variable%s %O will not be generalized" (if Set.count αs > 1 then "s" else "") αs
+        H 4 loc Min "scoped type variable%s %s will not be generalized" (if Set.count αs > 1 then "s" else "") (flatten_stringables ", " αs)
 
     let auto_generalization_occurred_in_annotation loc t t' =
         H 5 loc Low "type annotation %O has been automatically generalized to %O" t t'
 
     let type_annotation_is_instantiation loc tann ϕinf =
-        H 6 loc High "type annotation %O is an instance of the inferred flex type %O, which may lead to a loss of type information, possibly introducing the need of additional type annotations in further code" tann ϕinf
+        H 6 loc High "type annotation %O is an instance of the inferred flex type %O, which may lead to a loss of type information, \
+        possibly introducing the need of additional type annotations elsewhere"
+            tann ϕinf

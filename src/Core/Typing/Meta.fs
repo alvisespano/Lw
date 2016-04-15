@@ -104,7 +104,7 @@ module internal Eval =
             let! k0 = M.get_kinded       // this is the kind of the current ty_expr node being evaluated (annotated by previous Wk kind inference algorithm)
             match τ0.value with
             | Te_Wildcard ->
-                return ty.fresh_var k0
+                return ty.fresh_var k0 
 
             | Te_Var x ->
                 let! α = M.search_or_add_scoped_var x
@@ -164,6 +164,7 @@ module internal Eval =
                 let! ts = M.List.map R τs
                 return T_HTuple ts
 
+            // TODOL: pattern matching over types should perform unification instead?
             | Te_Match (τ1, cases) ->
                 let! t1 = R τ1
                 return! M.undo_δ <| M {
@@ -391,7 +392,7 @@ and Wk_ty_expr' (ctx : context) (τ0 : ty_expr) =
 
         | Te_Let (d, τ) ->
             yield! M.undo_γ <| M {
-                do! Wk_ty_decl { ctx with is_top_level = false } d
+                do! Wk_ty_decl ctx.nest d
                 yield! R τ
             }                 
 

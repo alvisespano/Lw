@@ -1,4 +1,11 @@
 ﻿
+15/4/2016:
+* FIX: various fixed in type annotations, type evaluation etc
+* UP: wildcards can now be type expressions too (not only type patterns as before)
+* FIX: when dealing with type annotations, new type variables are added to the prefix - only those which were not already in it
+* FIX: generalization of non-top-level type variables has been restored
+
+
 12/4/2016:
 * FIX: node kind annotation of type expressions has been fixed
 * FIX: free vars of type annotations are now inserted into the prefix

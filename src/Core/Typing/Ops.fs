@@ -291,6 +291,7 @@ type prefix with
                 r
 
     member Q.extend (α, ϕ : fxty) =
+        assert (not (Set.contains α Q.dom)) // HACK: not sure this assert it right
         let Q', θ' as r =
             match ϕ.nf with
             | FxU_Unquantified t -> Q, !> (new tsubst (α, t))

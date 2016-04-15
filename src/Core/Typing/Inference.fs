@@ -62,7 +62,7 @@ let W_lit = function
 
 let auto_jk decl_qual x (ϕ : fxty) = if decl_qual.over then jenv_key.Inst (x, ϕ.pretty.GetHashCode ()) else jenv_key.Var x
 
-let gen_bind ctx prefixes ({ id = x; qual = dq; expr = e0; to_bind = ϕ } as gb) =
+let gen_bind ctx prefixes ({ id = x; qual = dq; expr = e0; to_bind = ϕ; constraints = cs } as gb) =
     let M = new node_type_inference_builder<_> (e0, ctx)
     let loc0 = e0.loc
     let Lo0 x = Lo loc0 x
@@ -81,7 +81,6 @@ let gen_bind ctx prefixes ({ id = x; qual = dq; expr = e0; to_bind = ϕ } as gb)
             | _             -> ()                                               // normal binding that can shadow legally
 
         // check constraints solvability and scope escaping
-        let! cs = M.get_constraints
         for { name = cx; ty = ct } as c in cs do
             let αs = ct.fv - ϕ.fv in if not αs.IsEmpty then Report.Hint.unsolvable_constraint loc0 x ϕ cx ct αs
             match c.mode with
@@ -116,11 +115,19 @@ let gen_bind ctx prefixes ({ id = x; qual = dq; expr = e0; to_bind = ϕ } as gb)
 // annotations stuff
 //
 
-let W_fxty_annot ctx loc (ϕann : fxty) (ϕinf : fxty) =
+type type_inference_builder with
+    member inline M.extend_fv_of (t : ^t) =
+        M {
+            for α, k in (^t : (member kinded_ftv : _) t) do
+                let! Q = M.get_Q
+                if not (Set.contains α Q.dom) then      // add only variables that do not already exist in prefix
+                    do! M.extend (α, Fx_Bottom k)            
+        }
+
+let private W_fxty_annot ctx loc (ϕann : fxty) (ϕinf : fxty) =
     let M = new type_inference_builder (loc, ctx)
     M {
-        for α, k in ϕann.kinded_ftv do
-            do! M.extend (α, Fx_Bottom k)
+        do! M.extend_fv_of ϕann
         let! ϕ = M {
             match ϕann.maybe_ftype with
             | Some tann ->
@@ -155,27 +162,27 @@ let W_fxty_expr_annot_in_binding ctx (τ : fxty_expr) (ϕinf : fxty) =
         do! M.kunify loc K_Star k
         let! ϕann = M {
             match ϕann.maybe_ftype with
-            | Some tann ->
-                let! tann' = M.auto_geneneralize tann
-                if not (tann.is_equivalent tann') then Report.Hint.auto_generalization_occurred_in_annotation loc tann tann'
-                return (Fx_F_Ty tann')
-            | None ->
-                return ϕann
+            | Some tann -> let! t = M.auto_generalize true tann in return Fx_F_Ty t
+            | None      -> return ϕann
         }
         return! W_fxty_annot ctx loc ϕann ϕinf
     }
 
-let W_F_ty_annotation ctx τo =
+let W_F_ty_annot ctx τo =
     let M = new type_inference_builder (ctx)
     M {
-        match τo with
-        | None -> return ty.fresh_star_var
-        | Some τ ->
-            let! ϕ, k = Wk_and_eval_fxty_expr ctx τ
-            do! M.kunify τ.loc K_Star k
-            match ϕ.maybe_ftype with
-            | None   -> return Report.Error.annotation_is_flex_but_expected_an_F_type τ.loc ϕ
-            | Some t -> return t
+        let! t = M {
+            match τo with
+            | None -> return ty.fresh_star_var
+            | Some τ ->
+                let! ϕ, k = Wk_and_eval_fxty_expr ctx τ
+                do! M.kunify τ.loc K_Star k
+                match ϕ.maybe_ftype with
+                | None   -> return Report.Error.annotation_is_flex_but_expected_an_F_type τ.loc ϕ
+                | Some t -> return t
+        }
+        do! M.extend_fv_of t
+        return t
     }
 
 let check_monomorphic what loc (τo : fxty_expr option) (tx : ty) =
@@ -231,7 +238,7 @@ let rec W_expr (ctx : context) (e0 : expr) =
             L.undo_tabulate
     } 
 
-and W_decl ctx d =
+and W_decl (ctx : context) d =
     let M = new node_type_inference_builder<_> (d, ctx)
     M {
         L.debug Low "[decl] %O" d
@@ -377,7 +384,7 @@ and W_expr' ctx (e0 : expr) =
 
         | Lambda ((x, τo), e) ->
             let! Q0 = M.get_Q
-            let! tx = W_F_ty_annotation ctx τo
+            let! tx = W_F_ty_annot ctx τo
             // annotated or not, all free vars are added to the prefix
 //            for α in tx.ftv do
 //                do! M.extend (α, Fx_Bottom K_Star)
@@ -430,7 +437,7 @@ and W_expr' ctx (e0 : expr) =
 
         | Let (d, e) ->
             yield! M.undo_Γ <| M {
-                do! W_decl { ctx with is_top_level = false } d
+                do! W_decl ctx.nest d
                 yield! W_expr ctx e
             }
         
@@ -617,8 +624,10 @@ and W_decl' (ctx : context) (d0 : decl) =
                                         })
                             }
                         }) bs
-                let! bs' = M.List.map (fun gb -> M { do! M.set_constraints gb.constraints
-                                                     return! gen_bind ctx Config.Printing.Prompt.value_decl_prefixes gb }) l
+                let! bs' = M.List.map (fun gb -> M {
+                                do! M.set_constraints gb.constraints
+                                return! gen_bind ctx Config.Printing.Prompt.value_decl_prefixes gb
+                            }) l
                 M.translate <- D_Bind [for jk, e in bs' -> { qual = decl_qual.none; patt = Lo e.loc (P_Jk jk); expr = e }]
             }
 
@@ -633,7 +642,7 @@ and W_decl' (ctx : context) (d0 : decl) =
                                     match p.value with
                                     | P_SimpleVar (x, τo) -> x, τo
                                     | _                   -> Report.Error.illegal_pattern_in_rec_binding p.loc p
-                                let! tx = W_F_ty_annotation ctx τo
+                                let! tx = W_F_ty_annot ctx τo
                                 let! _ = M.bind_ungeneralized_var_Γ x tx
                                 return b, x, τo, tx
                             }) bs
@@ -695,13 +704,13 @@ and W_decl' (ctx : context) (d0 : decl) =
             Report.prompt ctx Config.Printing.Prompt.datatype_decl_prefixes c kσ None
             for { id = x; signature = τx } in bs do
                 // the whole inferred kind must be star
-                let! tx, kx = Wk_and_eval_ty_expr ctx τx      // TODO: support flex types for data constructors
-                let! tx = M.auto_geneneralize tx
+                let! tx, kx = Wk_and_eval_ty_expr ctx τx      // TODO: does supporting flex types make any sense? what if a constructor is declared to have type Bottom?
+                let! tx = M.auto_generalize false tx
                 do! M.kunify τx.loc K_Star kx                              
                 // each data constructor's return type must be equal to the type constructor being defined; arguments are not checked to be variables, so it means GADTs can be defined
                 let txcod = tx.return_ty
                 match txcod with
-                | T_ConsApps1 ((x', _), _) when x' = c -> ()    
+                | T_ConsApps1 ((x', _), _) when x' = c -> ()
                 | _                                    -> Report.Error.data_constructor_codomain_invalid τx.loc x c txcod
                 // check there are no Γ-free vars in the signature
                 if not tx.fv.IsEmpty then Report.Hint.datacons_contains_env_fv τx.loc c x tx

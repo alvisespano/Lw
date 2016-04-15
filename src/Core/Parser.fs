@@ -2590,7 +2590,7 @@ let _fsyacc_reductions ()  =    [|
                 (
                    (
 # 371 "Parser.fsy"
-                                                                           Te_Var (fresh_reserved_id ()) 
+                                                                           Te_Wildcard 
                    )
 # 371 "Parser.fsy"
                  : 'ty_expr_app_atom_));

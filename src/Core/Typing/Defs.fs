@@ -295,16 +295,20 @@ type resolution = Res_Strict | Res_Loose | Res_No
 
 type [< NoComparison; NoEquality >] context =
     { 
-        is_top_level       : bool
+        nesting_level   : int
         resolution      : resolution
-//        strict          : bool
     }
 with
     static member as_top_level_decl = {
-        is_top_level       = true
+        nesting_level   = 0
         resolution      = Res_Strict
-//        strict          = true
     }
+
+    member this.nest = { this with nesting_level = this.nesting_level + 1 } // HACK: re-enable this and fix what's wrong with top level generalization
+    member this.unnest = { this with nesting_level = crop (0, Int32.MaxValue) (this.nesting_level - 1) }
+
+    member this.is_top_level = this.nesting_level < 1
+
 
 type [< NoComparison; NoEquality >] uni_context =
     { 
@@ -639,6 +643,13 @@ type fxty with
         | Fx_Bottom _
         | Fx_Forall _ -> false
         | Fx_F_Ty t   -> t.is_monomorphic
+
+//    member this.return_ty =
+//        match this with
+//        | Fx_Forall (_, ϕ) -> ϕ.return_ty
+//        | Fx_F_Ty t        -> t.return_ty
+//        | Fx_Bottom _      -> 
+
 
 
 type tscheme with    

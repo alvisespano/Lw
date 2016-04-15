@@ -200,7 +200,7 @@ type basic_builder (loc : location) =
 // monad supertype for inference
 //
 
-type inference_builder (loc, ctx) =
+type inference_builder (loc, ctx : context) =
     inherit basic_builder (loc)
 
     new (ctx) = new inference_builder (new location (), ctx)
@@ -399,17 +399,25 @@ type type_inference_builder (loc, ctx) =
             return! M.bind_Γ jk { mode = jm; scheme = { constraints = cs; fxty = ϕ } }
         }
 
-    member M.auto_geneneralize (t : ty) =
+    member M.maybe_auto_geneneralize (t : ty) =
         M {
             let! ungeneralizables = M.get_ungeneralizable_vars
             let αs = t.fv - ungeneralizables
-            let t' =
-                if t.is_unquantified then T_Foralls (Set.toList αs, t)
-                else
-                    if not αs.IsEmpty then Report.Warn.unquantified_variables_in_type loc t
-                    t
-            do! M.lift_scoped_vars (fun αs -> αs - t'.fv)  // remove quantified vars from scoped vars, as if a Te_Forall was evaluated
-            return t'
+            if t.is_unquantified then
+                do! M.lift_scoped_vars (fun βs -> βs - αs)  // remove quantified vars from scoped vars, as if a Te_Forall was evaluated
+                return Some (T_Foralls (Set.toList αs, t))
+            else
+                if not (Set.isEmpty αs) then Report.Warn.unquantified_variables_in_type loc t
+                return None
+        }
+
+    member M.auto_generalize is_hint_enabled t =
+        M {
+            let! ϕo = M.maybe_auto_geneneralize t
+            match ϕo with
+            | None    -> return t
+            | Some t' -> if is_hint_enabled then Report.Hint.auto_generalization_occurred_in_annotation loc t t'
+                         return t'
         }
 
     member M.extend_fresh_star =

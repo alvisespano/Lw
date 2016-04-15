@@ -368,7 +368,7 @@ ty_expr_tuple_atom_:
 ty_expr_app_atom_:
   | id                                              { Te_Cons $1 }
   | TICK_ID                                         { Te_Var $1 }
-  | UNDERSCORE                                      { Te_Var (fresh_reserved_id ()) }
+  | UNDERSCORE                                      { Te_Wildcard }
   | BRA ty_expr KET                                 { $2.value }
   | CURBRA ty_expr_record CURKET                    { Te_Record ($2, None) }
   | CURBRA ty_expr_record PIPE ty_expr CURKET       { Te_Record ($2, Some $4) }
