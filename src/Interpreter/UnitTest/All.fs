@@ -39,13 +39,14 @@ let temp1 : section =
      in
         map poly ids",                          type_ok "list (int * bool)"
 
+    // these 2 are equal thanks to automatic generalization
     "let ids : list ('a -> 'a) = ids
      in
         map poly ids",                          type_ok "list (int * bool)"
-
     "let ids : forall 'a. list ('a -> 'a) = ids
      in
         map poly ids",                          type_ok "list (int * bool)"
+
     "let ids : forall ('a :> forall 'b. 'b -> 'b) . list 'a = ids
      in
         map poly ids",                          type_ok "list (int * bool)"
@@ -53,9 +54,9 @@ let temp1 : section =
 
 let all : section list =
     [
-//    [temp1]
-    TypeEquivalence.all
-    Basic.all
-    HML.all
+    [temp1]
+//    TypeEquivalence.all
+//    Basic.all
+//    HML.all
     ] |> List.concat
     

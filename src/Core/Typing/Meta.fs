@@ -107,7 +107,12 @@ module internal Eval =
                 return ty.fresh_var k0 
 
             | Te_Var x ->
-                let! α = M.search_or_add_scoped_var x
+                let! o = M.search_scoped_var x
+                let! α = M {
+                    match o with
+                    | Some α -> return α
+                    | None   -> return! M.add_scoped_var x
+                }
                 return T_Var (α, k0)
 
             | Te_Cons x ->
@@ -138,11 +143,13 @@ module internal Eval =
                 return! R τ
 
             | Te_Forall ((x, _), τ) ->
-                let! α = M.search_or_add_scoped_var x
-                let! t = R τ
-                // check if quantified var is unused
-                if t.search_var(α).IsNone then Report.Warn.unused_quantified_type_variable τ.loc α t
-                return T_Forall (α, t) 
+                return! M.undo_scoped_vars <| M {
+                    let! α = M.add_scoped_var x
+                    let! t = R τ
+                    // check if quantified var is unused
+                    if t.search_var(α).IsNone then Report.Warn.unused_quantified_type_variable τ.loc α t
+                    return T_Forall (α, t) 
+                }
 
             | Te_Let (d, τ1) ->
                 return! M.undo_δ <| M {
@@ -299,23 +306,25 @@ module internal Eval =
                 return Fx_F_Ty t
 
             | Fxe_Forall (((x, _), τo1), τ2) ->
-                let! α = M.search_or_add_scoped_var x
-                let! ϕ2 = R τ2                
-                let! ϕ1 = M {
-                    match τo1 with
-                    | None ->
-                        // check for unused quantified variable: because it's done on types rather than on type expressions, which would not allows for easy controlling scoping of the var itself
-                        let k =
-                            match ϕ2.ftype.search_var α with
-                            | Some k -> k
-                            | None   -> Report.Warn.unused_quantified_type_variable τ2.loc α ϕ2
-                                        kind.fresh_var
-                        in
-                            return Fx_Bottom k
+                return! M.undo_scoped_vars <| M {
+                    let! α = M.add_scoped_var x
+                    let! ϕ2 = R τ2                
+                    let! ϕ1 = M {
+                        match τo1 with
+                        | None ->
+                            // check for unused quantified variable: it's done here rather than during kind inference for scoping reasons
+                            let k =
+                                match ϕ2.search_var α with
+                                | Some k -> k
+                                | None   -> Report.Warn.unused_quantified_type_variable τ2.loc α ϕ2
+                                            kind.fresh_var
+                            in
+                                return Fx_Bottom k
 
-                    | Some τ1 -> return! R τ1
-                }
-                return Fx_Forall ((α, ϕ1), ϕ2)                              
+                        | Some τ1 -> return! R τ1
+                    }
+                    return Fx_Forall ((α, ϕ1), ϕ2)
+                }            
         }
 
 

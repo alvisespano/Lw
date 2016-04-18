@@ -140,14 +140,11 @@ type basic_builder (loc : location) =
             return Set.toList αs |> List.tryFind (function Va (_, Some s) -> s = x | _ -> false)
         }
 
-    member M.search_or_add_scoped_var x =
+    member M.add_scoped_var x =
         M {
-            let! o = M.search_scoped_var x
-            match o with
-            | Some α -> return α
-            | None   -> let α = var.fresh_named x
-                        do! M.lift_scoped_vars (Set.add α)
-                        return α
+            let α = var.fresh_named x
+            do! M.lift_scoped_vars (Set.add α)
+            return α
         }
 
     member M.undo_scoped_vars f =
@@ -184,7 +181,7 @@ type basic_builder (loc : location) =
             return { uni_context.Γ = Γ; γ = γ; loc = loc; scoped_vars = αs }
         }
 
-    member M.undoable_bind lift x v =
+    member internal M.undoable_bind lift x v =
         M {
             do! lift (fun (env : Env.t<_, _>) -> env.bind x v)
             return v, M { do! lift (fun (env : Env.t<_, _>) -> env.remove x) }

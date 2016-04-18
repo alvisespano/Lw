@@ -24,7 +24,7 @@ open Lw.Core.Typing.Equivalence
 // various utils
 //
 
-let vars_in_term (|Var|Leaf|Nodes|) =
+let vars_in_any_patt (|Var|Leaf|Nodes|) =
     let rec R = function
         | Var x  -> Set.singleton x
         | Leaf   -> Set.empty
@@ -61,7 +61,7 @@ let vars_in_patt p =
         | P_Record bs    -> Nodes [for _, p in bs -> p]
         | P_Tuple ps     -> Nodes ps
     in
-        vars_in_term (|Var|Leaf|Nodes|) p
+        vars_in_any_patt (|Var|Leaf|Nodes|) p
 
 let vars_in_ty_patt : ty_patt -> _ =
     let (|Var|Leaf|Nodes|) (p : ty_patt) =
@@ -77,7 +77,21 @@ let vars_in_ty_patt : ty_patt -> _ =
         | Tp_HTuple ps     -> Nodes ps        
         | Tp_Row (xps, po) -> Nodes (List.map snd xps @ (match po with None -> [] | Some p -> [p]))
     in
-        vars_in_term (|Var|Leaf|Nodes|)
+        vars_in_any_patt (|Var|Leaf|Nodes|)
+
+//let vars_in_ty_expr : ty_expr -> _ =
+//    let (|Var|Leaf|Nodes|) (e : ty_expr) =
+//        match e.value with
+//        | Te_Var x         -> Var x
+//        | Te_Cons _ 
+//        | Te_Wildcard      -> Leaf
+//        | Te_Forall (x, τ) -> Nodes [τ]
+//        | Te_Annot (p, _)  -> Nodes [p]
+//        | Te_App (p1, p2)  -> Nodes [p1; p2]
+//        | Te_HTuple ps     -> Nodes ps        
+//        | Te_Row (xps, po) -> Nodes (List.map snd xps @ (match po with None -> [] | Some p -> [p]))
+//    in
+//        vars_in_term (|Var|Leaf|Nodes|)
 
 let rec vars_in_decl (d : decl) =
     let B = Computation.B.set

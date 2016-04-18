@@ -458,6 +458,16 @@ type ty with
         in
             l [t]
 
+type fxty with
+    member ϕ.search_var α =
+        let rec R = function
+            | Fx_Bottom _             -> None
+            | Fx_Forall ((_, ϕ1), ϕ2) -> l [ϕ1; ϕ2]
+            | Fx_F_Ty t               -> t.search_var α
+        and l = List.tryPick R
+        in
+            l [ϕ]
+
 let T_Bottom k =
     let α, tα = ty.fresh_var_and_ty k
     in

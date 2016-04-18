@@ -1,4 +1,8 @@
 ﻿
+18/4/2016:
+* FIX: fixes in scoped variables
+
+
 15/4/2016:
 * FIX: various fixed in type annotations, type evaluation etc
 * UP: wildcards can now be type expressions too (not only type patterns as before)
