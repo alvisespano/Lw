@@ -36,7 +36,7 @@ type [< NoComparison; NoEquality; System.Diagnostics.DebuggerDisplayAttribute("{
 
         // extras
         constraints : constraints       // global constraints
-        scoped_vars : Set<var>          // named type variables
+        scoped_vars : scoped_vars       // named type variables are an env and not a set because lexical scoping is automatically handled by maps but not by sets
     }
 with
     override this.ToString () = this.pretty
@@ -56,7 +56,7 @@ with
             Q   = Q_Nil
 
             constraints = constraints.empty
-            scoped_vars = Set.empty
+            scoped_vars = Env.empty
         }
 
         
@@ -67,8 +67,8 @@ let (|Jb_Overload|Jb_Var|Jb_Data|Jb_OverVar|Jb_Unbound|) = function
     | Some (jenv_key.Var _, { mode = jenv_mode.Normal; scheme = σ })                 -> Jb_Var σ
     | Some (jenv_key.Inst _, { mode = jenv_mode.Overload; scheme = _ })              -> Jb_OverVar
     | Some (jenv_key.Data _, { mode = jenv_mode.Normal; scheme = σ })                -> Jb_Data σ
-    | None                                                              -> Jb_Unbound
-    | Some (jk, jv)                                                     -> unexpected "ill-formed jenv binding: %O = %O" __SOURCE_FILE__ __LINE__ jk jv
+    | None                                                                           -> Jb_Unbound
+    | Some (jk, jv) -> unexpected "ill-formed jenv binding: %O = %O" __SOURCE_FILE__ __LINE__ jk jv
 
 
 type basic_builder (loc : location) =
@@ -134,27 +134,6 @@ type basic_builder (loc : location) =
         try env.lookup x
         with Env.UnboundSymbol x -> report loc x
 
-    member M.search_scoped_var x =
-        M {
-            let! αs = M.get_scoped_vars
-            return Set.toList αs |> List.tryFind (function Va (_, Some s) -> s = x | _ -> false)
-        }
-
-    member M.add_scoped_var x =
-        M {
-            let α = var.fresh_named x
-            do! M.lift_scoped_vars (Set.add α)
-            return α
-        }
-
-    member M.undo_scoped_vars f =
-        M {
-            let! Γ = M.get_scoped_vars
-            let! r = f
-            do! M.set_scoped_vars Γ
-            return r
-        }
-
     member M.updated (k : kind) =
         M {
             let! θ = M.get_θ
@@ -177,8 +156,8 @@ type basic_builder (loc : location) =
         M {
             let! Γ = M.get_Γ
             let! γ = M.get_γ
-            let! αs = M.get_scoped_vars
-            return { uni_context.Γ = Γ; γ = γ; loc = loc; scoped_vars = αs }
+            let! scoped_vars = M.get_scoped_vars
+            return { uni_context.Γ = Γ; γ = γ; loc = loc; scoped_vars = scoped_vars }
         }
 
     member internal M.undoable_bind lift x v =
@@ -206,8 +185,8 @@ type inference_builder (loc, ctx : context) =
     member M.get_ungeneralizable_vars =
         M {
             let! Γ = M.get_Γ            
-            let! αs = M.get_scoped_vars
-            return fv_Γ Γ + if ctx.is_top_level then Set.empty else αs
+            let! scoped_vars = M.get_scoped_vars
+            return fv_Γ Γ + Computation.B.set { for sv in scoped_vars.values do if sv.nesting < 1 then yield sv.var }
         }
 
     // bind methods for γ and δ are in this superclass because they are used by type inference, kind inference and type evaluation
@@ -401,7 +380,7 @@ type type_inference_builder (loc, ctx) =
             let! ungeneralizables = M.get_ungeneralizable_vars
             let αs = t.fv - ungeneralizables
             if t.is_unquantified then
-                do! M.lift_scoped_vars (fun βs -> βs - αs)  // remove quantified vars from scoped vars, as if a Te_Forall was evaluated
+                do! M.lift_scoped_vars (fun scoped_vars -> scoped_vars.remove [for α in αs do match α with Va (_, Some s) -> yield s | _ -> ()])  // remove quantified vars from scoped vars, as if a Te_Forall was evaluated
                 return Some (T_Foralls (Set.toList αs, t))
             else
                 if not (Set.isEmpty αs) then Report.Warn.unquantified_variables_in_type loc t
@@ -530,6 +509,27 @@ type kind_inference_builder (loc, ctx) =
             let! r = f
             do! undo
             yield r
+        }
+
+    member M.search_scoped_var x =
+        M {
+            let! scoped_vars = M.get_scoped_vars
+            return Option.map (fun sv -> sv.var) (scoped_vars.search x)
+        }
+
+    member M.add_scoped_var x =
+        M {
+            let α = var.fresh_named x
+            do! M.lift_scoped_vars (fun scoped_vars -> scoped_vars.bind x { var = α; nesting = ctx.nesting })
+            return α
+        }
+
+    member M.undo_scoped_vars f =
+        M {
+            let! Γ = M.get_scoped_vars
+            let! r = f
+            do! M.set_scoped_vars Γ
+            return r
         }
 
 

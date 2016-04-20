@@ -295,27 +295,38 @@ type resolution = Res_Strict | Res_Loose | Res_No
 
 type [< NoComparison; NoEquality >] context =
     { 
-        nesting_level   : int
+        nesting   : int
         resolution      : resolution
     }
 with
     static member as_top_level_decl = {
-        nesting_level   = 0
+        nesting   = 0
         resolution      = Res_Strict
     }
 
-    member this.nest = { this with nesting_level = this.nesting_level + 1 } // HACK: re-enable this and fix what's wrong with top level generalization
-    member this.unnest = { this with nesting_level = crop (0, Int32.MaxValue) (this.nesting_level - 1) }
+    member this.nest = { this with nesting = this.nesting + 1 } // HACK: re-enable this and fix what's wrong with top level generalization
+    member this.unnest = { this with nesting = crop (0, Int32.MaxValue) (this.nesting - 1) }
 
-    member this.is_top_level = this.nesting_level < 1
+    member this.is_top_level = this.nesting < 1
 
+type scoped_var = {
+    var     : var
+    nesting    : int
+}
+with
+    member this.name =
+        match this.var with
+        | Va (_, Some s) -> s
+        | _ -> unexpected_case __SOURCE_FILE__ __LINE__ this
+
+type scoped_vars = Env.t<ident, scoped_var>
 
 type [< NoComparison; NoEquality >] uni_context =
     { 
         loc            : location
         γ              : kjenv
         Γ              : jenv
-        scoped_vars    : Set<var>
+        scoped_vars    : scoped_vars
     }
 
 
@@ -447,26 +458,19 @@ type ty with
     static member fresh_star_var = ty.fresh_var K_Star
     static member fresh_star_var_and_ty = ty.fresh_var_and_ty K_Star
 
-    member t.search_var α =
-        let rec R = function
-            | T_Var (β, k) when α = β -> Some k
-            | T_Forall (_, t) -> R t
-            | T_App (t1, t2)  -> l [t1; t2]
-            | T_HTuple ts     -> l ts
-            | _ -> None
-        and l = List.tryPick R
-        in
-            l [t]
+    member this.ftv =
+        Env.t.B {
+            match this with
+            | T_Var (α, k)              -> yield (α, k) 
+            | T_Closure (_, _, _, k)   
+            | T_Cons (_, k)             -> ()
+            | T_HTuple ts               -> for t in ts do yield! t.ftv
+            | T_App (t1, t2)            -> yield! t1.ftv; yield! t2.ftv
+            | T_Forall (α, t)           -> yield! t.ftv.remove α
+        }
 
-type fxty with
-    member ϕ.search_var α =
-        let rec R = function
-            | Fx_Bottom _             -> None
-            | Fx_Forall ((_, ϕ1), ϕ2) -> l [ϕ1; ϕ2]
-            | Fx_F_Ty t               -> t.search_var α
-        and l = List.tryPick R
-        in
-            l [ϕ]
+    member this.fv = Computation.B.set { for α, k in this.ftv do yield α; yield! k.fv }    
+
 
 let T_Bottom k =
     let α, tα = ty.fresh_var_and_ty k
@@ -477,11 +481,13 @@ let T_ForallK ((α, _), t) = T_Forall (α, t)
 let (|T_ForallK|_|) t =
     match t with
     | T_Forall (α, t) ->
-        let k = 
-            match t.search_var α with
-            | Some k -> k
-            | None   -> kind.fresh_var
-        in Some ((α, k), t)
+        let k =
+            match Seq.tryFind (fst >> (=) α) t.ftv with
+            | Some (_, k) -> k
+            | None        -> kind.fresh_var
+        in
+            Some ((α, k), t)
+
     | _ -> None
 
 let T_ForallsK, (|T_ForallsK0|), (|T_ForallsK|_|) = make_foralls T_ForallK (|T_ForallK|_|)
@@ -547,28 +553,6 @@ type ty with
         in
             R this
 
-    member this.kinded_ftv =
-        seq {
-                match this with
-                | T_Var (α, k)              -> yield (α, k) 
-                | T_Closure (_, _, _, k)   
-                | T_Cons (_, k)             -> ()
-                | T_HTuple ts               -> for t in ts do yield! t.kinded_ftv
-                | T_App (t1, t2)            -> yield! t1.kinded_ftv; yield! t2.kinded_ftv
-                | T_Forall (α, t)           -> yield! Seq.filter (fst >> (=) α >> not) t.kinded_ftv
-            } |> Seq.distinctBy fst
-
-    member this.ftv = this.kinded_ftv |> Seq.map fst |> Set.ofSeq
-
-    member this.fv =
-        match this with
-        | T_Var (α, k)              -> Set.singleton α + k.fv
-        | T_Cons (_, k)             -> k.fv
-        | T_HTuple ts               -> List.fold (fun r (t : ty) -> Set.union r t.fv) Set.empty ts
-        | T_App (t1, t2)            -> Set.union t1.fv t2.fv
-        | T_Forall (α, t)           -> t.fv - Set.singleton α
-        | T_Closure (_, _, _, k)    -> k.fv
-
     member this.is_monomorphic =
         match this with
         | T_Forall _        -> false
@@ -628,19 +612,17 @@ type fxty with
             | Fx_F_Ty t        -> t.pretty
             | Fx_Foralls arg   -> pretty_forall prefix.pretty_item Config.Printing.dynamic.flex_forall arg
             | Fx_Forall _ as ϕ -> unexpected_case __SOURCE_FILE__ __LINE__ ϕ
-                    
         and R = function
             | Fx_F_Ty _ as ϕ -> R' ϕ    // prevent double-wrapping an F-type
             | ϕ              -> pretty_kinded_wrapper R' ϕ
         in
             R this
 
-    member this.kinded_ftv =
+    member this.ftv =
         match this with
-        | Fx_F_Ty t               -> t.kinded_ftv
-        | Fx_Bottom _             -> Seq.empty
-        | Fx_Forall ((α, ϕ1), ϕ2) -> let r2 = ϕ2.kinded_ftv in if Seq.exists (fst >> (=) α) r2 then Seq.append ϕ1.kinded_ftv (Seq.filter (fst >> (=) α >> not) r2) else r2
-
+        | Fx_F_Ty t               -> t.ftv
+        | Fx_Bottom _             -> Env.empty
+        | Fx_Forall ((α, ϕ1), ϕ2) -> let r2 = ϕ2.ftv in if r2.contains_key α then ϕ1.ftv + r2.remove α else r2
 
     member this.fv =
         match this with
@@ -653,12 +635,6 @@ type fxty with
         | Fx_Bottom _
         | Fx_Forall _ -> false
         | Fx_F_Ty t   -> t.is_monomorphic
-
-//    member this.return_ty =
-//        match this with
-//        | Fx_Forall (_, ϕ) -> ϕ.return_ty
-//        | Fx_F_Ty t        -> t.return_ty
-//        | Fx_Bottom _      -> 
 
 
 

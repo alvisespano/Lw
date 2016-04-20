@@ -147,7 +147,7 @@ module internal Eval =
                     let! α = M.add_scoped_var x
                     let! t = R τ
                     // check if quantified var is unused
-                    if t.search_var(α).IsNone then Report.Warn.unused_quantified_type_variable τ.loc α t
+                    if not (Set.contains α t.fv) then Report.Warn.unused_quantified_type_variable τ.loc α t
                     return T_Forall (α, t) 
                 }
 
@@ -314,10 +314,10 @@ module internal Eval =
                         | None ->
                             // check for unused quantified variable: it's done here rather than during kind inference for scoping reasons
                             let k =
-                                match ϕ2.search_var α with
-                                | Some k -> k
-                                | None   -> Report.Warn.unused_quantified_type_variable τ2.loc α ϕ2
-                                            kind.fresh_var
+                                match Seq.tryFind (fst >> (=) α) ϕ2.ftv with
+                                | Some (_, k) -> k
+                                | None        -> Report.Warn.unused_quantified_type_variable τ2.loc α ϕ2
+                                                 kind.fresh_var
                             in
                                 return Fx_Bottom k
 

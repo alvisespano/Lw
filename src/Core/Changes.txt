@@ -1,4 +1,15 @@
 ﻿
+20/4/2016:
+* UP: scoped_vars are now an environment mapping names to records holding the variable and the nesting level
+* UP: scoped var nesting levels is used for filtering top-level-introduced vars in generalization
+
+
+19/4/2016:
+* REFACT: ty.kinded_ftv method has been renamed to ftv and now computes an Env mapping vars to kinds instead of a sequence of pairs
+* REFACT: ty.fv is now implemented using method ftv
+* REFACT: ty.search_var and fxty.search_var do not exist anymore
+
+
 18/4/2016:
 * FIX: fixes in scoped variables
 

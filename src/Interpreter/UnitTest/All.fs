@@ -43,6 +43,7 @@ let temp1 : section =
     "let ids : list ('a -> 'a) = ids
      in
         map poly ids",                          type_ok "list (int * bool)"
+
     "let ids : forall 'a. list ('a -> 'a) = ids
      in
         map poly ids",                          type_ok "list (int * bool)"

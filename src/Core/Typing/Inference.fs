@@ -118,7 +118,7 @@ let gen_bind ctx prefixes ({ id = x; qual = dq; expr = e0; to_bind = ϕ; constra
 type type_inference_builder with
     member inline M.extend_fv_of (t : ^t) =
         M {
-            for α, k in (^t : (member kinded_ftv : _) t) do
+            for α, k in (^t : (member ftv : _) t) do
                 let! Q = M.get_Q
                 if not (Set.contains α Q.dom) then      // add only variables that do not already exist in prefix
                     do! M.extend (α, Fx_Bottom k)            
@@ -247,9 +247,8 @@ and W_decl (ctx : context) d =
             #if DEBUG
             use N = var.reset_normalization
             #endif
-            do! M.undo_scoped_vars <| M {
-                do! W_decl' ctx d   
-            }
+            do! M.set_scoped_vars Env.empty
+            do! W_decl' ctx d               
             do! M.prune_θ
         else
             // when it's an inner binding
@@ -386,8 +385,6 @@ and W_expr' ctx (e0 : expr) =
             let! Q0 = M.get_Q
             let! tx = W_F_ty_annot ctx τo
             // annotated or not, all free vars are added to the prefix
-//            for α in tx.ftv do
-//                do! M.extend (α, Fx_Bottom K_Star)
             let! ϕ1 = M.undo_Γ <| M {
                 let! _ = M.bind_ungeneralized_var_Γ x tx
                 return! W_expr ctx e
@@ -427,7 +424,7 @@ and W_expr' ctx (e0 : expr) =
             yield T_Tuple ts
 
         | If (e1, e2, e3) ->
-            // TODOL: desugar to match with booleans?
+            // TODOL: desugar to a match expressions over true and false?
             let! t1 = W_expr_F ctx e1
             do! M.unify e1.loc T_Bool t1
             let! t2 = W_expr_F ctx e2
