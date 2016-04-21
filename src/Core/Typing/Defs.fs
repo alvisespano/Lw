@@ -305,15 +305,18 @@ with
     }
 
     member this.nest = { this with nesting = this.nesting + 1 } // HACK: re-enable this and fix what's wrong with top level generalization
-    member this.unnest = { this with nesting = crop (0, Int32.MaxValue) (this.nesting - 1) }
 
     member this.is_top_level = this.nesting < 1
 
 type scoped_var = {
     var     : var
-    nesting    : int
+    nesting : int
 }
 with
+    override this.ToString () = this.pretty
+
+    member this.pretty = sprintf "%O (nesting level %d)" this.var this.nesting
+
     member this.name =
         match this.var with
         | Va (_, Some s) -> s

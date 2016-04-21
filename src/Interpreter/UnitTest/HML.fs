@@ -19,6 +19,11 @@ let hml =
     "choose (fun x y -> x) (fun x y -> y)",     type_ok "forall 'a. 'a -> 'a -> 'a"
     "choose id",                                type_ok "forall ('a :> forall 'b. 'b -> 'b). 'a -> 'a"
 
+    "let ids : list ('a -> 'a) = ids in ids",   wrong_type  // autogeneralization does not occur in nested lets (and this one is a nested let..in)
+    "let ids : list ('a -> 'a) = ids",          type_ok_ "forall 'a. list ('a -> 'a)" [flag.RemoveBindings]    // autogeneralization takes place for top-level lets
+    "let ids : forall 'a. list ('a -> 'a) = ids in ids",   type_ok "forall 'a. list ('a -> 'a)"
+    "let ids : list (forall 'a. 'a -> 'a) = ids in ids",   type_ok "list (forall 'a. 'a -> 'a)"
+
     "let poly (f : forall 'a. 'a -> 'a) =
         f 1, f true",                           type_ok "(forall 'a. 'a -> 'a) -> int * bool"
         

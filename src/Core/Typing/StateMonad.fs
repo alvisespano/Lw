@@ -186,7 +186,7 @@ type inference_builder (loc, ctx : context) =
         M {
             let! Γ = M.get_Γ            
             let! scoped_vars = M.get_scoped_vars
-            return fv_Γ Γ + Computation.B.set { for sv in scoped_vars.values do if sv.nesting < 1 then yield sv.var }
+            return fv_Γ Γ + Computation.B.set { for sv in scoped_vars.values do if sv.nesting > 0 then yield sv.var }
         }
 
     // bind methods for γ and δ are in this superclass because they are used by type inference, kind inference and type evaluation
@@ -370,7 +370,7 @@ type type_inference_builder (loc, ctx) =
             | FxU0_ForallsQ (Q, _) -> assert (Set.intersect Q.dom ungeneralizables).IsEmpty     // no quantified vars must be among the ungeneralizables
             | FxU0_Bottom _        -> ()                                                        // TODOL: is there something to check with kind vars?
             assert ϕ.fv.IsSubsetOf ungeneralizables                                             // free vars must be among the ungeneralizable ones
-            do let βs = Set.intersect ϕ.fv ungeneralizables in if Set.count βs > 0 then Report.Hint.scoped_tyvars_wont_be_generalized loc βs
+            do let βs = Set.intersect ϕ.fv ungeneralizables in if Set.count βs > 0 then Report.Hint.scoped_vars_wont_be_generalized loc "type" βs
             let! cs = M.get_constraints
             return! M.bind_Γ jk { mode = jm; scheme = { constraints = cs; fxty = ϕ } }
         }
@@ -392,7 +392,7 @@ type type_inference_builder (loc, ctx) =
             let! ϕo = M.maybe_auto_geneneralize t
             match ϕo with
             | None    -> return t
-            | Some t' -> if is_hint_enabled then Report.Hint.auto_generalization_occurred_in_annotation loc t t'
+            | Some t' -> if is_hint_enabled then Report.Hint.auto_generalization_occurred loc t t'
                          return t'
         }
 

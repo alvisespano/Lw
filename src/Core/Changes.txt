@@ -1,4 +1,9 @@
 ﻿
+21/4/2016:
+* FIX: small fixes on type annotations and auto generalization
+* BUG: removal of scoped vars does not work as intended
+
+
 20/4/2016:
 * UP: scoped_vars are now an environment mapping names to records holding the variable and the nesting level
 * UP: scoped var nesting levels is used for filtering top-level-introduced vars in generalization

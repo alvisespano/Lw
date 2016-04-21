@@ -41,6 +41,7 @@ type flag =
     | KeepBindingsAtEnd
     | ShowSuccessful
     | ShowInput
+    | NoAutoGen
     | No of flag
 with
     static member private fold_flags p flag flags =
@@ -96,18 +97,16 @@ type typechecker () =
         with get () = st.Γ, st.γ, st.δ
         and set (Γ, γ, δ) = st <- { st with Γ = Γ; γ = γ; δ =  δ }
 
-    member this.parse_fxty_expr s =
+    member this.parse_fxty_expr (s, ?autogen) =
+        let autogen = defaultArg autogen false
         let τ =
             try parse_fxty_expr s
             with :? syntax_error as e -> unexpected "syntax error while parsing type expression: %s\n%O" __SOURCE_FILE__ __LINE__ s e
         let st1 = st
         let ϕ, _ = this.Wk_and_eval_fxty_expr τ
         st <- st1
-        τ, ϕ
-
-    member this.parse_ty_expr_and_auto_gen s =
-        match this.parse_fxty_expr s with
-        | τ, Fx_F_Ty t -> τ, Fx_F_Ty <| this.auto_generalize t
+        match τ, ϕ with
+        | τ, Fx_F_Ty t -> τ, Fx_F_Ty <| (if autogen then this.auto_generalize else id) t
         | r            -> r
 
 
@@ -274,8 +273,7 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
                 | D_Bind [{ patt = ULo (P_Var x) | ULo (P_Annot (ULo (P_Var x), _)) }] ->
                     let envs0 = tchk.envs
                     let r = tchk.lookup_var_Γ x
-                    if ed.is_enabled flag.RemoveBindings then
-                        tchk.envs <- envs0
+                    if ed.is_enabled flag.RemoveBindings then tchk.envs <- envs0
                     r
 
                 | _ -> decl_dummy_ty
@@ -317,7 +315,7 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
     | result.TypedOk so ->        
         let ϕok =
             match so with
-            | Some s -> try tchk.parse_ty_expr_and_auto_gen s |> snd
+            | Some s -> try tchk.parse_fxty_expr (s, not (ed.is_enabled flag.NoAutoGen)) |> snd
                         with e -> unexpected "%s" __SOURCE_FILE__ __LINE__ (pretty_exn_and_inners e)   
             | None   -> decl_dummy_ty
         in

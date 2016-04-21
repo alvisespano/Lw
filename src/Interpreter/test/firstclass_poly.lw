@@ -5,9 +5,9 @@
 
 namespace Test 
 
-let x = fun f (x : 'b) y -> ((f : _ -> 'a) x, y) : 'a * _
+//let x = fun f (x : 'b) y -> ((f : _ -> 'a) x, y) : 'a * _
  
-(*let id x = x
+let id x = x
 
 let ids = [id]
 
@@ -24,7 +24,7 @@ let tmp1 () =
     let ids : list ('a -> 'a) = ids
     in
         map poly ids
-*)
+
 
 (*
 let patt_in_non_letrec f x =

@@ -26,7 +26,11 @@ let temp1 : section =
 
     "let id x = x",                             type_ok "'a -> 'a"
     "let ids = [id]",                           type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
-    "let ids : list ('a -> 'a) = ids in ids",   type_ok "forall 'a. list ('a -> 'a)"
+
+    "let ids : list ('a -> 'a) = ids in ids",               type_ok_ "list ('a -> 'a)" [flag.NoAutoGen; flag.RemoveBindings]
+    "let ids : list ('a -> 'a) = ids",                      type_ok_ "forall 'a. list ('a -> 'a)" [flag.RemoveBindings]    // autogeneralization takes place for top-level lets
+    "let ids : forall 'a. list ('a -> 'a) = ids in ids",    type_ok_ "forall 'a. list ('a -> 'a)" [flag.RemoveBindings]
+    "let ids : list (forall 'a. 'a -> 'a) = ids in ids",    type_ok_ "list (forall 'a. 'a -> 'a)" [flag.RemoveBindings]
 
     "let poly (f : forall 'a. 'a -> 'a) =
         f 1, f true",                           type_ok "(forall 'a. 'a -> 'a) -> int * bool"

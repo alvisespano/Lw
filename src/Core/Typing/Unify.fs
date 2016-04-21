@@ -230,7 +230,7 @@ module internal Mgu =
                     let check_wrt α t = if check_circularity_wrt α Q0 t then let S = S θ0 in Report.Error.type_circularity loc (S t1_) (S t2_) (T_Var (α, t.kind)) (S t2_)
                     check_wrt α1 ϕ2
                     check_wrt α2 ϕ1
-                    let Q1, θ1, ϕ = let S = subst_fxty θ0 in mgu_fx ctx Q0 (S ϕ1) (S ϕ2)  // TODO: this θ0 subst should be applied also on the 2 types involved in the 2 updates below?
+                    let Q1, θ1, ϕ = let S = subst_fxty θ0 in mgu_fx ctx Q0 (S ϕ1) (S ϕ2)
                     let Q2, θ2 = Q1.update_with_subst (α1, T_Var (α2, k2))   // do not use t2 here! it would always refer to right-hand type of the pattern, and in case of reversed named var it would refer to α1!
                     let Q3, θ3 = Q2.update_with_bound (α2, ϕ)
                     in

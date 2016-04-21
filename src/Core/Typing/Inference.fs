@@ -479,7 +479,7 @@ and W_expr' ctx (e0 : expr) =
             for ei in es do
                 let! ti = W_expr_F ctx ei
                 try do! M.unify ei.loc T_Unit ti
-                with :? Report.type_error as e -> Report.Warn.expected_unit_statement ei.loc ti
+                with :? Report.type_error -> Report.Warn.expected_unit_statement ei.loc ti
             yield! W_expr ctx e
 
         | Select (e, x) ->
