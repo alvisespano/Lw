@@ -189,7 +189,7 @@ let Tp_Record, Tp_Variant, Tp_Tuple, (|Tp_Record|_|), (|Tp_Variant|_|), (|Tp_Tup
     in
         make_rows Tp_Rowed (|Tp_Rowed|_|)
 
-let Tp_AnnotVar, Tp_SimpleVar, (|Tp_AnnotVar|_|), (|Tp_SimpleVar|_|) = make_annot_var_pattern Tp_Var Tp_Annot (function Tp_Var x -> Some x | _ -> None) (function Tp_Annot (a, b) -> Some (a, b) | _ -> None)
+let Tp_SimpleVar, (|Tp_SimpleVar|_|) = make_simple_var Tp_Var Tp_Annot (function Tp_Var x -> Some x | _ -> None) (function Tp_Annot (a, b) -> Some (a, b) | _ -> None)
 
 
 let Te_LambdaPatts =
@@ -349,7 +349,7 @@ let (|P_ConsApps1|_|) = function
     | P_Apps1 (ULo (P_Cons x) :: ts) -> Some (x, ts)
     | _ -> None
 
-let P_AnnotVar, P_SimpleVar, (|P_AnnotVar|_|), (|P_SimpleVar|_|) = make_annot_var_pattern P_Var P_Annot (function P_Var x -> Some x | _ -> None) (function P_Annot (a, b) -> Some (a, b) | _ -> None)
+let P_SimpleVar, (|P_SimpleVar|_|) = make_simple_var P_Var P_Annot (function P_Var x -> Some x | _ -> None) (function P_Annot (a, b) -> Some (a, b) | _ -> None)
 
 
 

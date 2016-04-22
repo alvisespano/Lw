@@ -20,16 +20,20 @@ module private InFSharp =
 let temp1 : section =
     "Temp1", [flag.ShowSuccessful; flag.ShowInput],
     [
-//    "forall 'a ('b :> _|_). 'a -> 'b",          type_eq "forall 'a. forall 'b. 'a -> 'b"
-//    "forall 'a ('b :> _|_). 'a -> 'b",          type_eq "forall 'a. forall 'b. 'a -> 'b"
-
-
     "let id x = x",                             type_ok "'a -> 'a"
     "let ids = [id]",                           type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
+    "ids",  type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"   // check ids is still a flex type and has not been rebound
 
-    "let ids : list ('a -> 'a) = ids in ids",               type_ok_ "list ('a -> 'a)" [flag.NoAutoGen; flag.RemoveBindings]
-    "let ids : list ('a -> 'a) = ids",                      type_ok_ "forall 'a. list ('a -> 'a)" [flag.RemoveBindings]    // autogeneralization takes place for top-level lets
-    "let ids : forall 'a. list ('a -> 'a) = ids in ids",    type_ok_ "forall 'a. list ('a -> 'a)" [flag.RemoveBindings]
+    // TODO: move these so real test sections
+    "let ids : list ('a -> 'a) = ids in ids",               type_ok_ "list ('a -> 'a)" [flag.NoAutoGen]
+    "ids",  type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"   // check ids is still a flex type and has not been rebound
+    
+    "let ids : list ('a -> 'a) = ids",                      type_ok_ "forall 'a. list ('a -> 'a)" [flag.RemoveBindings]    // autogeneralization does take place for top-level lets
+    "ids",  type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"   // check ids is still a flex type and has not been rebound
+    
+    "let ids : forall 'a. list ('a -> 'a) = ids in ids",    type_ok "forall 'a. list ('a -> 'a)" 
+    "ids",  type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"   // check ids is still a flex type and has not been rebound
+
     "let ids : list (forall 'a. 'a -> 'a) = ids in ids",    type_ok_ "list (forall 'a. 'a -> 'a)" [flag.RemoveBindings]
 
     "let poly (f : forall 'a. 'a -> 'a) =

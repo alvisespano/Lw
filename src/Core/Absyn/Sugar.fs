@@ -197,7 +197,7 @@ let make_rec_lambda lambda_cases lett d_rec var ((x, t), cases) =
 
 // annotated variable patterns (useful for detecting simple let or let-rec bindings)
 
-let make_annot_var_pattern p_var p_annot (|P_Var|_|) (|P_Annot|_|) =
+let make_simple_var p_var p_annot (|P_Var|_|) (|P_Annot|_|) =
     let P_AnnotVar (x, τ) = p_annot (ULo (p_var x), τ)
     let P_SimpleVar = function
         | x, None   -> p_var x
@@ -210,4 +210,4 @@ let make_annot_var_pattern p_var p_annot (|P_Var|_|) (|P_Annot|_|) =
         | P_AnnotVar (x, τ) -> Some (x, Some τ)
         | _ -> None
     in
-        P_AnnotVar, P_SimpleVar, (|P_AnnotVar|_|), (|P_SimpleVar|_|)
+        P_SimpleVar, (|P_SimpleVar|_|)

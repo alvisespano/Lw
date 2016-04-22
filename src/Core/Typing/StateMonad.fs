@@ -206,6 +206,32 @@ type inference_builder (loc, ctx : context) =
             return! M.bind_γ x kσ
         }
 
+    member M.search_scoped_var x =
+        M {
+            let! scoped_vars = M.get_scoped_vars
+            return Option.map (fun sv -> sv.var) (scoped_vars.search x)
+        }
+
+    member M.add_scoped_var x =
+        M {
+            let α = var.fresh_named x
+            do! M.lift_scoped_vars <| fun scoped_vars -> scoped_vars.bind x { var = α; nesting = ctx.nesting }
+            return α
+        }
+
+    member M.remove_scoped_var α =
+        M {
+            do! M.lift_scoped_vars <| fun scoped_vars -> scoped_vars.filter (fun _ sv -> sv.var <> α) 
+        }
+
+    member M.undo_scoped_vars f =
+        M {
+            let! Γ = M.get_scoped_vars
+            let! r = f
+            do! M.set_scoped_vars Γ
+            return r
+        }
+
 
 // specialized monad for type inference
 //
@@ -380,7 +406,7 @@ type type_inference_builder (loc, ctx) =
             let! ungeneralizables = M.get_ungeneralizable_vars
             let αs = t.fv - ungeneralizables
             if t.is_unquantified then
-                do! M.lift_scoped_vars (fun scoped_vars -> scoped_vars.remove [for α in αs do match α with Va (_, Some s) -> yield s | _ -> ()])  // remove quantified vars from scoped vars, as if a Te_Forall was evaluated
+                for α in αs do do! M.remove_scoped_var α    // remove newly quantified vars from scoped vars as if they were in a forall
                 return Some (T_Foralls (Set.toList αs, t))
             else
                 if not (Set.isEmpty αs) then Report.Warn.unquantified_variables_in_type loc t
@@ -511,26 +537,6 @@ type kind_inference_builder (loc, ctx) =
             yield r
         }
 
-    member M.search_scoped_var x =
-        M {
-            let! scoped_vars = M.get_scoped_vars
-            return Option.map (fun sv -> sv.var) (scoped_vars.search x)
-        }
-
-    member M.add_scoped_var x =
-        M {
-            let α = var.fresh_named x
-            do! M.lift_scoped_vars (fun scoped_vars -> scoped_vars.bind x { var = α; nesting = ctx.nesting })
-            return α
-        }
-
-    member M.undo_scoped_vars f =
-        M {
-            let! Γ = M.get_scoped_vars
-            let! r = f
-            do! M.set_scoped_vars Γ
-            return r
-        }
 
 
 type node_kind_inference_builder<'e> (τ : node<'e>, ctx) =

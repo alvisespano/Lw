@@ -1,4 +1,8 @@
 ﻿
+22/4/2016:
+* FIX: scoped vars removed from scoped vars env by value
+
+
 21/4/2016:
 * FIX: small fixes on type annotations and auto generalization
 * BUG: removal of scoped vars does not work as intended

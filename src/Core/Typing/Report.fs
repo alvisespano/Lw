@@ -257,8 +257,8 @@ module Hint =
     // TODO: is this hint message really not necessary anymore?
     let manually_resolved_symbol_refers_to_mupliple_constraints loc x t cs =
         H 2 loc Low "symbol `%O : %O` specified in manual resolution refers to multiple constraints sharing the same name. \
-        Unification with user-specified type %O will apply in unpredicible order, possibly preventing the desired resolution to take place. \
-        In case of undesired results, consider reordering manually resolved symbols or redesigning code in such a way that multiple occurrences are no more an issue.\n\
+        Unification with user-specified type %O will apply in unpredictable order, possibly preventing the desired resolution to take place. \
+        In case of undesired results, consider manually reordering resolved symbols or redesigning code in such a way that multiple occurrences are no more an issue.\n\
         Current constraints are:\n%O"
             x t t (mappen_strings (fun (x, t) -> sprintf "   %O : %O" x t) "\n" cs)
 
@@ -266,7 +266,7 @@ module Hint =
         H 3 loc Normal "datatype %s defines a data constructor %s whose type %O has type variables that cannot be generalized" c x tx
 
     let scoped_vars_wont_be_generalized loc what scoped_vars =
-        H 4 loc Min "scoped %s variable%s %s will not be generalized" what (if Seq.length scoped_vars > 1 then "s" else "") (flatten_stringables ", " scoped_vars)
+        H 4 loc Min "scoped %s variable%s %s won't be generalized" what (if Seq.length scoped_vars > 1 then "s" else "") (flatten_stringables ", " scoped_vars)
 
     let auto_generalization_occurred loc t t' =
         H 5 loc Low "type annotation %O has been automatically generalized to %O" t t'

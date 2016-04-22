@@ -148,7 +148,7 @@ module internal Eval =
                     let! t = R τ
                     // check if quantified var is unused
                     if not (Set.contains α t.fv) then Report.Warn.unused_quantified_type_variable τ.loc α t
-                    return T_Forall (α, t) 
+                    return T_Forall (α, t)
                 }
 
             | Te_Let (d, τ1) ->
