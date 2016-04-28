@@ -22,19 +22,13 @@ let temp1 : section =
     [
     "let id x = x",                             type_ok "'a -> 'a"
     "let ids = [id]",                           type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
-    "ids",  type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"   // check ids is still a flex type and has not been rebound
 
-    // TODO: move these so real test sections
-    "let ids : list ('a -> 'a) = ids in ids",               type_ok_ "list ('a -> 'a)" [flag.NoAutoGen]
-    "ids",  type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"   // check ids is still a flex type and has not been rebound
-    
-    "let ids : list ('a -> 'a) = ids",                      type_ok_ "forall 'a. list ('a -> 'a)" [flag.RemoveBindings]    // autogeneralization does take place for top-level lets
-    "ids",  type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"   // check ids is still a flex type and has not been rebound
-    
-    "let ids : forall 'a. list ('a -> 'a) = ids in ids",    type_ok "forall 'a. list ('a -> 'a)" 
-    "ids",  type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"   // check ids is still a flex type and has not been rebound
+    // TODO: move these to real test sections
+    "let ids : list ('a -> 'a) = ids in ids",               type_ok_ "list ('a -> 'a)" [flag.NoAutoGen]    
+    "let ids : list ('a -> 'a) = ids",                      type_ok_ "forall 'a. list ('a -> 'a)" [flag.Unbind]
 
-    "let ids : list (forall 'a. 'a -> 'a) = ids in ids",    type_ok_ "list (forall 'a. 'a -> 'a)" [flag.RemoveBindings]
+    "let ids : forall 'a. list ('a -> 'a) = ids in ids",    type_ok "forall 'a. list ('a -> 'a)"
+    "let ids : list (forall 'a. 'a -> 'a) = ids in ids",    type_ok "list (forall 'a. 'a -> 'a)"
 
     "let poly (f : forall 'a. 'a -> 'a) =
         f 1, f true",                           type_ok "(forall 'a. 'a -> 'a) -> int * bool"

@@ -37,7 +37,7 @@ type logger with
 [< RequireQualifiedAccess >]
 type flag =
     | Verbatim
-    | RemoveBindings
+    | Unbind
     | KeepBindingsAtEnd
     | ShowSuccessful
     | ShowInput
@@ -95,7 +95,7 @@ type typechecker () =
 
     member __.envs
         with get () = st.Γ, st.γ, st.δ
-        and set (Γ, γ, δ) = st <- { st with Γ = Γ; γ = γ; δ =  δ }
+        and set (Γ, γ, δ) = st <- { st with Γ = Γ; γ = γ; δ = δ }
 
     member this.parse_fxty_expr (s, ?autogen) =
         let autogen = defaultArg autogen false
@@ -171,7 +171,7 @@ let static_error_infos (input : string) (e : static_error) =
 // entries and sections
 //
 
-let decl_dummy_ty = Fx_F_Ty T_Unit
+//let decl_dummy_ty = Fx_F_Ty T_Unit
 
 type entry = string * (result * flag list)
 type section = string * flag list * entry list
@@ -267,16 +267,17 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
             match p with
             | parsed.Expr e -> tchk.W_expr e
             | parsed.Decl d ->
+                let envs0 = tchk.envs
                 tchk.W_decl d
                 match d.value with
                 | D_RecBind [{ patt = ULo (P_SimpleVar (x, _)) }]
                 | D_Bind [{ patt = ULo (P_SimpleVar (x, _)) }] ->
-                    let envs0 = tchk.envs
                     let r = tchk.lookup_var_Γ x
-                    if ed.is_enabled flag.RemoveBindings then tchk.envs <- envs0
+                    if ed.is_enabled flag.Unbind then
+                        tchk.envs <- envs0
                     r
 
-                | _ -> decl_dummy_ty
+                | d -> not_implemented "%O" __SOURCE_FILE__ __LINE__ d
         in
             ϕ, fun (ϕb, tb, kb) -> [ "translated", txt p.pretty_translated
                                      "inferred", pp_infos <| typed_infos (ok_or_no_info ϕb (fxty ϕ), 
@@ -312,12 +313,8 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
             | false, false, _   -> test_failed' "types are different")
                 infs
 
-    | result.TypedOk so ->        
-        let ϕok =
-            match so with
-            | Some s -> try tchk.parse_fxty_expr (s, not (ed.is_enabled flag.NoAutoGen)) |> snd
-                        with e -> unexpected "%s" __SOURCE_FILE__ __LINE__ (pretty_exn_and_inners e)   
-            | None   -> decl_dummy_ty
+    | result.TypedOk (Some s) ->        
+        let ϕok = tchk.parse_fxty_expr (s, not (ed.is_enabled flag.NoAutoGen)) |> snd
         in
             try
                 let ϕres, infs1 = typecheck_expr_or_decl ()
@@ -335,6 +332,15 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
                     | _                  -> test_failed "types are wrong" (infs1 @ infs2)
             with :? static_error as e ->
                 test_failed (sprintf "unwanted %s" (error_name_of_exn e)) <| infs0 @ static_error_infos s1 e @ expected_infos ϕok
+
+    | result.TypedOk None ->        
+        try
+            let _, infs1 = typecheck_expr_or_decl ()
+            let infs1 = infs0 @ infs1 (true, true, true)
+            in
+                test_ok "typed ok" infs1
+        with :? static_error as e ->
+            test_failed (sprintf "unwanted %s" (error_name_of_exn e)) <| infs0 @ static_error_infos s1 e
                     
     | result.StaticError (T, codeo) ->
         assert (let t = typeof<static_error> in t = T || T.IsSubclassOf t)

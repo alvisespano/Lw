@@ -1,4 +1,8 @@
 ﻿
+28/4/2016:
+* FIX: some fixes in scoped vars, type annotations and relevant unit tests
+
+
 22/4/2016:
 * FIX: scoped vars removed from scoped vars env by value
 
