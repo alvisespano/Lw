@@ -41,14 +41,13 @@ let temp1 : section =
      in
         map poly ids",                          type_ok "list (int * bool)"
 
-    // these 2 are equal thanks to automatic generalization
     "let ids : list ('a -> 'a) = ids
      in
-        map poly ids",                          type_ok "list (int * bool)"
+        map poly ids",                          wrong_type
 
     "let ids : forall 'a. list ('a -> 'a) = ids
      in
-        map poly ids",                          type_ok "list (int * bool)"
+        map poly ids",                          wrong_type
 
     "let ids : forall ('a :> forall 'b. 'b -> 'b) . list 'a = ids
      in

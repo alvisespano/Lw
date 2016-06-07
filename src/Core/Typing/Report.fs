@@ -190,6 +190,12 @@ module Error =
 //        let α = var.fresh_named x
 //        Ek 402 loc "type variable %O used in place of type constructor %s :: %O" α x k
 
+type Globals.logger with
+    member this.norm l =
+        let N = var.reset_normalization
+        this.cont <- fun () -> N.Dispose ()
+        l
+
 
 [< RequireQualifiedAccess >]
 module Warn =
@@ -245,9 +251,8 @@ module Warn =
 [< RequireQualifiedAccess >]
 module Hint =
     let private H n loc pri (fmt : StringFormat<'a, unit>) =
-        use N = var.reset_normalization
         if Set.contains n Config.Report.disabled_hints then null_L.hint Unmaskerable fmt
-        else L.nhint n pri (new StringFormat<location -> 'a, unit> ("%O: " + fmt.Value)) loc
+        else L.norm L.nhint n pri (new StringFormat<location -> 'a, unit> ("%O: " + fmt.Value)) loc
 
     let unsolvable_constraint loc x t cx ct αs = 
         H 1 loc High "constraint `%s : %O` is unsolvable because type variables %s do not appear in %O : %O. This prevents automatic resolution to determine instances, therefore \
@@ -271,7 +276,9 @@ module Hint =
     let auto_generalization_occurred loc t t' =
         H 5 loc Low "type annotation %O has been automatically generalized to %O" t t'
 
+    // TODO: this might become a warning that could be avoided by using a special instantiation operator ":>"
     let type_annotation_is_instantiation loc tann ϕinf =
-        H 6 loc High "type annotation %O is an instance of the inferred flex type %O, which may lead to a loss of type information, \
-        possibly introducing the need of additional type annotations elsewhere"
+        H 6 loc High "type annotation %O is an instance of the inferred type %O, which is more generic. \
+        This is a loss of type information: additional type annotations may be needed to make further code work in relation to this, \
+        or it may prevent first-class polymorphic uses"
             tann ϕinf

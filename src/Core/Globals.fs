@@ -79,6 +79,18 @@ type TimeSpan with
 type logger () =
     inherit Log.console_logger (Config.Log.cfg)
 
+    let default_cont = fun () -> ()
+    let mutable cont_ = default_cont
+        
+    member __.cont
+        with get () = cont_
+        and set f = cont_ <- f
+
+    override this.actually_print (header, fgcol, markso, prio, s) =
+        base.actually_print (header, fgcol, markso, prio, s)
+        this.cont ()
+        this.cont <- default_cont
+
     member this.not_implemented fmt = this.log_unleveled "NOT IMPLEMENTED" Config.Log.not_implemented_color fmt
     member this.uni pri fmt = this.log_leveled "UNI" Config.Log.uni_color this.cfg.debug_threshold pri fmt
     member this.resolve pri fmt = this.log_leveled "RESOLVE" Config.Log.resolve_color this.cfg.debug_threshold pri fmt

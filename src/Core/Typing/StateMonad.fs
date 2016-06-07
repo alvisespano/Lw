@@ -405,12 +405,14 @@ type type_inference_builder (loc, ctx) =
         M {
             let! ungeneralizables = M.get_ungeneralizable_vars
             let αs = t.fv - ungeneralizables
-            if t.is_unquantified then
-                for α in αs do do! M.remove_scoped_var α    // remove newly quantified vars from scoped vars as if they were in a forall
-                return Some (T_Foralls (Set.toList αs, t))
+            if Set.isEmpty αs then return None
             else
-                if not (Set.isEmpty αs) then Report.Warn.unquantified_variables_in_type loc t
-                return None
+                if t.is_unquantified then
+                    for α in αs do do! M.remove_scoped_var α    // remove newly quantified vars from scoped vars as if they were in a forall
+                    return Some (T_Foralls (Set.toList αs, t))
+                else
+                    if not (Set.isEmpty αs) then Report.Warn.unquantified_variables_in_type loc t
+                    return None
         }
 
     member M.auto_generalize is_hint_enabled t =

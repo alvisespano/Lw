@@ -1,4 +1,15 @@
 ﻿
+7/6/2016:
+* FIX: auto generalization with an empty quantified variable set is now treated as a non-generalization: this fixes the unwanted hint message
+       when no type variable was actually generalized
+
+
+6/6/2016:
+* back to Lw after some weeks off
+* UP: logger supports continuations post-printing
+* FIX: warning and hint messages are now properly normalized now thanks to the new logger continuation mechanism
+
+
 28/4/2016:
 * FIX: some fixes in scoped vars, type annotations and relevant unit tests
 
