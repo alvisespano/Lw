@@ -1,4 +1,8 @@
 ﻿
+8-9/6/2016:
+* UP: warning and hint report system revamped: now supports free enabling and disabling, plus it's reused by both hints and warnings
+
+
 7/6/2016:
 * FIX: auto generalization with an empty quantified variable set is now treated as a non-generalization: this fixes the unwanted hint message
        when no type variable was actually generalized

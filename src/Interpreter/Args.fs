@@ -13,6 +13,7 @@ open FSharp.Common.X.Assembly
 open System
 open System.Reflection
 open Lw
+open Lw.Core.Typing
 
 module C = Config
 module CC = Core.Config
@@ -78,12 +79,12 @@ let private infos =
     Entry.string "hint-threshold" (fun s -> CC.Log.cfg.hint_threshold <- pri.Parse s) "set hint messages verbosity threshold" (Some CC.Log.cfg.hint_threshold)
     Entry.string "warn-threshold" (fun s -> CC.Log.cfg.warn_threshold <- pri.Parse s) "set warnings verbosity threshold" (Some CC.Log.cfg.warn_threshold)
     
-    Entry.int "-W" CC.Report.disable_warning "suppress specific warning" None
-    Entry.int "-H" CC.Report.disable_hint "suppress specific hint" None
-    Entry.int "+W" CC.Report.enable_warning "enable specific warning" None
-    Entry.int "+H" CC.Report.enable_hint "enable specific hint" None
-    Entry.int "Wall" (fun n -> CC.Report.disabled_warnings <- Set.empty) "activate all warnings" None
-    Entry.int "Hall" (fun n -> CC.Report.disabled_hints <- Set.empty) "activate all hints" None
+    Entry.int "-W" Report.warnings.disable "suppress specific warning" None
+    Entry.int "-H" Report.hints.disable "suppress specific hint" None
+    Entry.int "+W" Report.warnings.enable "enable specific warning" None
+    Entry.int "+H" Report.hints.enable "enable specific hint" None
+    Entry.int "Wall" (fun n -> Report.warnings.disable_all) "activate all warnings" None
+    Entry.int "Hall" (fun n -> Report.hints.disable_all) "activate all hints" None
   |] |> Array.concat
 
 let parse () = ArgParser.Parse (infos, other, usage ())

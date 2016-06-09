@@ -42,14 +42,18 @@ type flag =
     | ShowSuccessful
     | ShowInput
     | NoAutoGen
+    | HideWarning of int
+    | HideWarnings
+    | HideHint of int
+    | HideHints
     | No of flag
 with
     static member private fold_flags p flag flags =
-        List.fold (fun r ->
-                function flag' when flag = flag'     -> true
-                       | No flag' when flag = flag'  -> false
-                       | _                           -> r)
+        List.fold (fun r -> function flag' when flag = flag'     -> true
+                                   | No flag' when flag = flag'  -> false
+                                   | _                           -> r)
             false flags |> p
+
     static member is_enabled = flag.fold_flags id
 
 [< RequireQualifiedAccess >]
@@ -188,7 +192,10 @@ type entry_data = {
     flags : flag list
 }
 with
-    member this.is_enabled fl = flag.is_enabled fl (this.flags @ this.section.flags)
+    member this.all_flags with get () = this.flags @ this.section.flags
+    member this.is_flag_enabled fl = flag.is_enabled fl this.all_flags
+    member this.enabled_flags = List.filter this.is_flag_enabled this.all_flags
+
 
 let entry_info sec n = "entry", txt (sprintf "#%d in section \"%s\"" (n + 1) sec)
 let ok_or_no_info b doc = (txt (sprintf "(%s)" (if b then "OK" else "NO"))) <+> doc
@@ -201,7 +208,7 @@ type logger with
     member __.pp (L : PrintfFormat<_, _, _, _> -> _) doc = L "%s" <| render None doc
 
 let test_ok (ed : entry_data) esit infs =
-    if ed.is_enabled flag.ShowSuccessful then
+    if ed.is_flag_enabled flag.ShowSuccessful then
         L.pp L.test_ok (pp_infos (["esist", txt esit] @ infs))
     score.Ok
 
@@ -210,7 +217,7 @@ let test_failed msg infs = L.pp L.test_failed (pp_infos (["reason", txt msg] @ i
 let test_weak_ok esit infs = L.pp L.test_weak_ok (pp_infos (["esit", txt esit] @ infs)); score.Weak
 
 let testing (ed : entry_data) doc =
-    if ed.is_enabled flag.ShowInput then
+    if ed.is_flag_enabled flag.ShowInput then
         L.pp L.testing doc
 
 
@@ -251,13 +258,33 @@ let parse_expr_or_decl s =
         try parsed.Decl (parse_decl s)
         with :? syntax_error -> reraise ()
            | e               -> unexpected "syntax error while parsing expression or declaration: %s\n%O" __SOURCE_FILE__ __LINE__ s e
-
+  
 
 let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
     let infs0 = [ entry_info sd.name sd.num ]
     let ed = { section = sd; input = s1; flags = flags }
     let test_ok = test_ok ed
     let testing = testing ed
+
+    use D =
+        let l =
+            let w = Typing.Report.warnings
+            let h = Typing.Report.hints
+            let undo f g = f (); disposable_by g
+            let restore (r : recoverables) = let x = r.disabled in fun () -> r.disabled <- x
+            let all (r : recoverables) = undo (fun () -> r.disable_all) (restore r)
+            let one (r : recoverables) n = undo (fun () -> r.disable n) (restore r)
+            in
+                [ for flag in ed.enabled_flags do
+                    match flag with
+                    | flag.HideWarnings  -> yield all w
+                    | flag.HideHints     -> yield all h
+                    | flag.HideWarning n -> yield one w n
+                    | flag.HideHint n    -> yield one h n
+                    | _ -> ()         
+                ]
+        in
+            disposable_by (fun () -> for d in l do d.Dispose ())
     
     let typecheck_expr_or_decl () =
         testing (txt "input:" </> txt ed.input)
@@ -273,7 +300,7 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
                 | D_RecBind [{ patt = ULo (P_SimpleVar (x, _)) }]
                 | D_Bind [{ patt = ULo (P_SimpleVar (x, _)) }] ->
                     let r = tchk.lookup_var_Γ x
-                    if ed.is_enabled flag.Unbind then
+                    if ed.is_flag_enabled flag.Unbind then
                         tchk.envs <- envs0
                     r
 
@@ -314,11 +341,11 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
                 infs
 
     | result.TypedOk (Some s) ->        
-        let ϕok = tchk.parse_fxty_expr (s, not (ed.is_enabled flag.NoAutoGen)) |> snd
+        let ϕok = tchk.parse_fxty_expr (s, not (ed.is_flag_enabled flag.NoAutoGen)) |> snd
         in
             try
                 let ϕres, infs1 = typecheck_expr_or_decl ()
-                let compare_test = if ed.is_enabled flag.Verbatim then compare_test_verbatim else compare_test_eq
+                let compare_test = if ed.is_flag_enabled flag.Verbatim then compare_test_verbatim else compare_test_eq
                 let b3 = compare_test ϕres ϕok
                 let infs1 = infs0 @ infs1 b3
                 let infs2 = expected_infos ϕok

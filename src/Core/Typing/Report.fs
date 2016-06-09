@@ -190,19 +190,65 @@ module Error =
 //        let α = var.fresh_named x
 //        Ek 402 loc "type variable %O used in place of type constructor %s :: %O" α x k
 
+
+// warnings and hints
+//
+
 type Globals.logger with
     member this.norm l =
         let N = var.reset_normalization
         this.cont <- fun () -> N.Dispose ()
         l
 
+type recoverables (disabled_by_default) as this =
+    let mutable disabled_ : int Set = disabled_by_default
+    let mutable registered = Set.empty
+
+    do
+        for n in disabled_by_default do
+            this.register n
+
+    member __.register n = registered <- Set.add n registered
+    member __.is_registered n = Set.contains n registered
+
+    member private this.check n =
+        if not (this.is_registered n) then
+            L.unexpected_error "report weak entity %d has not been registered properly" n
+            this.register n
+
+    member this.disable n = this.check n; disabled_ <- Set.add n disabled_
+    member this.enable n = this.check n; disabled_ <- Set.remove n disabled_
+
+    member this.is_disabled n = this.check n; Set.contains n disabled_
+    member this.is_enabled n = this.check n; not (this.is_disabled n)
+
+    member __.disabled
+        with get () = disabled_
+        and set x =
+            for n in x do this.check n
+            disabled_ <- x
+
+    member __.disable_all = disabled_ <- registered
+    member __.enable_all = disabled_ <- Set.empty
+
+    member this.create log n loc pri (fmt : StringFormat<'a, _>) =
+        if this.is_enabled n then L.norm log n pri (StringFormat<location -> 'a, _> ("%O: " + fmt.Value)) loc
+        else null_L.msg Min fmt // 
+
+let warnings = new recoverables (Config.Report.disabled_warnings)
+let hints = new recoverables (Config.Report.disabled_hints)
+
+
+
 
 [< RequireQualifiedAccess >]
 module Warn =
-    let private W n loc pri (fmt : StringFormat<'a, _>) =
-        use N = var.reset_normalization
-        if Set.contains n Config.Report.disabled_warnings then null_L.warn Min fmt
-        else L.nwarn n pri (StringFormat<location -> 'a, _> ("%O: " + fmt.Value)) loc
+//    let private W n loc pri (fmt : StringFormat<'a, _>) =
+//        use N = var.reset_normalization
+//        if warnings.is_enabled n then L.nwarn n pri (StringFormat<location -> 'a, _> ("%O: " + fmt.Value)) loc
+//        else null_L.warn Min fmt
+
+    let private W n loc pri fmt = warnings.create L.nwarn n loc pri fmt
 
     let expected_unit_statement loc t =
         W 1 loc High "expected expression of type %O when used as statement, but got type %O" T_Unit t
@@ -250,9 +296,11 @@ module Warn =
 
 [< RequireQualifiedAccess >]
 module Hint =
-    let private H n loc pri (fmt : StringFormat<'a, unit>) =
-        if Set.contains n Config.Report.disabled_hints then null_L.hint Unmaskerable fmt
-        else L.norm L.nhint n pri (new StringFormat<location -> 'a, unit> ("%O: " + fmt.Value)) loc
+//    let private H n loc pri (fmt : StringFormat<'a, unit>) =
+//        if Config.Report.is_hint_enabled n then L.norm L.nhint n pri (new StringFormat<location -> 'a, unit> ("%O: " + fmt.Value)) loc
+//        else null_L.hint Unmaskerable fmt
+
+    let private H n loc pri fmt = hints.create L.nhint n loc pri fmt
 
     let unsolvable_constraint loc x t cx ct αs = 
         H 1 loc High "constraint `%s : %O` is unsolvable because type variables %s do not appear in %O : %O. This prevents automatic resolution to determine instances, therefore \
