@@ -1,4 +1,8 @@
 ﻿
+10/6/2016:
+* UP: UnitTest flags for warning and hint manipulation have been extended and tested
+
+
 8-9/6/2016:
 * UP: warning and hint report system revamped: now supports free enabling and disabling, plus it's reused by both hints and warnings
 

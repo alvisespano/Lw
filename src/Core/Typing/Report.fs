@@ -200,40 +200,39 @@ type Globals.logger with
         this.cont <- fun () -> N.Dispose ()
         l
 
-type recoverables (disabled_by_default) as this =
-    let mutable disabled_ : int Set = disabled_by_default
-    let mutable registered = Set.empty
+/// Opaque representation of recoverables class internal state
+type recoverables_state = internal { disabled : int Set option }
 
-    do
-        for n in disabled_by_default do
-            this.register n
+type recoverables (disabled_by_default) =
+    let mutable disabled_ : int Set option = Some disabled_by_default
 
-    member __.register n = registered <- Set.add n registered
-    member __.is_registered n = Set.contains n registered
+    member __.disable n =
+        match disabled_ with
+        | None     -> ()
+        | Some set -> disabled_ <- Some (Set.add n set)
 
-    member private this.check n =
-        if not (this.is_registered n) then
-            L.unexpected_error "report weak entity %d has not been registered properly" n
-            this.register n
+    member __.enable n =
+        disabled_ <- Some (match disabled_ with
+                           | None     ->  Set.singleton n
+                           | Some set ->  Set.remove n set)
 
-    member this.disable n = this.check n; disabled_ <- Set.add n disabled_
-    member this.enable n = this.check n; disabled_ <- Set.remove n disabled_
+    member __.is_disabled n =
+        match disabled_ with
+        | None     -> true
+        | Some set -> Set.contains n set
 
-    member this.is_disabled n = this.check n; Set.contains n disabled_
-    member this.is_enabled n = this.check n; not (this.is_disabled n)
+    member this.is_enabled n = not (this.is_disabled n)
 
-    member __.disabled
-        with get () = disabled_
-        and set x =
-            for n in x do this.check n
-            disabled_ <- x
+    member __.state
+        with get () = { disabled = disabled_ }
+        and set st = disabled_ <- st.disabled
 
-    member __.disable_all = disabled_ <- registered
-    member __.enable_all = disabled_ <- Set.empty
+    member __.disable_all = disabled_ <- None
+    member __.enable_all = disabled_ <- Some Set.empty
 
     member this.create log n loc pri (fmt : StringFormat<'a, _>) =
         if this.is_enabled n then L.norm log n pri (StringFormat<location -> 'a, _> ("%O: " + fmt.Value)) loc
-        else null_L.msg Min fmt // 
+        else null_L.msg Min fmt // msg channel is used, but any would do
 
 let warnings = new recoverables (Config.Report.disabled_warnings)
 let hints = new recoverables (Config.Report.disabled_hints)

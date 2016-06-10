@@ -42,10 +42,14 @@ type flag =
     | ShowSuccessful
     | ShowInput
     | NoAutoGen
-    | HideWarning of int
-    | HideWarnings
-    | HideHint of int
-    | HideHints
+    | DisableWarning of int
+    | DisableWarnings
+    | DisableHint of int
+    | DisableHints
+    | EnableWarning of int
+    | EnableWarnings
+    | EnableHint of int
+    | EnableHints
     | No of flag
 with
     static member private fold_flags p flag flags =
@@ -266,23 +270,32 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
     let test_ok = test_ok ed
     let testing = testing ed
 
+    // deal with flags for hint and warning manipulation
     use D =
         let l =
+            let undo f g = f (); disposable_by g
+            let restore (r : recoverables) = let x = r.state in fun () -> r.state <- x
+            let disable_all (r : recoverables) = undo (fun () -> r.disable_all) (restore r)
+            let disable1 (r : recoverables) n = undo (fun () -> r.disable n) (restore r)
+            let enable_all (r : recoverables) = undo (fun () -> r.enable_all) (restore r)
+            let enable1 (r : recoverables) n = undo (fun () -> r.enable n) (restore r)
             let w = Typing.Report.warnings
             let h = Typing.Report.hints
-            let undo f g = f (); disposable_by g
-            let restore (r : recoverables) = let x = r.disabled in fun () -> r.disabled <- x
-            let all (r : recoverables) = undo (fun () -> r.disable_all) (restore r)
-            let one (r : recoverables) n = undo (fun () -> r.disable n) (restore r)
             in
-                [ for flag in ed.enabled_flags do
+              [ for flag in ed.enabled_flags do
                     match flag with
-                    | flag.HideWarnings  -> yield all w
-                    | flag.HideHints     -> yield all h
-                    | flag.HideWarning n -> yield one w n
-                    | flag.HideHint n    -> yield one h n
+                    | flag.DisableWarnings  -> yield disable_all w
+                    | flag.DisableHints     -> yield disable_all h
+                    | flag.DisableWarning n -> yield disable1 w n
+                    | flag.DisableHint n    -> yield disable1 h n
+
+                    | flag.EnableWarnings  -> yield enable_all w
+                    | flag.EnableHints     -> yield enable_all h
+                    | flag.EnableWarning n -> yield enable1 w n
+                    | flag.EnableHint n    -> yield enable1 h n
+                    
                     | _ -> ()         
-                ]
+              ]
         in
             disposable_by (fun () -> for d in l do d.Dispose ())
     
