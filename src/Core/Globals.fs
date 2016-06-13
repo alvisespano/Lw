@@ -80,11 +80,8 @@ type logger () =
     inherit Log.console_logger (Config.Log.cfg)
 
     let default_cont = fun () -> ()
-    let mutable cont_ = default_cont
         
-    member __.cont
-        with get () = cont_
-        and set f = cont_ <- f
+    member val cont = default_cont with get, set
 
     override this.actually_print (header, fgcol, markso, prio, s) =
         base.actually_print (header, fgcol, markso, prio, s)

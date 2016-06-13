@@ -20,11 +20,13 @@ module private InFSharp =
 let temp1 : section =
     "Temp1", [flag.ShowSuccessful; flag.ShowInput],
     [
+    "forall 'a 'b. 'a -> 'b",                   type_neq_ "forall 'a 'b. 'a -> 'c" [flag.DisableWarning 13]
+
     "let id x = x",                             type_ok "'a -> 'a"
     "let ids = [id]",                           type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
 
     // TODO: move these to real test sections
-    "let ids : list ('a -> 'a) = ids in ids",               type_ok_ "list ('a -> 'a)" [flag.NoAutoGen]    
+    "let ids : list ('a -> 'a) = ids in ids",               type_ok_ "list ('a -> 'a)" [flag.NoAutoGen; flag.EnableHint 6]    
     "let ids : list ('a -> 'a) = ids",                      type_ok_ "forall 'a. list ('a -> 'a)" [flag.Unbind]
 
     "let ids : forall 'a. list ('a -> 'a) = ids in ids",    type_ok "forall 'a. list ('a -> 'a)"
@@ -56,9 +58,9 @@ let temp1 : section =
 
 let all : section list =
     [
-//    [temp1]
-    TypeEquivalence.all
-    Basic.all   // these are needed as they introduce some basic bindings
-    HML.all
+    [temp1]
+//    TypeEquivalence.all
+//    Basic.all   // these are needed as they introduce some basic bindings
+//    HML.all
     ] |> List.concat
     

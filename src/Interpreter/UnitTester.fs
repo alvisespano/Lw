@@ -196,7 +196,7 @@ type entry_data = {
     flags : flag list
 }
 with
-    member this.all_flags with get () = this.flags @ this.section.flags
+    member this.all_flags = this.flags @ this.section.flags
     member this.is_flag_enabled fl = flag.is_enabled fl this.all_flags
     member this.enabled_flags = List.filter this.is_flag_enabled this.all_flags
 
@@ -271,6 +271,8 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
     let testing = testing ed
 
     // deal with flags for hint and warning manipulation
+    use wtracer = Typing.Report.warnings.tracer
+    use htracer = Typing.Report.hints.tracer
     use D =
         let l =
             let undo f g = f (); disposable_by g
@@ -297,7 +299,10 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
                     | _ -> ()         
               ]
         in
-            disposable_by (fun () -> for d in l do d.Dispose ())
+            disposable_by (fun () -> for d in List.rev l do d.Dispose ())   // dispose in reverse order for restoring state correctly
+
+    let infs0 () = infs0 @ [ "warnings", txt (flatten_stringables ", " wtracer.get)
+                             "hints", txt (flatten_stringables ", " htracer.get) ]
     
     let typecheck_expr_or_decl () =
         testing (txt "input:" </> txt ed.input)
@@ -338,7 +343,7 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
         let b2 = t1.is_equivalent t2
         let b3 = k1.is_equivalent k2
         let infs =
-            infs0 @
+            infs0 () @
             [ "flex types", ok_or_no_info b1 (fxty ϕ1 <+> txt "=" <+> fxty ϕ2)
               "F-types", ok_or_no_info b2 (ty t1 <+> txt "=" <+> ty t2)
               "kinds", ok_or_no_info b3 (kind k1 <+> txt "=" <+> kind k2) ]
@@ -360,7 +365,7 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
                 let ϕres, infs1 = typecheck_expr_or_decl ()
                 let compare_test = if ed.is_flag_enabled flag.Verbatim then compare_test_verbatim else compare_test_eq
                 let b3 = compare_test ϕres ϕok
-                let infs1 = infs0 @ infs1 b3
+                let infs1 = infs0 () @ infs1 b3
                 let infs2 = expected_infos ϕok
                 in
                     match b3 with
@@ -371,16 +376,16 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
                     | false, true, false -> test_failed "types are ok but kind is wrong" (infs1 @ infs2)
                     | _                  -> test_failed "types are wrong" (infs1 @ infs2)
             with :? static_error as e ->
-                test_failed (sprintf "unwanted %s" (error_name_of_exn e)) <| infs0 @ static_error_infos s1 e @ expected_infos ϕok
+                test_failed (sprintf "unwanted %s" (error_name_of_exn e)) <| infs0 () @ static_error_infos s1 e @ expected_infos ϕok
 
     | result.TypedOk None ->        
         try
             let _, infs1 = typecheck_expr_or_decl ()
-            let infs1 = infs0 @ infs1 (true, true, true)
+            let infs1 = infs0 () @ infs1 (true, true, true)
             in
                 test_ok "typed ok" infs1
         with :? static_error as e ->
-            test_failed (sprintf "unwanted %s" (error_name_of_exn e)) <| infs0 @ static_error_infos s1 e
+            test_failed (sprintf "unwanted %s" (error_name_of_exn e)) <| infs0 () @ static_error_infos s1 e
                     
     | result.StaticError (T, codeo) ->
         assert (let t = typeof<static_error> in t = T || T.IsSubclassOf t)
@@ -390,7 +395,7 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
             in
                 test_failed
                     (something (sprintf "expected %s code %d" errname) (sprintf "expected some %s" errname) codeo)
-                    (infs0 @ infs1 (false, false, false))
+                    (infs0 () @ infs1 (false, false, false))
         with :? static_error as e ->
             let tb = let t = e.GetType() in t = T || t.IsSubclassOf T
             let errname = error_name_of_exn e
@@ -403,7 +408,7 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
                 | true, false  -> test_weak_ok (sprintf "%s is right but error code %d is wrong" errname e.code)
                 | false, true  -> test_weak_ok (sprintf "error code %d is right but %s is wrong" e.code errname)
                 | false, false -> test_failed (sprintf "wrong %s and code %d" errname e.code)
-                ) <| infs0 @ static_error_infos s1 e
+                ) <| infs0 () @ static_error_infos s1 e
 
 
 let score_infos scores =

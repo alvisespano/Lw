@@ -31,6 +31,12 @@ type kind_error (msg, n, loc) =
 
 let flatten_and_trim_strings sep ss = flatten_strings sep (seq { for s : string in ss do let s = s.Trim () in if not <| String.IsNullOrWhiteSpace s then yield s })
 
+type Globals.logger with
+    member this.norm l =
+        let N = var.reset_normalization
+        this.cont <- fun () -> N.Dispose ()
+        l
+
 let inline prompt ctx prefixes x (t1 : ^t1) t2o =
     let is_top_level = (^a : (member is_top_level : bool) ctx)
     let log =
@@ -194,17 +200,12 @@ module Error =
 // warnings and hints
 //
 
-type Globals.logger with
-    member this.norm l =
-        let N = var.reset_normalization
-        this.cont <- fun () -> N.Dispose ()
-        l
-
 /// Opaque representation of recoverables class internal state
 type recoverables_state = internal { disabled : int Set option }
 
 type recoverables (disabled_by_default) =
     let mutable disabled_ : int Set option = Some disabled_by_default
+    let mutable tracers : WeakReference<recoverables_tracer> list = []
 
     member __.disable n =
         match disabled_ with
@@ -230,9 +231,35 @@ type recoverables (disabled_by_default) =
     member __.disable_all = disabled_ <- None
     member __.enable_all = disabled_ <- Some Set.empty
 
+    member this.tracer =
+        let r = new recoverables_tracer (this)
+        tracers <- new WeakReference<recoverables_tracer> (r) :: tracers
+        r
+
+    member private __.filter_tracers f =
+        let l = tracers.Length
+        let tr = ref Unchecked.defaultof<recoverables_tracer>
+        tracers <- tracers |> List.filter (fun wtr ->
+                if wtr.TryGetTarget tr then
+                    f !tr
+                else false)
+        L.debug Normal "tracers: %d >= %d" l tracers.Length
+
+    member this.remove_tracer tr0 = this.filter_tracers ((<>) tr0) 
+
     member this.create log n loc pri (fmt : StringFormat<'a, _>) =
+        this.filter_tracers (fun tr -> tr.add n; true)
         if this.is_enabled n then L.norm log n pri (StringFormat<location -> 'a, _> ("%O: " + fmt.Value)) loc
-        else null_L.msg Min fmt // msg channel is used, but any would do
+        else null_L.msg Min fmt // msg channel is used, but any would do, as it actually doesn't write out
+
+
+and recoverables_tracer (r : recoverables) as this =
+    inherit disposable_base (fun () -> L.debug High "disposing"; r.remove_tracer this)
+    let mutable nums = Set.empty
+    member __.add n = nums <- Set.add n nums
+    member __.contains x = Set.contains x nums
+    member __.get = nums
+
 
 let warnings = new recoverables (Config.Report.disabled_warnings)
 let hints = new recoverables (Config.Report.disabled_hints)
