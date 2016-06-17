@@ -1,4 +1,9 @@
 ﻿
+17/6/2016:
+* UP: UnitTest internals revamped: now each entry computes a list of (score * msg) tuples, which are then sorted according to severity and the final
+      result is the worst in the list
+
+
 13/6/2016:
 * UP: flag manegement in UnitTest revamped even more: it now supports checking whether warnings and hints actually take place, via
       a special scope-tracer object which can track warnings or hints shot while type-checking 

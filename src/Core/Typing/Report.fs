@@ -91,15 +91,16 @@ let private circularity E n loc what x1 x2 α x =
 [< RequireQualifiedAccess >]
 module Error =            
     
-    // put here only those codes that need to be caught or detected or reused for some reason
+    // put here only those error codes that need to be caught, detected or reused by other parts of the program for some reason (e.g., UnitTest)
     module Code =
         let type_mismatch = 200
+        let unbound_symbol = 10
 
 
     // unbound symbol errors
 
     let unbound_symbol loc x =
-        Es 10 loc "variable identifier `%s` is undefined" x
+        Es Code.unbound_symbol loc "variable identifier `%s` is undefined" x
 
     let unbound_type_constructor loc x =
         Es 11 loc "type constructor `%s` is undefined" x
@@ -197,84 +198,84 @@ module Error =
 //        Ek 402 loc "type variable %O used in place of type constructor %s :: %O" α x k
 
 
+// alert manager
+//
+
+[< RequireQualifiedAccess >]
+module Alert =
+
+    /// Opaque representation of manager state
+    type state =
+        val disabled : int Set option
+        internal new (d) = { disabled =  d }
+
+    type manager (disabled_by_default) =
+        let mutable disabled_ : int Set option = Some disabled_by_default
+        let mutable tracers : WeakReference<tracer> list = []
+
+        member __.disable n =
+            match disabled_ with
+            | None     -> ()
+            | Some set -> disabled_ <- Some (Set.add n set)
+
+        member __.enable n =
+            disabled_ <- Some (match disabled_ with
+                               | None     ->  Set.singleton n
+                               | Some set ->  Set.remove n set)
+
+        member __.is_disabled n =
+            match disabled_ with
+            | None     -> true
+            | Some set -> Set.contains n set
+
+        member this.is_enabled n = not (this.is_disabled n)
+
+        member __.state
+            with get () = new state (disabled_)
+            and set (st : state) = disabled_ <- st.disabled
+
+        member __.disable_all = disabled_ <- None
+        member __.enable_all = disabled_ <- Some Set.empty
+
+        member this.tracer =
+            let r = new tracer (this)
+            tracers <- new WeakReference<tracer> (r) :: tracers
+            r
+
+        member private __.filter_tracers f =
+            let tr = ref Unchecked.defaultof<tracer>
+            tracers <- tracers |> List.filter (fun wtr ->
+                    if wtr.TryGetTarget tr then
+                        f !tr
+                    else false)
+
+        member this.remove_tracer tr0 = this.filter_tracers ((<>) tr0) 
+
+        member this.log f n loc pri (fmt : StringFormat<'a, _>) =
+            this.filter_tracers (fun tr -> tr.add n; true)
+            if this.is_enabled n then L.norm f n pri (StringFormat<location -> 'a, _> ("%O: " + fmt.Value)) loc
+            else null_L.msg Min fmt // uses msg channel but any would do, as it actually doesn't output
+
+
+    and tracer (r : manager) =
+        inherit disposable_base ()
+        let mutable nums = Set.empty
+        member internal __.add n = nums <- Set.add n nums
+        member __.to_set = nums
+        override this.cleanup_managed () = this.remove_self        
+        member this.remove_self = r.remove_tracer this
+
+
 // warnings and hints
 //
 
-/// Opaque representation of recoverables class internal state
-type recoverables_state = internal { disabled : int Set option }
-
-type recoverables (disabled_by_default) =
-    let mutable disabled_ : int Set option = Some disabled_by_default
-    let mutable tracers : WeakReference<recoverables_tracer> list = []
-
-    member __.disable n =
-        match disabled_ with
-        | None     -> ()
-        | Some set -> disabled_ <- Some (Set.add n set)
-
-    member __.enable n =
-        disabled_ <- Some (match disabled_ with
-                           | None     ->  Set.singleton n
-                           | Some set ->  Set.remove n set)
-
-    member __.is_disabled n =
-        match disabled_ with
-        | None     -> true
-        | Some set -> Set.contains n set
-
-    member this.is_enabled n = not (this.is_disabled n)
-
-    member __.state
-        with get () = { disabled = disabled_ }
-        and set st = disabled_ <- st.disabled
-
-    member __.disable_all = disabled_ <- None
-    member __.enable_all = disabled_ <- Some Set.empty
-
-    member this.tracer =
-        let r = new recoverables_tracer (this)
-        tracers <- new WeakReference<recoverables_tracer> (r) :: tracers
-        r
-
-    member private __.filter_tracers f =
-        let l = tracers.Length
-        let tr = ref Unchecked.defaultof<recoverables_tracer>
-        tracers <- tracers |> List.filter (fun wtr ->
-                if wtr.TryGetTarget tr then
-                    f !tr
-                else false)
-        L.debug Normal "tracers: %d >= %d" l tracers.Length
-
-    member this.remove_tracer tr0 = this.filter_tracers ((<>) tr0) 
-
-    member this.create log n loc pri (fmt : StringFormat<'a, _>) =
-        this.filter_tracers (fun tr -> tr.add n; true)
-        if this.is_enabled n then L.norm log n pri (StringFormat<location -> 'a, _> ("%O: " + fmt.Value)) loc
-        else null_L.msg Min fmt // msg channel is used, but any would do, as it actually doesn't write out
-
-
-and recoverables_tracer (r : recoverables) as this =
-    inherit disposable_base (fun () -> L.debug High "disposing"; r.remove_tracer this)
-    let mutable nums = Set.empty
-    member __.add n = nums <- Set.add n nums
-    member __.contains x = Set.contains x nums
-    member __.get = nums
-
-
-let warnings = new recoverables (Config.Report.disabled_warnings)
-let hints = new recoverables (Config.Report.disabled_hints)
-
-
-
+let warnings = new Alert.manager (Config.Report.disabled_warnings)
+let hints = new Alert.manager (Config.Report.disabled_hints)
 
 [< RequireQualifiedAccess >]
 module Warn =
-//    let private W n loc pri (fmt : StringFormat<'a, _>) =
-//        use N = var.reset_normalization
-//        if warnings.is_enabled n then L.nwarn n pri (StringFormat<location -> 'a, _> ("%O: " + fmt.Value)) loc
-//        else null_L.warn Min fmt
 
-    let private W n loc pri fmt = warnings.create L.nwarn n loc pri fmt
+    let private W n loc pri fmt = warnings.log L.nwarn n loc pri fmt
 
     let expected_unit_statement loc t =
         W 1 loc High "expected expression of type %O when used as statement, but got type %O" T_Unit t
@@ -320,13 +321,11 @@ module Warn =
     let unquantified_variables_in_type loc t =
         W 14 loc Low "type expression has unquantified type variables: %O" t
 
+
 [< RequireQualifiedAccess >]
 module Hint =
-//    let private H n loc pri (fmt : StringFormat<'a, unit>) =
-//        if Config.Report.is_hint_enabled n then L.norm L.nhint n pri (new StringFormat<location -> 'a, unit> ("%O: " + fmt.Value)) loc
-//        else null_L.hint Unmaskerable fmt
 
-    let private H n loc pri fmt = hints.create L.nhint n loc pri fmt
+    let private H n loc pri fmt = hints.log L.nhint n loc pri fmt
 
     let unsolvable_constraint loc x t cx ct αs = 
         H 1 loc High "constraint `%s : %O` is unsolvable because type variables %s do not appear in %O : %O. This prevents automatic resolution to determine instances, therefore \

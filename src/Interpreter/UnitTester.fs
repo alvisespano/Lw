@@ -23,7 +23,7 @@ open Lw.Core.Typing.Defs
 open Lw.Core.Typing.Inference
 open Lw.Core.Typing.Meta
 open Lw.Core.Typing.Ops
-open Lw.Core.Typing.Report
+open Lw.Core.Typing
 open Lw.Core.Typing.StateMonad
 open Lw.Core.Typing.Equivalence
 open PPrint
@@ -76,6 +76,11 @@ with
         | score.Failed  -> "FAILED"
         | score.Weak    -> "WEAK"
 
+    member this.to_int =
+        match this with
+        | score.Ok     -> 1
+        | score.Weak   -> 2
+        | score.Failed -> 3
 
 
 // TODO: reuse this for interactive as well
@@ -228,7 +233,7 @@ let testing (ed : entry_data) doc =
 // compares
 //
 
-let compare_test eq_fxty eq_ty eq_kind (ϕres : fxty) (ϕok : fxty) =
+let fxty_compare_test eq_fxty eq_ty eq_kind (ϕres : fxty) (ϕok : fxty) =
     let tb = eq_ty ϕok.ftype ϕres.ftype
     let kb = eq_kind ϕok.kind ϕres.kind
     let ϕb =
@@ -240,9 +245,9 @@ let compare_test eq_fxty eq_ty eq_kind (ϕres : fxty) (ϕok : fxty) =
     in
         ϕb, tb, kb
 
-let compare_test_eq = compare_test (fun (x : fxty) y -> x.is_equivalent y) (fun (x : ty) y -> x.is_equivalent y) (fun (x : kind) y -> x.is_equivalent y)   
+let fxty_compare_test_eq = fxty_compare_test (fun (x : fxty) y -> x.is_equivalent y) (fun (x : ty) y -> x.is_equivalent y) (fun (x : kind) y -> x.is_equivalent y)   
 
-let compare_test_verbatim =
+let fxty_compare_test_verbatim =
     let p x =
         use N = var.reset_normalization
         let r = sprintf "%O" x
@@ -250,7 +255,18 @@ let compare_test_verbatim =
             r.Replace (Config.Printing.dynamic.flex_forall, Config.Printing.dynamic.forall)     // replace capitalized Forall with the lowercase one
     let (===) a b = p a = p b
     in
-        compare_test (===) (===) (===)
+        fxty_compare_test (===) (===) (===)
+
+let tyeq_compare_test (ϕ1 : fxty) (ϕ2 : fxty) =
+    let t1 = ϕ1.ftype
+    let t2 = ϕ2.ftype
+    let k1 = ϕ1.kind
+    let k2 = ϕ2.kind
+    let b1 = ϕ1.is_equivalent ϕ2
+    let b2 = t1.is_equivalent t2
+    let b3 = k1.is_equivalent k2
+    in
+        b1, b2, b3
 
 
 // testers
@@ -262,7 +278,7 @@ let parse_expr_or_decl s =
         try parsed.Decl (parse_decl s)
         with :? syntax_error -> reraise ()
            | e               -> unexpected "syntax error while parsing expression or declaration: %s\n%O" __SOURCE_FILE__ __LINE__ s e
-  
+
 
 let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
     let infs0 = [ entry_info sd.name sd.num ]
@@ -271,18 +287,18 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
     let testing = testing ed
 
     // deal with flags for hint and warning manipulation
-    use wtracer = Typing.Report.warnings.tracer
-    use htracer = Typing.Report.hints.tracer
+    use wtracer = Report.warnings.tracer
+    use htracer = Report.hints.tracer
     use D =
-        let l =
+        let disps =
             let undo f g = f (); disposable_by g
-            let restore (r : recoverables) = let x = r.state in fun () -> r.state <- x
-            let disable_all (r : recoverables) = undo (fun () -> r.disable_all) (restore r)
-            let disable1 (r : recoverables) n = undo (fun () -> r.disable n) (restore r)
-            let enable_all (r : recoverables) = undo (fun () -> r.enable_all) (restore r)
-            let enable1 (r : recoverables) n = undo (fun () -> r.enable n) (restore r)
-            let w = Typing.Report.warnings
-            let h = Typing.Report.hints
+            let restore (r : Report.Alert.manager) = let x = r.state in fun () -> r.state <- x
+            let disable_all (r : Report.Alert.manager) = undo (fun () -> r.disable_all) (restore r)
+            let disable1 (r : Report.Alert.manager) n = undo (fun () -> r.disable n) (restore r)
+            let enable_all (r : Report.Alert.manager) = undo (fun () -> r.enable_all) (restore r)
+            let enable1 (r : Report.Alert.manager) n = undo (fun () -> r.enable n) (restore r)
+            let w = Report.warnings
+            let h = Report.hints
             in
               [ for flag in ed.enabled_flags do
                     match flag with
@@ -299,10 +315,33 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
                     | _ -> ()         
               ]
         in
-            disposable_by (fun () -> for d in List.rev l do d.Dispose ())   // dispose in reverse order for restoring state correctly
+            disposable_by (fun () -> for d in List.rev disps do d.Dispose ())   // dispose in reverse order for restoring state correctly
 
-    let infs0 () = infs0 @ [ "warnings", txt (flatten_stringables ", " wtracer.get)
-                             "hints", txt (flatten_stringables ", " htracer.get) ]
+    let expected_hints =
+        Computation.B.set {
+            for flag in ed.enabled_flags do
+                match flag with
+                | flag.DisableHint n
+                | flag.EnableHint n -> yield n
+                | _ -> ()
+        }
+    let expecter_warns =
+        Computation.B.set {
+            for flag in ed.enabled_flags do
+                match flag with
+                | flag.DisableWarning n
+                | flag.EnableWarning n -> yield n
+                | _ -> ()
+        }
+
+    let infs0 () =
+        let flatten (tr : Report.Alert.tracer) expected_set =
+            let f n = sprintf "%d%s" n (if Set.contains n expected_set then "" else "?")                    
+            in
+                txt (mappen_stringables f ", " tr.to_set)
+        in
+            infs0 @ [ "warnings", flatten wtracer expecter_warns
+                      "hints", flatten htracer expected_hints ]
     
     let typecheck_expr_or_decl () =
         testing (txt "input:" </> txt ed.input)
@@ -324,77 +363,87 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
 
                 | d -> not_implemented "%O" __SOURCE_FILE__ __LINE__ d
         in
-            ϕ, fun (ϕb, tb, kb) -> [ "translated", txt p.pretty_translated
-                                     "inferred", pp_infos <| typed_infos (ok_or_no_info ϕb (fxty ϕ), 
-                                                                          ok_or_no_info tb (ty ϕ.ftype),
-                                                                          ok_or_no_info kb (kind ϕ.kind)) ]
+            ϕ,
+            (fun (ϕb, tb, kb) -> ["translated", txt p.pretty_translated
+                                  "inferred", pp_infos <| typed_infos (ok_or_no_info ϕb (fxty ϕ), 
+                                                                       ok_or_no_info tb (ty ϕ.ftype),
+                                                                       ok_or_no_info kb (kind ϕ.kind))]),
+            [if not (wtracer.to_set - expecter_warns).IsEmpty then yield score.Weak, "some unexpected warnings"
+             if not (htracer.to_set - expected_hints).IsEmpty then yield score.Weak, "some unexpected hints" ]
 
     match res with
+
+    // type equality
     | result.TypeEq (s2, is_eq) ->
         testing (txt "input:" </> txt s1 <+> txt "=" <+> txt s2)
         let τ1, ϕ1 = tchk.parse_fxty_expr s1
         let τ2, ϕ2 = tchk.parse_fxty_expr s2
         testing (txt "parsed:" </> fmt "%O" τ1 <+> txt "=" <+> fmt "%O" τ2)
-        let t1 = ϕ1.ftype
-        let t2 = ϕ2.ftype
-        let k1 = ϕ1.kind
-        let k2 = ϕ2.kind
-        let b1 = ϕ1.is_equivalent ϕ2
-        let b2 = t1.is_equivalent t2
-        let b3 = k1.is_equivalent k2
+        let b1, b2, b3 = tyeq_compare_test ϕ1 ϕ2
         let infs =
             infs0 () @
             [ "flex types", ok_or_no_info b1 (fxty ϕ1 <+> txt "=" <+> fxty ϕ2)
-              "F-types", ok_or_no_info b2 (ty t1 <+> txt "=" <+> ty t2)
-              "kinds", ok_or_no_info b3 (kind k1 <+> txt "=" <+> kind k2) ]
-        let test_ok' = if is_eq then test_ok else test_failed
-        let test_failed' = if is_eq then test_failed else test_ok
+              "F-types", ok_or_no_info b2 (ty ϕ1.ftype <+> txt "=" <+> ty ϕ2.ftype)
+              "kinds", ok_or_no_info b3 (kind ϕ1.kind <+> txt "=" <+> kind ϕ2.kind) ]
+        let ok' = if is_eq then score.Ok else score.Failed
+        let failed' = if is_eq then score.Failed else score.Ok
+        let scores =    // TODOH: warnings and hints must be checked
+          [
+            yield (match b1, b2, b3 with
+                   | true, true, true  -> ok', "types are equivalent" 
+                   | true, true, false -> failed', "types are equivalent but kinds are different" 
+                   | true, false, _    -> score.Weak, "flex types are equivalent but F-types are different"
+                   | false, true, _    -> score.Weak, "F-types are equivalent but flex types are different"
+                   | false, false, _   -> failed', "types are different")
+          ]
         in
-            (match b1, b2, b3 with
-            | true, true, true  -> test_ok' "types are equivalent" 
-            | true, true, false -> test_weak_ok "types are equivalent but kinds are different" 
-            | true, false, _    -> test_weak_ok "flex types are equivalent but F-types are different"
-            | false, true, _    -> test_weak_ok "F-types are equivalent but flex types are different"
-            | false, false, _   -> test_failed' "types are different")
-                infs
+            scores, infs
 
+    // typability with specific type result
     | result.TypedOk (Some s) ->        
-        let ϕok = tchk.parse_fxty_expr (s, not (ed.is_flag_enabled flag.NoAutoGen)) |> snd
+        let ϕok = tchk.parse_fxty_expr (s, not (ed.is_flag_enabled flag.NoAutoGen)) |> snd            
         in
             try
-                let ϕres, infs1 = typecheck_expr_or_decl ()
-                let compare_test = if ed.is_flag_enabled flag.Verbatim then compare_test_verbatim else compare_test_eq
+                let ϕres, infs1, scores = typecheck_expr_or_decl ()
+                let compare_test = if ed.is_flag_enabled flag.Verbatim then fxty_compare_test_verbatim else fxty_compare_test_eq
                 let b3 = compare_test ϕres ϕok
-                let infs1 = infs0 () @ infs1 b3
-                let infs2 = expected_infos ϕok
+                let infs = infs0 () @ infs1 b3 @ expected_infos ϕok
+                let scores =
+                  scores @
+                  [
+                    yield (match b3 with
+                           | true, true, true  -> score.Ok, "all ok" 
+                           | true, false, true -> score.Weak, "F-type is wrong"
+                           | false, true, true -> score.Weak, "flex type is wrong"
+                           | true, false, false
+                           | false, true, false -> score.Failed, "types are ok but kind is wrong"
+                           | _                  -> score.Failed, "types are wrong")
+                  ]
                 in
-                    match b3 with
-                    | true, true, true  -> test_ok "all ok" infs1
-                    | true, false, true -> test_weak_ok "F-type is wrong" (infs1 @ infs2)
-                    | false, true, true -> test_weak_ok "flex type is wrong" (infs1 @ infs2)
-                    | true, false, false
-                    | false, true, false -> test_failed "types are ok but kind is wrong" (infs1 @ infs2)
-                    | _                  -> test_failed "types are wrong" (infs1 @ infs2)
-            with :? static_error as e ->
-                test_failed (sprintf "unwanted %s" (error_name_of_exn e)) <| infs0 () @ static_error_infos s1 e @ expected_infos ϕok
+                    scores, infs
 
+            with :? static_error as e ->
+                [score.Failed, sprintf "unwanted %s" (error_name_of_exn e)],
+                    infs0 () @ static_error_infos s1 e @ expected_infos ϕok
+
+    // generic typability
     | result.TypedOk None ->        
         try
-            let _, infs1 = typecheck_expr_or_decl ()
+            let _, infs1, scores = typecheck_expr_or_decl ()
             let infs1 = infs0 () @ infs1 (true, true, true)
             in
-                test_ok "typed ok" infs1
+                scores @ [score.Ok, "typed successfully"], infs1
         with :? static_error as e ->
-            test_failed (sprintf "unwanted %s" (error_name_of_exn e)) <| infs0 () @ static_error_infos s1 e
-                    
+            [score.Failed, sprintf "unwanted %s" (error_name_of_exn e)], infs0 () @ static_error_infos s1 e
+
+    // expected static error                
     | result.StaticError (T, codeo) ->
         assert (let t = typeof<static_error> in t = T || T.IsSubclassOf t)
         try
-            let _, infs1 = typecheck_expr_or_decl ()
+            let _, infs1, scores = typecheck_expr_or_decl ()
             let errname = error_name_of_type T
             in
-                test_failed
-                    (something (sprintf "expected %s code %d" errname) (sprintf "expected some %s" errname) codeo)
+                scores @ [score.Failed, something (sprintf "expected %s code %d" errname) (sprintf "expected some %s" errname) codeo],
                     (infs0 () @ infs1 (false, false, false))
         with :? static_error as e ->
             let tb = let t = e.GetType() in t = T || t.IsSubclassOf T
@@ -402,19 +451,36 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
             let cb = match codeo with
                      | None   -> true
                      | Some n -> n = e.code
+            let scores =
+              [
+                yield (match tb, cb with
+                       | true, true   -> score.Ok, "justly rejected"
+                       | true, false  -> score.Weak, sprintf "%s is right but error code %d is wrong" errname e.code
+                       | false, true  -> score.Weak, sprintf "error code %d is right but %s is wrong" e.code errname
+                       | false, false -> score.Failed, sprintf "wrong %s and code %d" errname e.code)
+              ]
             in
-                (match tb, cb with
-                | true, true   -> test_ok "justly rejected"
-                | true, false  -> test_weak_ok (sprintf "%s is right but error code %d is wrong" errname e.code)
-                | false, true  -> test_weak_ok (sprintf "error code %d is right but %s is wrong" e.code errname)
-                | false, false -> test_failed (sprintf "wrong %s and code %d" errname e.code)
-                ) <| infs0 () @ static_error_infos s1 e
+                scores, infs0 () @ static_error_infos s1 e
 
+    // process score rusults
+    |> fun (scores, infs) ->
+        let score, msg = List.maxBy (fun (score : score, _) -> score.to_int) scores
+        let test =
+            match score with
+            | score.Ok -> test_ok
+            | score.Weak -> test_weak_ok
+            | score.Failed -> test_failed
+        in
+            test msg infs
+
+
+// section management
+//
 
 let score_infos scores =
     [score.Ok; score.Weak; score.Failed] @ scores   // trick for making countBy always count at least 1 for each kind of score
     |> List.countBy id
-    |> List.sortBy (fst >> function score.Ok -> 1 | score.Weak -> 2 | score.Failed -> 3)
+    |> List.sortBy (fst >> fun (score : score) -> score.to_int)
     |> List.map (fun (score, n) -> sprintf "%O" score, fmt "%d" (n  - 1))
 
 let section_infos sec (span : TimeSpan) (scores : score list) =
@@ -437,9 +503,13 @@ let test_sections (secs : section list) =
     List.sumBy (function score.Ok | score.Weak -> 1 | _ -> 0) scores
 
 
-// shortcuts for unit tests
+
+// some shortcuts to be used by unit tests
+//
 
 module Aux =
+    open Lw.Core.Typing.Report
+
     let type_ok_ s l : result * flag list = result.TypedOk (Some s), l
     let type_is_ s l : result * flag list = result.TypedOk (Some s), [flag.Verbatim] @ l
     let type_eq_ s l : result * flag list = result.TypeEq (s, true), l
@@ -457,7 +527,7 @@ module Aux =
     let wrong_syntax_ = wrong_<syntax_error> None
     let static_errn_ code = wrong_<static_error> (Some code)
     let type_errn_ code = wrong_<type_error> (Some code)
-    let unbound_error_ = static_errn_ 10
+    let unbound_error_ = static_errn_ Error.Code.unbound_symbol
 
     let wrong codeo = wrong_ codeo []
     let wrong_type = wrong_type_ []
