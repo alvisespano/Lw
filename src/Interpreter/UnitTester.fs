@@ -66,18 +66,25 @@ type [< NoComparison; NoEquality >] result =
     | StaticError of Type * int option
     | TypeEq of string * bool
 
-[< RequireQualifiedAccess >]
+[< RequireQualifiedAccess; CustomEquality; CustomComparison >]
 type score = Ok | Failed | Weak
 with
     override this.ToString () = this.pretty
+
+    override x.Equals y = CustomCompare.equals_by score.to_int x y
+
+    override x.GetHashCode () = CustomCompare.hash_by score.to_int x
+    
+    interface System.IComparable with
+        member x.CompareTo y = CustomCompare.compare_by score.to_int x y
+
     member this.pretty =
         match this with
         | score.Ok      -> "OK"
         | score.Failed  -> "FAILED"
         | score.Weak    -> "WEAK"
 
-    member this.to_int =
-        match this with
+    static member to_int = function
         | score.Ok     -> 1
         | score.Weak   -> 2
         | score.Failed -> 3
@@ -216,18 +223,16 @@ let ok_or_no_info b doc = (txt (sprintf "(%s)" (if b then "OK" else "NO"))) <+> 
 type logger with
     member __.pp (L : PrintfFormat<_, _, _, _> -> _) doc = L "%s" <| render None doc
 
-let test_ok (ed : entry_data) esit infs =
-    if ed.is_flag_enabled flag.ShowSuccessful then
-        L.pp L.test_ok (pp_infos (["esist", txt esit] @ infs))
-    score.Ok
+//let test_ok (ed : entry_data) result infs =
+//    if ed.is_flag_enabled flag.ShowSuccessful then
+//        L.pp L.test_ok (pp_infos (["result", result] @ infs))
+//    score.Ok
+//
+//let test_failed reason infs = L.pp L.test_failed (pp_infos (["reason", reason] @ infs)); score.Failed
+//
+//let test_weak_ok issue infs = L.pp L.test_weak_ok (pp_infos (["issue", issue] @ infs)); score.Weak
 
-let test_failed msg infs = L.pp L.test_failed (pp_infos (["reason", txt msg] @ infs)); score.Failed
-
-let test_weak_ok esit infs = L.pp L.test_weak_ok (pp_infos (["esit", txt esit] @ infs)); score.Weak
-
-let testing (ed : entry_data) doc =
-    if ed.is_flag_enabled flag.ShowInput then
-        L.pp L.testing doc
+       
 
 
 // compares
@@ -281,10 +286,21 @@ let parse_expr_or_decl s =
 
 
 let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
-    let infs0 = [ entry_info sd.name sd.num ]
+    let entry_infs = [ entry_info sd.name sd.num ]
     let ed = { section = sd; input = s1; flags = flags }
-    let test_ok = test_ok ed
-    let testing = testing ed
+
+    let print_result score result infs =
+        let infs = pp_infos (["result", result] @ infs)
+        match score with
+        | score.Ok when ed.is_flag_enabled flag.ShowSuccessful -> L.pp L.test_ok infs
+        | score.Weak -> L.pp L.test_weak_ok infs
+        | score.Failed -> L.pp L.test_failed infs
+        | _ -> ()
+
+    let testing doc =
+        if ed.is_flag_enabled flag.ShowInput then
+            L.pp L.testing doc
+
 
     // deal with flags for hint and warning manipulation
     use wtracer = Report.warnings.tracer
@@ -325,7 +341,7 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
                 | flag.EnableHint n -> yield n
                 | _ -> ()
         }
-    let expecter_warns =
+    let expected_warns =
         Computation.B.set {
             for flag in ed.enabled_flags do
                 match flag with
@@ -334,14 +350,14 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
                 | _ -> ()
         }
 
-    let infs0 () =
-        let flatten (tr : Report.Alert.tracer) expected_set =
-            let f n = sprintf "%d%s" n (if Set.contains n expected_set then "" else "?")                    
+    let wh_infs () =
+        let flatten (tr : Report.Alert.tracer) expected =
+            let f n = sprintf "%d%s" n (if Set.contains n expected then "" else "(?)")
             in
-                txt (mappen_stringables f ", " tr.to_set)
+                txt (mappen_stringables f ", " tr)
         in
-            infs0 @ [ "warnings", flatten wtracer expecter_warns
-                      "hints", flatten htracer expected_hints ]
+            [ "warnings", flatten wtracer expected_warns
+              "hints", flatten htracer expected_hints ]
     
     let typecheck_expr_or_decl () =
         testing (txt "input:" </> txt ed.input)
@@ -364,12 +380,21 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
                 | d -> not_implemented "%O" __SOURCE_FILE__ __LINE__ d
         in
             ϕ,
-            (fun (ϕb, tb, kb) -> ["translated", txt p.pretty_translated
-                                  "inferred", pp_infos <| typed_infos (ok_or_no_info ϕb (fxty ϕ), 
+            (fun (ϕb, tb, kb) -> [ yield "translated", txt p.pretty_translated
+                                   yield "inferred", pp_infos <| typed_infos (ok_or_no_info ϕb (fxty ϕ), 
                                                                        ok_or_no_info tb (ty ϕ.ftype),
-                                                                       ok_or_no_info kb (kind ϕ.kind))]),
-            [if not (wtracer.to_set - expecter_warns).IsEmpty then yield score.Weak, "some unexpected warnings"
-             if not (htracer.to_set - expected_hints).IsEmpty then yield score.Weak, "some unexpected hints" ]
+                                                                       ok_or_no_info kb (kind ϕ.kind))])
+
+    let wh_scores () =
+        let l name (tr : Report.Alert.tracer) expected =
+            let traced = Set.ofSeq tr
+            let f set fmt = if not (Set.isEmpty set) then [score.Weak, sprintf fmt name (flatten_stringables ", " set)] else []
+            in
+                [ yield! f (traced - expected) "some unexpected %ss: %s"
+                  yield! f (expected - traced) "some expected %ss were not shot: %s" ]
+        in
+            [ yield! l "warning" wtracer expected_warns
+              yield! l "hint" htracer expected_hints ]
 
     match res with
 
@@ -381,20 +406,19 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
         testing (txt "parsed:" </> fmt "%O" τ1 <+> txt "=" <+> fmt "%O" τ2)
         let b1, b2, b3 = tyeq_compare_test ϕ1 ϕ2
         let infs =
-            infs0 () @
             [ "flex types", ok_or_no_info b1 (fxty ϕ1 <+> txt "=" <+> fxty ϕ2)
               "F-types", ok_or_no_info b2 (ty ϕ1.ftype <+> txt "=" <+> ty ϕ2.ftype)
               "kinds", ok_or_no_info b3 (kind ϕ1.kind <+> txt "=" <+> kind ϕ2.kind) ]
         let ok' = if is_eq then score.Ok else score.Failed
         let failed' = if is_eq then score.Failed else score.Ok
-        let scores =    // TODOH: warnings and hints must be checked
+        let scores = 
           [
-            yield (match b1, b2, b3 with
-                   | true, true, true  -> ok', "types are equivalent" 
-                   | true, true, false -> failed', "types are equivalent but kinds are different" 
-                   | true, false, _    -> score.Weak, "flex types are equivalent but F-types are different"
-                   | false, true, _    -> score.Weak, "F-types are equivalent but flex types are different"
-                   | false, false, _   -> failed', "types are different")
+            (match b1, b2, b3 with
+            | true, true, true  -> ok', "types are equivalent" 
+            | true, true, false -> failed', "types are equivalent but kinds are different" 
+            | true, false, _    -> score.Weak, "flex types are equivalent but F-types are different"
+            | false, true, _    -> score.Weak, "F-types are equivalent but flex types are different"
+            | false, false, _   -> failed', "types are different")
           ]
         in
             scores, infs
@@ -404,49 +428,48 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
         let ϕok = tchk.parse_fxty_expr (s, not (ed.is_flag_enabled flag.NoAutoGen)) |> snd            
         in
             try
-                let ϕres, infs1, scores = typecheck_expr_or_decl ()
+                let ϕres, infs1 = typecheck_expr_or_decl ()
                 let compare_test = if ed.is_flag_enabled flag.Verbatim then fxty_compare_test_verbatim else fxty_compare_test_eq
                 let b3 = compare_test ϕres ϕok
-                let infs = infs0 () @ infs1 b3 @ expected_infos ϕok
+                let infs = infs1 b3 @ expected_infos ϕok
                 let scores =
-                  scores @
                   [
-                    yield (match b3 with
-                           | true, true, true  -> score.Ok, "all ok" 
-                           | true, false, true -> score.Weak, "F-type is wrong"
-                           | false, true, true -> score.Weak, "flex type is wrong"
-                           | true, false, false
-                           | false, true, false -> score.Failed, "types are ok but kind is wrong"
-                           | _                  -> score.Failed, "types are wrong")
+                    (match b3 with
+                    | true, true, true  -> score.Ok, "type is correct" 
+                    | true, false, true -> score.Weak, "F-type is wrong"
+                    | false, true, true -> score.Weak, "flex type is wrong"
+                    | true, false, false
+                    | false, true, false -> score.Failed, "types are ok but kind is wrong"
+                    | _                  -> score.Failed, "types are wrong")
                   ]
                 in
                     scores, infs
 
             with :? static_error as e ->
                 [score.Failed, sprintf "unwanted %s" (error_name_of_exn e)],
-                    infs0 () @ static_error_infos s1 e @ expected_infos ϕok
+                    static_error_infos s1 e @ expected_infos ϕok
 
     // generic typability
     | result.TypedOk None ->        
         try
-            let _, infs1, scores = typecheck_expr_or_decl ()
-            let infs1 = infs0 () @ infs1 (true, true, true)
+            let _, infs1 = typecheck_expr_or_decl ()
+            let infs1 = infs1 (true, true, true)
             in
-                scores @ [score.Ok, "typed successfully"], infs1
+                [score.Ok, "typed successfully"], infs1
         with :? static_error as e ->
-            [score.Failed, sprintf "unwanted %s" (error_name_of_exn e)], infs0 () @ static_error_infos s1 e
+            [score.Failed, sprintf "unwanted %s" (error_name_of_exn e)], static_error_infos s1 e
 
     // expected static error                
     | result.StaticError (T, codeo) ->
         assert (let t = typeof<static_error> in t = T || T.IsSubclassOf t)
         try
-            let _, infs1, scores = typecheck_expr_or_decl ()
+            let _, infs1 = typecheck_expr_or_decl ()
             let errname = error_name_of_type T
             in
-                scores @ [score.Failed, something (sprintf "expected %s code %d" errname) (sprintf "expected some %s" errname) codeo],
-                    (infs0 () @ infs1 (false, false, false))
+                [score.Failed, something (sprintf "expected %s code %d" errname) (sprintf "expected some %s" errname) codeo],
+                    (infs1 (false, false, false))
         with :? static_error as e ->
-            let tb = let t = e.GetType() in t = T || t.IsSubclassOf T
+            let tb = let t = e.GetType () in t = T || t.IsSubclassOf T
             let errname = error_name_of_exn e
             let cb = match codeo with
                      | None   -> true
@@ -460,18 +483,21 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
                        | false, false -> score.Failed, sprintf "wrong %s and code %d" errname e.code)
               ]
             in
-                scores, infs0 () @ static_error_infos s1 e
+                scores, static_error_infos s1 e
 
     // process score rusults
     |> fun (scores, infs) ->
-        let score, msg = List.maxBy (fun (score : score, _) -> score.to_int) scores
-        let test =
-            match score with
-            | score.Ok -> test_ok
-            | score.Weak -> test_weak_ok
-            | score.Failed -> test_failed
-        in
-            test msg infs
+        let infs = entry_infs @ infs @ wh_infs ()
+        let scores = wh_scores () @ scores    // append scores related to warnings and hints
+        let score1 = List.maxBy fst scores |> fst
+        let msgs = List.filter (fun (score, _) -> score <= score1) scores |> List.map snd
+        let result =
+            match List.length msgs with
+            | 0 -> txt "unknown reason"
+            | 1 -> txt msgs.[0]
+            | len -> pp_infos [ for i = 1 to len do yield sprintf "%d" i, txt msgs.[i - 1] ]
+        print_result score1 result infs
+        score1
 
 
 // section management
@@ -480,7 +506,7 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
 let score_infos scores =
     [score.Ok; score.Weak; score.Failed] @ scores   // trick for making countBy always count at least 1 for each kind of score
     |> List.countBy id
-    |> List.sortBy (fst >> fun (score : score) -> score.to_int)
+    |> List.sortBy fst
     |> List.map (fun (score, n) -> sprintf "%O" score, fmt "%d" (n  - 1))
 
 let section_infos sec (span : TimeSpan) (scores : score list) =

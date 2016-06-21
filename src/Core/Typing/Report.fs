@@ -203,6 +203,8 @@ module Error =
 
 [< RequireQualifiedAccess >]
 module Alert =
+    open System.Collections
+    open System.Collections.Generic
 
     /// Opaque representation of manager state
     type state =
@@ -262,8 +264,11 @@ module Alert =
         let mutable nums = Set.empty
         member internal __.add n = nums <- Set.add n nums
         member __.to_set = nums
-        override this.cleanup_managed () = this.remove_self        
-        member this.remove_self = r.remove_tracer this
+        override this.cleanup_managed () = r.remove_tracer this
+        interface IEnumerable<int> with
+            member this.GetEnumerator () = (Set.toSeq nums).GetEnumerator ()
+        interface IEnumerable with
+            member this.GetEnumerator () = (this :> IEnumerable<int>).GetEnumerator () :> IEnumerator
 
 
 // warnings and hints

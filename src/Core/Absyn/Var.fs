@@ -29,7 +29,7 @@ with
     override x.GetHashCode () = match x with Va (n, so) -> hash (n, so)
  
     interface System.IComparable with
-      member x.CompareTo y = CustomCompare.compare_by (fun (α : var) -> α.uid) x y
+        member x.CompareTo y = CustomCompare.compare_by (fun (α : var) -> α.uid) x y
 
 // this module is needed and cannot be turn into static members within the var class because static members are unit closures thus cannot be constants
 [< CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix) >]

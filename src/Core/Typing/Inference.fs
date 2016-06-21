@@ -273,7 +273,7 @@ and W_patt ctx (p0 : patt) =
             L.debug Min "%s %O\n[Q]   %O" rule p0 Q
             #endif
             let! (ϕ : fxty) = W_patt' ctx p0
-            // TODOH: insert automatic generalization here, besides automatic resolution
+            // TODOH: insert automatic generalization here, beside automatic resolution
             #if DEBUG_INFERENCE
             let! Q' = M.get_Q
             // TODOL: create a logger.prefix(str) method returning a new logger object which prefixes string str for each line (and deals with EOLs padding correctly)

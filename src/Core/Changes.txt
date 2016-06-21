@@ -1,4 +1,8 @@
 ﻿
+21/6/2016:
+* UP: unit test internals furtherly improved: scores and infs population is cleaner now and multiple results for each entry are supported (success, weak issue or errors)
+
+
 17/6/2016:
 * UP: UnitTest internals revamped: now each entry computes a list of (score * msg) tuples, which are then sorted according to severity and the final
       result is the worst in the list
