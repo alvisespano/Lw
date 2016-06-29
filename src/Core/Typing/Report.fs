@@ -206,38 +206,63 @@ module Alert =
     open System.Collections
     open System.Collections.Generic
 
+    // TODO: consider extending this class with union, intersection and other common set operations and migrate it to FSharp.Common
+    /// Pure virtual set type supporting inclusions and exclusions without really containing actual elements.
+    /// For example, it can represent a "virtually full" set without knowing all possible elements.
+    type cset<'a when 'a : comparison> (is_complemented, set) =
+
+        new (set) = new cset<_> (false, set)
+//        static member includes set = new cset<'a> (false, set)
+        static member complemented set = new cset<'a> (true, set)
+        static member full = cset<_>.complemented Set.empty
+        static member empty = new cset<_> (Set.empty)
+
+        member private __.apply inc exc = new cset<'a> (is_complemented, (if is_complemented then exc else inc) set)            
+        member this.add x = this.apply (Set.add x) (Set.remove x)
+        member this.remove x = this.apply (Set.remove x) (Set.add x)
+        member __.contains x = (if is_complemented then not else id) (Set.contains x set)
+        member __.is_full = is_complemented && Set.isEmpty set
+        member __.is_empty = not is_complemented && Set.isEmpty set
+        member __.is_complemented = is_complemented
+        member __.set = set
+
+        static member (-) (a : cset<'a>, b : cset<'a>) =
+            let (|Inc|Exc|) (x : cset<_>) =
+                let set = x.set
+                in
+                    if x.is_complemented then Exc set
+                    else Inc set
+            in
+                match a, b with
+                | Inc set1, Inc set2 -> new cset<'a> (set1 - set2)
+                | Inc set1, Exc set2 -> new cset<'a> (Set.intersect set1 set2)  // X - ~Y = X intersect Y
+                | Exc set1, Exc set2 -> new cset<'a> (set2 - set1)              // ~X - ~Y = Y - X
+                | Exc set1, Inc set2 -> cset<'a>.complemented (set1 + set2)     // ~X - Y = ~(X union Y)
+            
+
+
     /// Opaque representation of manager state
     type state =
-        val disabled : int Set option
+        val disabled : int cset
         internal new (d) = { disabled =  d }
 
+
     type manager (disabled_by_default) =
-        let mutable disabled_ : int Set option = Some disabled_by_default
+        let mutable disabled_ = cset<_> disabled_by_default
         let mutable tracers : WeakReference<tracer> list = []
 
-        member __.disable n =
-            match disabled_ with
-            | None     -> ()
-            | Some set -> disabled_ <- Some (Set.add n set)
+        member __.disable n = disabled_ <- disabled_.add n
+        member __.enable n = disabled_ <- disabled_.remove n
 
-        member __.enable n =
-            disabled_ <- Some (match disabled_ with
-                               | None     ->  Set.singleton n
-                               | Some set ->  Set.remove n set)
-
-        member __.is_disabled n =
-            match disabled_ with
-            | None     -> true
-            | Some set -> Set.contains n set
-
-        member this.is_enabled n = not (this.is_disabled n)
+        member __.is_disabled n = disabled_.contains n
+        member __.is_enabled n = not (disabled_.contains n)
 
         member __.state
             with get () = new state (disabled_)
             and set (st : state) = disabled_ <- st.disabled
 
-        member __.disable_all = disabled_ <- None
-        member __.enable_all = disabled_ <- Some Set.empty
+        member __.disable_all = disabled_ <- cset<_>.full
+        member __.enable_all = disabled_ <- cset<_>.empty
 
         member this.tracer =
             let r = new tracer (this)
@@ -259,6 +284,54 @@ module Alert =
             else null_L.msg Min fmt // uses msg channel but any would do, as it actually doesn't output
 
 
+//    and manager__ (disabled_by_default) =
+//        let mutable disabled_ : int Set option = Some disabled_by_default
+//        let mutable tracers : WeakReference<tracer> list = []
+//
+//        member __.disable n =
+//            match disabled_ with
+//            | None     -> ()
+//            | Some set -> disabled_ <- Some (Set.add n set)
+//
+//        member __.enable n =
+//            disabled_ <- Some (match disabled_ with
+//                               | None     ->  Set.singleton n
+//                               | Some set ->  Set.remove n set)
+//
+//        member __.is_disabled n =
+//            match disabled_ with
+//            | None     -> true
+//            | Some set -> Set.contains n set
+//
+//        member this.is_enabled n = not (this.is_disabled n)
+//
+//        member __.state
+//            with get () = new state (disabled_)
+//            and set (st : state) = disabled_ <- st.disabled
+//
+//        member __.disable_all = disabled_ <- None
+//        member __.enable_all = disabled_ <- Some Set.empty
+//
+//        member this.tracer =
+//            let r = new tracer (this)
+//            tracers <- new WeakReference<tracer> (r) :: tracers
+//            r
+//
+//        member private __.filter_tracers f =
+//            let tr = ref Unchecked.defaultof<tracer>
+//            tracers <- tracers |> List.filter (fun wtr ->
+//                    if wtr.TryGetTarget tr then
+//                        f !tr
+//                    else false)
+//
+//        member this.remove_tracer tr0 = this.filter_tracers ((<>) tr0) 
+//
+//        member this.log f n loc pri (fmt : StringFormat<'a, _>) =
+//            this.filter_tracers (fun tr -> tr.add n; true)
+//            if this.is_enabled n then L.norm f n pri (StringFormat<location -> 'a, _> ("%O: " + fmt.Value)) loc
+//            else null_L.msg Min fmt // uses msg channel but any would do, as it actually doesn't output
+
+
     and tracer (r : manager) =
         inherit disposable_base ()
         let mutable nums = Set.empty
@@ -266,7 +339,7 @@ module Alert =
         member __.to_set = nums
         override this.cleanup_managed () = r.remove_tracer this
         interface IEnumerable<int> with
-            member this.GetEnumerator () = (Set.toSeq nums).GetEnumerator ()
+            member __.GetEnumerator () = (Set.toSeq nums).GetEnumerator ()
         interface IEnumerable with
             member this.GetEnumerator () = (this :> IEnumerable<int>).GetEnumerator () :> IEnumerator
 

@@ -20,15 +20,15 @@ module private InFSharp =
 let temp1 : section =
     "Temp1", [flag.ShowSuccessful; flag.ShowInput],
     [
-    "forall 'a 'b. 'a -> 'b",                   type_neq_ "forall 'a 'b. 'a -> 'c" [flag.DisableWarning 12]
-    "int",                                      type_eq_ "int" [flag.EnableWarning 13]
+    "forall 'a 'b. 'a -> 'b",                   type_neq_ "forall 'a 'b. 'a -> 'c" [flag.DisableWarning 13]
+    "int",                                      type_eq "int"
 
     "let id x = x",                             type_ok "'a -> 'a"
     "let ids = [id]",                           type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
 
     // TODO: move these to real test sections
-    "let ids : list ('a -> 'a) = ids in ids",               type_ok_ "list ('a -> 'a)" [flag.NoAutoGen; flag.EnableHint 6]    
-    "let ids : list ('a -> 'a) = ids",                      type_ok_ "forall 'a. list ('a -> 'a)" [flag.Unbind]
+    "let ids : list ('a -> 'a) = ids in ids",               type_ok_ "list ('a -> 'a)" [flag.NoAutoGen; flag.EnableHint 6; flag.EnableHint 4]    
+    "let ids : list ('a -> 'a) = ids",                      type_ok_ "forall 'a. list ('a -> 'a)" [flag.Unbind; flag.EnableHints]
 
 //    "let ids : forall 'a. list ('a -> 'a) = ids in ids",    type_ok "forall 'a. list ('a -> 'a)"
 //    "let ids : list (forall 'a. 'a -> 'a) = ids in ids",    type_ok "list (forall 'a. 'a -> 'a)"

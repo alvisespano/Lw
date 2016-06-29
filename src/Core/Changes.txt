@@ -1,4 +1,9 @@
 ﻿
+29/6/2016:
+* UP: cset type represents complement-able sets (was vset)
+* REFACT: UnitTester rewritten according to new cset system for dealing with alerts (hints and warnings)
+
+
 21/6/2016:
 * UP: unit test internals furtherly improved: scores and infs population is cleaner now and multiple results for each entry are supported (success, weak issue or errors)
 
