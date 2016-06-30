@@ -1,4 +1,8 @@
 ﻿
+30/6/2016:
+* REFACT: Report.Alert.cset extended with set operations and moved to FSharp.Common.Collections
+
+
 29/6/2016:
 * UP: cset type represents complement-able sets (was vset)
 * REFACT: UnitTester rewritten according to new cset system for dealing with alerts (hints and warnings)

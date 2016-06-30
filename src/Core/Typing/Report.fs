@@ -206,49 +206,16 @@ module Alert =
     open System.Collections
     open System.Collections.Generic
 
-    // TODO: consider extending this class with union, intersection and other common set operations and migrate it to FSharp.Common
-    /// Pure virtual set type supporting inclusions and exclusions without really containing actual elements.
-    /// For example, it can represent a "virtually full" set without knowing all possible elements.
-    type cset<'a when 'a : comparison> (is_complemented, set) =
-
-        new (set) = new cset<_> (false, set)
-//        static member includes set = new cset<'a> (false, set)
-        static member complemented set = new cset<'a> (true, set)
-        static member full = cset<_>.complemented Set.empty
-        static member empty = new cset<_> (Set.empty)
-
-        member private __.apply inc exc = new cset<'a> (is_complemented, (if is_complemented then exc else inc) set)            
-        member this.add x = this.apply (Set.add x) (Set.remove x)
-        member this.remove x = this.apply (Set.remove x) (Set.add x)
-        member __.contains x = (if is_complemented then not else id) (Set.contains x set)
-        member __.is_full = is_complemented && Set.isEmpty set
-        member __.is_empty = not is_complemented && Set.isEmpty set
-        member __.is_complemented = is_complemented
-        member __.set = set
-
-        static member (-) (a : cset<'a>, b : cset<'a>) =
-            let (|Inc|Exc|) (x : cset<_>) =
-                let set = x.set
-                in
-                    if x.is_complemented then Exc set
-                    else Inc set
-            in
-                match a, b with
-                | Inc set1, Inc set2 -> new cset<'a> (set1 - set2)
-                | Inc set1, Exc set2 -> new cset<'a> (Set.intersect set1 set2)  // X - ~Y = X intersect Y
-                | Exc set1, Exc set2 -> new cset<'a> (set2 - set1)              // ~X - ~Y = Y - X
-                | Exc set1, Inc set2 -> cset<'a>.complemented (set1 + set2)     // ~X - Y = ~(X union Y)
-            
-
+    type cset = FSharp.Common.Collections.cset<int>
 
     /// Opaque representation of manager state
     type state =
-        val disabled : int cset
+        val disabled : cset
         internal new (d) = { disabled =  d }
 
 
     type manager (disabled_by_default) =
-        let mutable disabled_ = cset<_> disabled_by_default
+        let mutable disabled_ = cset disabled_by_default
         let mutable tracers : WeakReference<tracer> list = []
 
         member __.disable n = disabled_ <- disabled_.add n
@@ -261,8 +228,8 @@ module Alert =
             with get () = new state (disabled_)
             and set (st : state) = disabled_ <- st.disabled
 
-        member __.disable_all = disabled_ <- cset<_>.full
-        member __.enable_all = disabled_ <- cset<_>.empty
+        member __.disable_all = disabled_ <- cset.universe
+        member __.enable_all = disabled_ <- cset.empty
 
         member this.tracer =
             let r = new tracer (this)

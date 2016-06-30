@@ -335,28 +335,28 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
             disposable_by (fun () -> for d in List.rev disps do d.Dispose ())   // dispose in reverse order for restoring state correctly
 
     let expected_hints =
-        if ed.is_flag_enabled flag.EnableHints || ed.is_flag_enabled flag.DisableHints then Alert.cset<_>.full
+        if ed.is_flag_enabled flag.EnableHints || ed.is_flag_enabled flag.DisableHints then Alert.cset.universe
         else
-            Alert.cset<_> (Computation.B.set {
+            Alert.cset <| Computation.B.set {
                     for flag in ed.enabled_flags do
                         match flag with
                         | flag.DisableHint n
                         | flag.EnableHint n -> yield n
                         | _ -> ()
-                })
+                }
     let expected_warns =
-        if ed.is_flag_enabled flag.EnableWarnings || ed.is_flag_enabled flag.DisableWarnings then Alert.cset<_>.full
+        if ed.is_flag_enabled flag.EnableWarnings || ed.is_flag_enabled flag.DisableWarnings then Alert.cset.universe
         else
-            Alert.cset<_> (Computation.B.set {
+            Alert.cset <| Computation.B.set {
                     for flag in ed.enabled_flags do
                         match flag with
                         | flag.DisableWarning n
                         | flag.EnableWarning n -> yield n
                         | _ -> ()
-                })
+                }
 
     let wh_infs () =
-        let flatten (tr : Alert.tracer) (expected : Alert.cset<_>) =
+        let flatten (tr : Alert.tracer) (expected : Alert.cset) =
             let f n = sprintf "%d%s" n (if expected.contains n then "" else "(?)")
             in
                 txt (mappen_stringables f ", " tr)
@@ -393,9 +393,9 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
                                                                        ok_or_no_info kb (kind ϕ.kind))])
 
     let wh_scores () =
-        let l name (tr : Alert.tracer) (expected : Alert.cset<_>) =
-            let traced = Alert.cset<_> <| Set.ofSeq tr                
-            let f (cset : Alert.cset<_>) fmt = if not cset.is_empty then [score.Weak, sprintf fmt name (flatten_stringables ", " cset.set)] else [] // HACK: better use cset.ToString 
+        let l name (tr : Alert.tracer) (expected : Alert.cset) =
+            let traced = tr |> Set.ofSeq |> Alert.cset
+            let f (cset : Alert.cset) fmt = if not cset.is_empty then [score.Weak, sprintf fmt name cset.pretty] else []
             in
                 [ yield! f (traced - expected) "some unexpected %ss: %s"
                   yield! f (expected - traced) "some expected %ss were not shot: %s" ]
