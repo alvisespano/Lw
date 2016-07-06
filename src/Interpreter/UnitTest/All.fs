@@ -27,7 +27,7 @@ let temp1 : section =
     "let ids = [id]",                           type_ok "forall ('a :> forall 'b. 'b -> 'b). list 'a"
 
     // TODO: move these to real test sections
-    "let ids : list ('a -> 'a) = ids in ids",               type_ok_ "list ('a -> 'a)" [flag.NoAutoGen; flag.EnableHint 6; flag.EnableHint 4]    
+    "let ids : list ('a -> 'a) = ids in ids",               type_ok_ "list ('a -> 'a)" [flag.NoAutoGen; flag.EnableHint 6; flag.EnableHint 4; flag.EnableWarnings]
     "let ids : list ('a -> 'a) = ids",                      type_ok_ "forall 'a. list ('a -> 'a)" [flag.Unbind; flag.EnableHints]
 
 //    "let ids : forall 'a. list ('a -> 'a) = ids in ids",    type_ok "forall 'a. list ('a -> 'a)"
@@ -59,6 +59,7 @@ let temp1 : section =
 
 let all : section list =
     [
+    Other.all
     [temp1]
 //    TypeEquivalence.all
 //    Basic.all   // these are needed as they introduce some basic bindings

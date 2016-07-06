@@ -1,4 +1,9 @@
 ﻿
+6/7/2016:
+* UP: few improvements in cset management
+* UP: UnitTest module now support custom tests consisting in arbitrary pieces of code, aimed at testing specific internals not related to language constructs
+
+
 30/6/2016:
 * REFACT: Report.Alert.cset extended with set operations and moved to FSharp.Common.Collections
 

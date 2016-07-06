@@ -206,7 +206,7 @@ module Alert =
     open System.Collections
     open System.Collections.Generic
 
-    type cset = FSharp.Common.Collections.cset<int>
+    type cset = int FSharp.Common.Collections.cset
 
     /// Opaque representation of manager state
     type state =

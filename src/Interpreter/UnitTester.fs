@@ -66,6 +66,7 @@ type [< NoComparison; NoEquality >] result =
     | TypedOk of string option
     | StaticError of Type * int option
     | TypeEq of string * bool
+    | Custom of (unit -> bool)
 
 [< RequireQualifiedAccess; CustomEquality; CustomComparison >]
 type score = Ok | Failed | Weak
@@ -151,8 +152,8 @@ with
         
 
 let error_name_of_type (T : Type) : string = T.GetProperty("error_name").GetGetMethod().Invoke(T, [||]) |> unbox
-//let inline error_name_of_exn (_ : ^e) = (^e : (static member error_name : string) ())
 let error_name_of_exn (e : static_error) = error_name_of_type (e.GetType ())
+
 
 // PPrint extensions
 //
@@ -192,8 +193,6 @@ let static_error_infos (input : string) (e : static_error) =
 // entries and sections
 //
 
-//let decl_dummy_ty = Fx_F_Ty T_Unit
-
 type entry = string * (result * flag list)
 type section = string * flag list * entry list
 
@@ -224,16 +223,6 @@ let ok_or_no_info b doc = (txt (sprintf "(%s)" (if b then "OK" else "NO"))) <+> 
 type logger with
     member __.pp (L : PrintfFormat<_, _, _, _> -> _) doc = L "%s" <| render None doc
 
-//let test_ok (ed : entry_data) result infs =
-//    if ed.is_flag_enabled flag.ShowSuccessful then
-//        L.pp L.test_ok (pp_infos (["result", result] @ infs))
-//    score.Ok
-//
-//let test_failed reason infs = L.pp L.test_failed (pp_infos (["reason", reason] @ infs)); score.Failed
-//
-//let test_weak_ok issue infs = L.pp L.test_weak_ok (pp_infos (["issue", issue] @ infs)); score.Weak
-
-       
 
 
 // compares
@@ -329,7 +318,7 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
                     | flag.EnableWarning n -> yield enable1 w n
                     | flag.EnableHint n    -> yield enable1 h n
                     
-                    | _ -> ()         
+                    | _ -> ()
               ]
         in
             disposable_by (fun () -> for d in List.rev disps do d.Dispose ())   // dispose in reverse order for restoring state correctly
@@ -337,23 +326,19 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
     let expected_hints =
         if ed.is_flag_enabled flag.EnableHints || ed.is_flag_enabled flag.DisableHints then Alert.cset.universe
         else
-            Alert.cset <| Computation.B.set {
-                    for flag in ed.enabled_flags do
-                        match flag with
-                        | flag.DisableHint n
-                        | flag.EnableHint n -> yield n
-                        | _ -> ()
-                }
+            Alert.cset [ for flag in ed.enabled_flags do
+                            match flag with
+                            | flag.DisableHint n
+                            | flag.EnableHint n -> yield n
+                            | _ -> () ]
     let expected_warns =
         if ed.is_flag_enabled flag.EnableWarnings || ed.is_flag_enabled flag.DisableWarnings then Alert.cset.universe
         else
-            Alert.cset <| Computation.B.set {
-                    for flag in ed.enabled_flags do
-                        match flag with
-                        | flag.DisableWarning n
-                        | flag.EnableWarning n -> yield n
-                        | _ -> ()
-                }
+            Alert.cset [ for flag in ed.enabled_flags do
+                            match flag with
+                            | flag.DisableWarning n
+                            | flag.EnableWarning n -> yield n
+                            | _ -> () ]
 
     let wh_infs () =
         let flatten (tr : Alert.tracer) (expected : Alert.cset) =
@@ -404,6 +389,11 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
               yield! l "hint" htracer expected_hints ]
 
     match res with
+    // custom test
+    | result.Custom f ->
+        testing (txt "custom test")
+        (try if f () then [score.Ok, "custom test successful"] else [score.Failed, "custom test failed"]
+         with e -> [score.Failed, sprintf "custom test raised exception: %s" (pretty_exn_and_inners e)]), []
 
     // type equality
     | result.TypeEq (s2, is_eq) ->
@@ -494,8 +484,8 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
 
     // process score rusults
     |> fun (scores, infs) ->
-        let infs = entry_infs @ infs @ wh_infs ()
-        let scores = wh_scores () @ scores    // append scores related to warnings and hints
+        let infs = entry_infs @ infs @ match res with result.Custom _ -> [] | _ -> wh_infs ()   // append warns and hints inf when entry is not custom
+        let scores = wh_scores () @ scores
         let score1 = List.maxBy fst scores |> fst
         let msgs = List.filter (fun (score, _) -> score <= score1) scores |> List.map snd
         let result =
@@ -548,6 +538,9 @@ module Aux =
     let type_eq_ s l : result * flag list = result.TypeEq (s, true), l
     let type_neq_ s l : result * flag list = result.TypeEq (s, false), l
     let ok_ l : result * flag list = result.TypedOk None, l
+
+    let custom_ f l = "", (result.Custom f, l)
+    let custom f = custom_ f []
 
     let type_ok s = type_ok_ s []
     let type_is s = type_is_ s []
