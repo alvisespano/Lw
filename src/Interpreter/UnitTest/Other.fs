@@ -10,11 +10,15 @@ let cset : section =
     let a = cset [1..5]
     let b = cset [2..5]
     let c = cset [6..9]
+    let U = cset.universe
+    let E = cset.empty
     [
-    custom (fun () -> a + b = a)
-    custom (fun () -> a + c - a = c)
-    custom (fun () -> a.intersect b = b)
-    custom (fun () -> c >= a)
+    custom <| fun () -> a + b = a
+    custom <| fun () -> a + c - a = c
+    custom <| fun () -> a.intersect b = b
+    custom <| fun () -> c >= a
+    custom <| fun () -> U - a = a.complement
+    custom <| fun () -> U - U = E
     ]
 
 

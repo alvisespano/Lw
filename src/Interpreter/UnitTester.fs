@@ -379,8 +379,9 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
 
     let wh_scores () =
         let l name (tr : Alert.tracer) (expected : Alert.cset) =
-            let traced = tr |> Set.ofSeq |> Alert.cset
-            let f (cset : Alert.cset) fmt = if not cset.is_empty then [score.Weak, sprintf fmt name cset.pretty] else []
+            let traced = tr |> Set |> Alert.cset
+            L.debug Normal "%s: traced = %O  expected = %O" name tr.to_set expected
+            let f (cset : Alert.cset) fmt = if not (cset.is_empty || cset.is_complemented) then [score.Weak, sprintf fmt name cset.pretty] else []
             in
                 [ yield! f (traced - expected) "some unexpected %ss: %s"
                   yield! f (expected - traced) "some expected %ss were not shot: %s" ]
@@ -389,6 +390,7 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
               yield! l "hint" htracer expected_hints ]
 
     match res with
+
     // custom test
     | result.Custom f ->
         testing (txt "custom test")
@@ -485,7 +487,7 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
     // process score rusults
     |> fun (scores, infs) ->
         let infs = entry_infs @ infs @ match res with result.Custom _ -> [] | _ -> wh_infs ()   // append warns and hints inf when entry is not custom
-        let scores = wh_scores () @ scores
+        let scores = scores @ match res with result.Custom _ -> [] | _ -> wh_scores ()
         let score1 = List.maxBy fst scores |> fst
         let msgs = List.filter (fun (score, _) -> score <= score1) scores |> List.map snd
         let result =
