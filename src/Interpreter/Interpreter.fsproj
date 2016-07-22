@@ -164,7 +164,7 @@
     <Reference Include="System.Numerics" />
     <ProjectReference Include="..\..\..\FSharp.Common\FSharp.Common.fsproj">
       <Name>FSharp.Common</Name>
-      <Project>{7c493012-2911-43fe-8ad3-f052c3084e3c}</Project>
+      <Project>{3e721011-6cce-4187-a49a-dac093de8e0f}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\Core\Core.fsproj">
