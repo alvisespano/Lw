@@ -251,54 +251,6 @@ module Alert =
             else null_L.msg Min fmt // uses msg channel but any would do, as it actually doesn't output
 
 
-//    and manager__ (disabled_by_default) =
-//        let mutable disabled_ : int Set option = Some disabled_by_default
-//        let mutable tracers : WeakReference<tracer> list = []
-//
-//        member __.disable n =
-//            match disabled_ with
-//            | None     -> ()
-//            | Some set -> disabled_ <- Some (Set.add n set)
-//
-//        member __.enable n =
-//            disabled_ <- Some (match disabled_ with
-//                               | None     ->  Set.singleton n
-//                               | Some set ->  Set.remove n set)
-//
-//        member __.is_disabled n =
-//            match disabled_ with
-//            | None     -> true
-//            | Some set -> Set.contains n set
-//
-//        member this.is_enabled n = not (this.is_disabled n)
-//
-//        member __.state
-//            with get () = new state (disabled_)
-//            and set (st : state) = disabled_ <- st.disabled
-//
-//        member __.disable_all = disabled_ <- None
-//        member __.enable_all = disabled_ <- Some Set.empty
-//
-//        member this.tracer =
-//            let r = new tracer (this)
-//            tracers <- new WeakReference<tracer> (r) :: tracers
-//            r
-//
-//        member private __.filter_tracers f =
-//            let tr = ref Unchecked.defaultof<tracer>
-//            tracers <- tracers |> List.filter (fun wtr ->
-//                    if wtr.TryGetTarget tr then
-//                        f !tr
-//                    else false)
-//
-//        member this.remove_tracer tr0 = this.filter_tracers ((<>) tr0) 
-//
-//        member this.log f n loc pri (fmt : StringFormat<'a, _>) =
-//            this.filter_tracers (fun tr -> tr.add n; true)
-//            if this.is_enabled n then L.norm f n pri (StringFormat<location -> 'a, _> ("%O: " + fmt.Value)) loc
-//            else null_L.msg Min fmt // uses msg channel but any would do, as it actually doesn't output
-
-
     and tracer (r : manager) =
         inherit disposable_base ()
         let mutable nums = Set.empty
@@ -397,6 +349,7 @@ module Hint =
     // TODO: this might become a warning that could be avoided by using a special instantiation operator ":>"
     let type_annotation_is_instantiation loc tann ϕinf =
         H 6 loc High "type annotation %O is an instance of the inferred type %O, which is more generic. \
-        This is a loss of type information: additional type annotations may be needed to make further code work in relation to this, \
-        or it may prevent first-class polymorphic uses"
+        This means there is a loss of type information. \
+        It may affect code referring to the value or binding being defined here: additional type annotations may be needed in call sites or it may prevent code from benefitting of first-class polymorphic. \
+        Remove this annotation unless you know exactly what you are doing."
             tann ϕinf

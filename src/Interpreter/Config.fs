@@ -40,7 +40,8 @@ module Interactive =
     let pretty_rec_closure (x, e, _) = sprintf "| rec fun %s -> %s |" x (pretty_expr e)
 
 module UnitTest =
-    let quiet = true
+    let multiple_results_item_fmt : StringFormat<_> = "%d"
+
 
 module Exit =
     let ok = 0

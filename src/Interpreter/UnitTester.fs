@@ -43,19 +43,19 @@ type flag =
     | ShowSuccessful
     | ShowInput
     | NoAutoGen
-    | DisableWarning of int
-    | DisableWarnings
-    | DisableHint of int
-    | DisableHints
-    | EnableWarning of int
-    | EnableWarnings
-    | EnableHint of int
-    | EnableHints
-    | No of flag
+    | HideWarning of int
+    | HideWarnings
+    | HideHint of int
+    | HideHints
+    | ShowWarning of int
+    | ShowWarnings
+    | ShowHint of int
+    | ShowHints
+    | Dont of flag
 with
     static member private fold_flags p flag flags =
         List.fold (fun r -> function flag' when flag = flag'     -> true
-                                   | No flag' when flag = flag'  -> false
+                                   | Dont flag' when flag = flag'  -> false
                                    | _                           -> r)
             false flags |> p
 
@@ -155,7 +155,7 @@ let error_name_of_type (T : Type) : string = T.GetProperty("error_name").GetGetM
 let error_name_of_exn (e : static_error) = error_name_of_type (e.GetType ())
 
 
-// PPrint extensions
+// PPrint facilities
 //
       
 let colon2 = txt Config.Printing.kind_annotation_sep
@@ -248,9 +248,9 @@ let fxty_compare_test_verbatim =
         let r = sprintf "%O" x
         in
             r.Replace (Config.Printing.dynamic.flex_forall, Config.Printing.dynamic.forall)     // replace capitalized Forall with the lowercase one
-    let (===) a b = p a = p b
+    let eq a b = p a = p b
     in
-        fxty_compare_test (===) (===) (===)
+        fxty_compare_test eq eq eq
 
 let tyeq_compare_test (ϕ1 : fxty) (ϕ2 : fxty) =
     let t1 = ϕ1.ftype
@@ -279,8 +279,13 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
     let entry_infs = [ entry_info sd.name sd.num ]
     let ed = { section = sd; input = s1; flags = flags }
 
-    let print_result score result infs =
-        let infs = pp_infos (["result", result] @ infs)
+    let print_result score msgs infs =
+        let result =
+            match List.length msgs with
+            | 0 -> txt "unknown reason"
+            | 1 -> txt msgs.[0]
+            | len -> pp_infos [ for i = 1 to len do yield sprintf Config.UnitTest.multiple_results_item_fmt i, txt msgs.[i - 1] ]
+        let infs = pp_infos ([sprintf "result%s" (if List.length msgs > 1 then "s" else ""), result] @ infs)
         match score with
         | score.Ok when ed.is_flag_enabled flag.ShowSuccessful -> L.pp L.test_ok infs
         | score.Weak -> L.pp L.test_weak_ok infs
@@ -308,15 +313,15 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
             in
               [ for flag in ed.enabled_flags do
                     match flag with
-                    | flag.DisableWarnings  -> yield disable_all w
-                    | flag.DisableHints     -> yield disable_all h
-                    | flag.DisableWarning n -> yield disable1 w n
-                    | flag.DisableHint n    -> yield disable1 h n
+                    | flag.HideWarnings  -> yield disable_all w
+                    | flag.HideHints     -> yield disable_all h
+                    | flag.HideWarning n -> yield disable1 w n
+                    | flag.HideHint n    -> yield disable1 h n
 
-                    | flag.EnableWarnings  -> yield enable_all w
-                    | flag.EnableHints     -> yield enable_all h
-                    | flag.EnableWarning n -> yield enable1 w n
-                    | flag.EnableHint n    -> yield enable1 h n
+                    | flag.ShowWarnings  -> yield enable_all w
+                    | flag.ShowHints     -> yield enable_all h
+                    | flag.ShowWarning n -> yield enable1 w n
+                    | flag.ShowHint n    -> yield enable1 h n
                     
                     | _ -> ()
               ]
@@ -324,20 +329,20 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
             disposable_by (fun () -> for d in List.rev disps do d.Dispose ())   // dispose in reverse order for restoring state correctly
 
     let expected_hints =
-        if ed.is_flag_enabled flag.EnableHints || ed.is_flag_enabled flag.DisableHints then Alert.cset.universe
+        if ed.is_flag_enabled flag.ShowHints || ed.is_flag_enabled flag.HideHints then Alert.cset.universe
         else
             Alert.cset [ for flag in ed.enabled_flags do
                             match flag with
-                            | flag.DisableHint n
-                            | flag.EnableHint n -> yield n
+                            | flag.HideHint n
+                            | flag.ShowHint n -> yield n
                             | _ -> () ]
     let expected_warns =
-        if ed.is_flag_enabled flag.EnableWarnings || ed.is_flag_enabled flag.DisableWarnings then Alert.cset.universe
+        if ed.is_flag_enabled flag.ShowWarnings || ed.is_flag_enabled flag.HideWarnings then Alert.cset.universe
         else
             Alert.cset [ for flag in ed.enabled_flags do
                             match flag with
-                            | flag.DisableWarning n
-                            | flag.EnableWarning n -> yield n
+                            | flag.HideWarning n
+                            | flag.ShowWarning n -> yield n
                             | _ -> () ]
 
     let wh_infs () =
@@ -380,7 +385,7 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
     let wh_scores () =
         let l name (tr : Alert.tracer) (expected : Alert.cset) =
             let traced = tr |> Set |> Alert.cset
-            L.debug Normal "%s: traced = %O  expected = %O" name tr.to_set expected
+//            L.debug Normal "%s: traced = %O  expected = %O" name tr.to_set expected
             let f (cset : Alert.cset) fmt = if not (cset.is_empty || cset.is_complemented) then [score.Weak, sprintf fmt name cset.pretty] else []
             in
                 [ yield! f (traced - expected) "some unexpected %ss: %s"
@@ -476,7 +481,7 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
             let scores =
               [
                 yield (match tb, cb with
-                       | true, true   -> score.Ok, "justly rejected"
+                       | true, true   -> score.Ok, "correctly rejected"
                        | true, false  -> score.Weak, sprintf "%s is right but error code %d is wrong" errname e.code
                        | false, true  -> score.Weak, sprintf "error code %d is right but %s is wrong" e.code errname
                        | false, false -> score.Failed, sprintf "wrong %s and code %d" errname e.code)
@@ -490,12 +495,7 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
         let scores = scores @ match res with result.Custom _ -> [] | _ -> wh_scores ()
         let score1 = List.maxBy fst scores |> fst
         let msgs = List.filter (fun (score, _) -> score <= score1) scores |> List.map snd
-        let result =
-            match List.length msgs with
-            | 0 -> txt "unknown reason"
-            | 1 -> txt msgs.[0]
-            | len -> pp_infos [ for i = 1 to len do yield sprintf "%d" i, txt msgs.[i - 1] ]
-        print_result score1 result infs
+        print_result score1 msgs infs
         score1
 
 

@@ -178,7 +178,7 @@ let Te_LambdaCases = make_lambda_cases Te_Lambda Te_Match Te_Cons
 let Tp_Apps, (|Tp_Apps1|), (|Tp_Apps|_|) = nodify make_apps_by Tp_App (function Tp_App (τ1, τ2) -> Some (τ1, τ2) | _ -> None)
 let Tp_Arrow, (|Tp_Arrow|_|) = let A = Config.Typing.Names.Type.arrow in make_arrow_by_apps (ULo (Tp_Cons A)) Tp_Apps (function ULo (Tp_Cons x) when x = A -> Some () | _ -> None) (|Tp_Apps|_|)
 let Tp_Arrows, (|Tp_Arrows1|), (|Tp_Arrows|_|) = nodify make_arrows_by Tp_Arrow (|Tp_Arrow|_|)
-// TODO: type patterns do not have the forall case yet
+// TODO: implement forall case in type patterns
 //let Tp_Foralls, (|Tp_Foralls0|), (|Tp_Foralls|_|) = make_foralls (fun (α, τ) -> Lo τ.loc <| Tp_Forall (α, τ)) (function ULo (Tp_Forall (α, τ)) -> Some (α, τ) | _ -> None)
 
 let Tp_Record, Tp_Variant, Tp_Tuple, (|Tp_Record|_|), (|Tp_Variant|_|), (|Tp_Tuple|_|) =

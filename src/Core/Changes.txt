@@ -1,4 +1,9 @@
 ﻿
+24/10/2016:
+* REFACT: UnitTester flags for dealing with hints and warnings have been renamed from Disable/Enable to Hide/Show
+* FIX: several unit tests have been polished and return now success instead of weak success due to hints
+
+
 12/7/2016:
 * FIX: warning and hint csets are checked correctly in UnitTester now
 

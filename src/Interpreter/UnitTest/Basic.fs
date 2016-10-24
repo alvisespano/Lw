@@ -38,7 +38,7 @@ let type_annotations =
     ]
 
 let scoped_type_variables =
-    "Scoped Type Variables", [],
+    "Scoped Type Variables", [flag.HideHints],
     [
     "let i (x : 'bar) = x in i 1, i true, i",   wrong_type  // this is considered non-top-level also in OCaml, so no generalization
     "let y =
