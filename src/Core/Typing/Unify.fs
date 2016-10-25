@@ -1,44 +1,53 @@
 ﻿(*
  * Lw
  * Typing/Unify.fs: unification algorithms
- * (C) 2000-2014 Alvise Spano' @ Universita' Ca' Foscari di Venezia
+ * (C) Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
  
 module Lw.Core.Typing.Unify
 
-open FSharp.Common.Prelude
 open FSharp.Common.Log
 open FSharp.Common
 open Lw.Core.Absyn
+open Lw.Core.Absyn.Misc
+open Lw.Core.Absyn.Var
+open Lw.Core.Absyn.Kind
+open Lw.Core.Absyn.Sugar
+open Lw.Core.Absyn.Ast
 open Lw.Core.Globals
 open Lw.Core.Typing.Defs
 open Lw.Core.Typing.StateMonad
 open Lw.Core.Typing.Meta
+open Lw.Core.Typing.Ops
+open Lw.Core
+open Lw.Core.Typing.Subst
 open System.Diagnostics
 
 
 // unification
 //
 
-exception Mismatch of ty * ty
+//exception Mismatch of ty * ty
 
 let rec rewrite_row loc t1 t2 r0 l =
     let R = rewrite_row loc t1 t2
-    L.mgu "[I] %O ~= %s" r0 l
+    #if DEBUG_UNI
+    L.uni Low "[I] %O ~= %s" r0 l
+    #endif
     match r0 with
     | T_Row_Ext (l', t', r) ->
         if l' = l then t', r, tsubst.empty
         else
-            let t, r', θ = R r l
+            let t, r', tθ = R r l
             in
-                t, T_Row_Ext (l', t', r'), θ
+                t, T_Row_Ext (l', t', r'), tθ
 
     | T_Row_Var ρ ->
-        let γ = ty.fresh_var
+        let α = ty.fresh_star_var
         let β = T_Row_Var var.fresh
-        let t = T_Row_Ext (l, γ, β)
+        let t = T_Row_Ext (l, α, β)
         in
-            γ, β, new tsubst (ρ, t)
+            α, β, new tsubst (ρ, t)
 
     | T_Row_Empty ->
         Report.Error.cannot_rewrite_row loc l t1 t2
@@ -48,236 +57,290 @@ let rec rewrite_row loc t1 t2 r0 l =
                 
 
 [< RequireQualifiedAccess >]
-module Mgu =
-
-    let check_circularity (θ : tsubst) =
-        for α, t in θ do
-            if Set.contains α t.fv then Debugger.Break ()
-            match t with
-            | T_Var (β, _) when α = β -> Debugger.Break ()
-            | _ -> ()
-        θ
+module internal Mgu =
 
     module Pure =
+        let S = subst_ty
+        let ( ** ) = compose_tksubst
+        let kmgu ctx k1 k2 : tksubst = !> (kmgu ctx k1 k2)
 
-        let mgu (ctx : mgu_context) t1_ t2_ =
-            let ( ** ) = compose_tksubst
-            let S = subst_ty
-            let Sk = subst_kind
+        type var with
+            member α.skolemized = sprintf Config.Printing.skolemized_tyvar_fmt α.pretty
+
+        type ty with
+            static member fresh_skolem k = let x = var.fresh.skolemized in T_Cons (x, k), x
+
+            member t.skolemize_unquantified αks =
+                assert t.is_unquantified
+                let sks = [ for α : var, k in αks do yield α, α.skolemized, k ]
+                let θ = !> (new tsubst (Env.t.ofSeq <| List.map (fun (α, x, k) -> α, T_Cons (x, k)) sks))
+                in
+                    Computation.B.set { for _, x, _ in sks do yield x }, S θ t
+
+            member this.cons =
+                let rec R t =
+                  Computation.B.set {
+                    match t with
+                    | T_Closure _
+                    | T_Var _                   -> ()
+                    | T_Cons (x, _)             -> yield x
+                    | T_HTuple ts               -> for t in ts do yield! R t
+                    | T_App (t1, t2)            -> yield! R t1; yield! R t2
+                    | T_Forall (_, t)           -> yield! R t }
+                in
+                    R this
+        
+        type fxty with
+            member this.cons =
+                let rec R ϕ =
+                    Computation.B.set {
+                        match ϕ with
+                        | Fx_Bottom _       -> ()
+                        | Fx_F_Ty t         -> yield! t.cons
+                        | Fx_Forall (_, ϕ)  -> yield! R ϕ
+                    }
+                in
+                    R this
+
+        type prefix with
+            member this.cons = Computation.B.set { for _, t in this do yield! t.cons }
+
+        let cons_in_tsubst (tθ : tsubst) = Computation.B.set { for _, t : ty in tθ do yield! t.cons }
+        let cons_in_tksubst θ = cons_in_tsubst θ.t
+
+        let check_skolem_escape ctx c (Q : prefix, θ) =
+            let cons = cons_in_tksubst θ + Q.cons
+            in
+                if Set.contains c cons then
+                    Report.Error.skolemized_type_variable_escaped ctx.loc c
+
+        let check_skolems_escape ctx cs (Q, θ) =
+            for c in cs do
+                check_skolem_escape ctx c (Q, θ)
+
+        let check_circularity_wrt α Q ϕ =
+            match Q with
+            | Q_Slice α (_, _, Q2) -> Set.contains α (Fx_ForallsQ (Q2, ϕ)).fv
+            | _                    -> false
+ 
+        let rec subsume ctx (Q0 : prefix) (t : ty) (ϕ : fxty) =
+          #if ENFORCE_NF_IN_UNI
+          let t = t.nf
+          let ϕ = ϕ.nf
+          #endif
+          #if DEBUG_UNI && DEBUG_HML
+          L.uni High "[sub] %O :> %O\n      Q = %O\n" t ϕ Q0
+          let Q, θ as r =
+          #endif
+            assert t.is_nf
+            assert ϕ.is_nf
+            match t, ϕ with            
+            | _, FxU0_Bottom k ->          // this case is not in the HML paper but it is necessary or it will recur infinitely
+                Q0, kmgu ctx t.kind k                    
+
+            | T_ForallsK0 (αks, t1), FxU0_ForallsQ (Mapped fxty.instantiate_unquantified (Q', t2)) ->
+                assert Q0.is_disjoint Q'
+                let skcs, t1' = t1.skolemize_unquantified αks
+                let Q1, θ1 = mgu ctx (Q0 + Q') t1' t2
+                let Q2, Q3 = Q1.split Q0.dom
+                #if DISABLE_HML_FIXES
+                let θ2 = { θ1 with t = θ1.t.remove Q3.dom }
+                let r = Q2, θ2
+                #else
+                let r = Q1, { θ1 with t = θ1.t.remove (Q3.dom + Q'.dom) }   // HACK: Q'.dom contains variables created by the intantiation, and therefore must be removed
+                #endif
+                check_skolems_escape ctx skcs r
+                r
+          #if DEBUG_UNI && DEBUG_HML
+          L.uni High "[sub=] %O :> %O\n       %O\n       Q' = %O" t ϕ θ Q
+          r
+          #endif
+
+
+        and mgu_fx ctx (Q : prefix) (ϕ1 : fxty) (ϕ2 : fxty) =
+          #if ENFORCE_NF_IN_UNI
+          let ϕ1 = ϕ1.nf
+          let ϕ2 = ϕ2.nf
+          #endif
+          #if DEBUG_UNI && DEBUG_HML
+          L.uni Normal "[mgu-scheme] %O == %O\n             Q = %O" ϕ1 ϕ2 Q
+          let Q', θ, ϕ as r =
+          #endif
+            assert ϕ1.is_nf
+            assert ϕ2.is_nf
+            match ϕ1, ϕ2 with
+            | (FxU0_Bottom k, (_ as ϕ))
+            | (_ as ϕ, FxU0_Bottom k) -> Q, kmgu ctx k ϕ.kind, ϕ
+
+            | FxU0_ForallsQ  (Mapped fxty.instantiate_unquantified (Q1, t1)), FxU0_ForallsQ (Mapped fxty.instantiate_unquantified (Q2, t2)) ->
+                assert (let p (a : prefix) b = a.is_disjoint b in p Q Q1 && p Q1 Q2 && p Q Q2)  // instantiating ϕ1 and ϕ2 makes this assert always false
+                let Q3, θ3 = mgu ctx (Q + Q1 + Q2) t1 t2
+                let Q4, Q5 = Q3.split (Q.dom + (fv_Γ (subst_jenv θ3 ctx.Γ)))    // TODOH: abstract this code by using get_ungeneralizable_vars
+                in
+                    Q4, θ3, FxU_ForallsQ (Q5, S θ3 t1)
+          #if DEBUG_UNI && DEBUG_HML
+          L.uni Normal "[mgu-scheme=] %O == %O\n              %O\n              Q' = %O\n              res = %O" ϕ1 ϕ2 θ Q' ϕ
+          r
+          #endif
+
+
+        // TODOL: rewrite the whole unification with monads?
+        and mgu (ctx : uni_context) Q0 t1_ t2_ : prefix * tksubst =
             let loc = ctx.loc
-            let rec R t1 t2 =        
+            let rec R (Q0 : prefix) (t1 : ty) (t2 : ty) =
+              #if DEBUG_UNI && DEBUG_UNI_DEEP
+              L.uni Low "[mgu] %O == %O\n      Q = %O" t1 t2 Q0
+              let Q, θ as r =
+              #endif
+                #if ENFORCE_NF_IN_UNI
+                let t1 = t1.nf
+                let t2 = t2.nf
+                #endif
+                assert t1.is_nf
+                assert t2.is_nf
                 match t1, t2 with
-                | T_Cons (x, k1), T_Cons (y, k2) when x = y -> tsubst.empty, kmgu ctx k1 k2
-                | T_Var (α, k1), T_Var (β, k2) when α = β   -> tsubst.empty, kmgu ctx k1 k2
+                | T_Cons (x, k1), T_Cons (y, k2) when x = y -> Q0, kmgu ctx k1 k2
+                | T_Var (α, k1), T_Var (β, k2) when α = β   -> Q0, kmgu ctx k1 k2
                                       
                 | (T_Row _ as s), T_Row_Ext (l, t, (T_Row (_, ρo) as r)) ->
-                    let t', s', θ1 = rewrite_row loc t1 t2 s l
-                    let Σ1 = θ1, ksubst.empty
-                    Option.iter (fun ρ -> if Set.contains ρ θ1.dom then Report.Error.row_tail_circularity loc ρ θ1) ρo
-                    let Σ2 = R (S Σ1 t) (S Σ1 t')
-                    let Σ3 =
-                        let Σ = Σ2 ** Σ1
-                        in
-                            R (S Σ r) (S Σ s')
+                    let t', s', tθ1 = rewrite_row loc t1 t2 s l
+                    let θ1 = !> tθ1
+                    Option.iter (fun ρ -> if Set.contains ρ tθ1.dom then Report.Error.row_tail_circularity loc ρ tθ1) ρo
+                    let Q2, θ2 = R Q0 (S θ1 t) (S θ1 t')
+                    let Q3, θ3 = let θ = θ2 ** θ1 in R Q2 (S θ r) (S θ s')
                     in
-                        Σ3 ** Σ2 ** Σ1
+                        Q3, θ3 ** θ2 ** θ1
+
+                | T_ForallK ((α, k1), t1), T_ForallK ((β, k2), t2) ->
+                    let θ0 = kmgu ctx k1 k2
+                    let tc, c = ty.fresh_skolem k1
+                    let θ1 = !> (new tsubst (α, tc)) ** θ0
+                    let θ2 = !> (new tsubst (β, tc)) ** θ0
+                    let Q1, θ1 = R Q0 (S θ1 t1) (S θ2 t2)
+                    check_skolems_escape ctx [c] (Q1, θ1)
+                    Q1, θ1
+
+                | T_Var (α1, k1), T_NamedVar (α2, k2) // prefer propagating named over anonymous vars in substitutions
+                | T_NamedVar (α2, k2), T_Var (α1, k1)
+                | T_Var (α1, k1), T_Var (α2, k2) ->
+                    let θ0 = kmgu ctx k1 k2
+                    let ϕ1 = Q0.lookup α1
+                    let ϕ2 = Q0.lookup α2
+                    // occurs check between one tyvar into the other's type bound and the other way round
+                    let check_wrt α t = if check_circularity_wrt α Q0 t then let S = S θ0 in Report.Error.type_circularity loc (S t1_) (S t2_) (T_Var (α, t.kind)) (S t2_)
+                    check_wrt α1 ϕ2
+                    check_wrt α2 ϕ1
+                    let Q1, θ1, ϕ = let S = subst_fxty θ0 in mgu_fx ctx Q0 (S ϕ1) (S ϕ2)
+                    let Q2, θ2 = Q1.update_with_subst (α1, T_Var (α2, k2))   // do not use t2 here! it would always refer to right-hand type of the pattern, and in case of reversed named var it would refer to α1!
+                    let Q3, θ3 = Q2.update_with_bound (α2, ϕ)
+                    in
+                        Q3, θ3 ** θ2 ** θ1 ** θ0
 
                 | T_Var (α, k), t
                 | t, T_Var (α, k) ->
-                    let kt = t.kind
-                    let Θ = kmgu ctx k kt
+                    let ϕ = Q0.lookup α
+                    let θ0 = kmgu ctx k t.kind
+                    // occurs check
+                    if check_circularity_wrt α Q0 (Fx_F_Ty t) then let S = S θ0 in Report.Error.type_circularity loc (S t1_) (S t2_) (S (T_Var (α, k))) (S t)
+                    let Q1, θ1 = subsume ctx Q0 (S θ0 t) (subst_fxty θ0 ϕ)
+                    let Q2, θ2 = let S = S (θ1 ** θ0) in Q1.update_with_subst (α, S t)
                     in
-                        if Set.contains α t.fv then Report.Error.circularity loc t1_ t2_ (T_Var (α, Sk Θ k)) t
-                        else new tsubst (α, t) |> check_circularity, Θ
+                        Q2, θ2 ** θ1 ** θ0
 
                 | T_App (t1, t2), T_App (t1', t2') ->
-                    let Σ1 = R t1 t1'
-                    let Σ2 = R (S Σ1 t2) (S Σ1 t2')
+                    let θ0 = kmgu ctx (K_Arrow (t2.kind, kind.fresh_var)) t1.kind ** kmgu ctx (K_Arrow (t2'.kind, kind.fresh_var)) t1'.kind
+                    let Q1, θ1 = let S = S θ0 in R Q0 (S t1) (S t1')
+                    let Q2, θ2 = let S = S (θ1 ** θ0) in R Q1 (S t2) (S t2')
                     in
-                        Σ2 ** Σ1
-                                                           
-                | t1, t2 ->
-                    raise (Mismatch (t1, t2))
-            in
-                try R t1_ t2_
-                with Mismatch (t1, t2) -> Report.Error.type_mismatch loc t1_ t2_ t1 t2
+                        Q2, θ2 ** θ1 ** θ0
 
+                | t1, t2 -> Report.Error.type_mismatch loc t1_ t2_ t1 t2
+              #if DEBUG_UNI && DEBUG_UNI_DEEP
+              L.uni Low "[mgu=] %O == %O\n       %O\n       Q' = %O" t1 t2 θ Q
+              r
+              #endif
+            #if DEBUG_UNI && !DEBUG_UNI_DEEP
+            L.uni Low "[mgu] %O == %O\n      Q = %O" t1_ t2_ Q0
+            #endif
+            let Q, θ as r = R Q0 t1_ t2_
+            assert (Set.intersect Q.dom θ.dom).IsEmpty;
+            #if DEBUG_UNI && !DEBUG_UNI_DEEP
+            L.uni Low "[mgu=] %O == %O\n       %O\n       Q' = %O" t1_ t2_ θ Q
+            #endif                    
+            r
 
-    module Computational =
-       
-        let private __tYield _Yield (θ : tsubst) = _Yield ((θ, ksubst.empty))
-        let private __kYield _Yield (Θ : ksubst) = _Yield ((tsubst.empty, Θ))
-        let private __YieldFrom _Bind _Yield f = _Bind (f, _Yield) // { let! (r : tksubst) = f in yield r }
+open Mgu.Pure
 
-        module StateMonad =
-
-           type [< NoEquality; NoComparison >] state = { Σ : tksubst }
-
-           type mgu_builder () =
-                inherit Monad.state_builder<state> ()
-                member __.Zero () = fun s -> s.Σ, s
-                member __.Yield (Σ : tksubst) = fun s -> let Σ = compose_tksubst Σ s.Σ in Σ, { Σ = Σ }
-                member this.YieldFrom f = __YieldFrom this.Bind (fun (Σ : tksubst) -> this.Yield Σ) f
-                member this.Yield x = __tYield this.Yield x
-                member this.Yield x = __kYield this.Yield x
-                member __.get = fun s -> s.Σ, s
-       
-           let mgu (ctx : mgu_context) t1_ t2_ =
-                let loc = ctx.loc
-                let U = new mgu_builder ()
-                let S = subst_ty
-                let rec R t1 t2 =
-                    U {                    
-                        let! Σ = U.get
-                        let S = S Σ
-                        match t1, t2 with
-                        | T_Cons (x, k1), T_Cons (y, k2) when x = y ->
-                            yield kmgu ctx k1 k2
-
-                        | T_Var (α, k1), T_Var (β, k2) when α = β ->
-                            yield kmgu ctx k1 k2
-                                      
-                        | T_Row _ as s, T_Row_Ext (l, t, (T_Row (_, ρo) as r)) ->
-                            let t', s', θ1 = rewrite_row loc t1 t2 s l
-                            match ρo with
-                            | None -> ()
-                            | Some ρ ->                            
-                                if Set.contains ρ θ1.dom then Report.Error.row_tail_circularity loc ρ θ1
-                                yield! R t t'
-                                yield! R r s'
-
-                        | T_Var (α, k) as tα, t
-                        | t, (T_Var (α, k) as tα) ->
-                            yield kmgu ctx k t.kind
-                            // TODO: come mai non entra mai nell'if?
-                            if Set.contains α t.fv then Report.Error.circularity loc (S t1) (S t2) (S tα) (S t)
-                            yield new tsubst (α, t) |> check_circularity
-
-                        | T_App (t1, t2), T_App (t1', t2') ->
-                            yield! R t1 t1'
-                            yield! R t2 t2'
-                                                           
-                        | t1, t2 ->
-                            return Report.Error.type_mismatch loc (S t1_) (S t2_) (S t1) (S t2)
-                    }
-                in
-                    R t1_ t2_ { Σ = tsubst.empty, ksubst.empty } |> fst
-        
-
-        module Functional =
-
-            type mgu_builder () =
-                inherit Computation.Builder.collection<tksubst> ((tsubst.empty, ksubst.empty), fun Σ1 Σ2 -> compose_tksubst Σ2 Σ1)
-                member this.YieldFrom (θ : tsubst) = this.YieldFrom ((θ, ksubst.empty))
-                member this.YieldFrom (Θ : ksubst) = this.YieldFrom ((tsubst.empty, Θ))
-
-            let mgu (ctx : mgu_context) t1_ t2_ =
-                let loc = ctx.loc
-                let U = new mgu_builder ()
-                let S = subst_ty
-                let rec R t1 t2 =
-                    U {                    
-                        let! Σ = U.get
-                        let S = S Σ
-                        match t1, t2 with
-                        | T_Cons (x, k1), T_Cons (y, k2) when x = y ->
-                            yield! kmgu ctx k1 k2
-
-                        | T_Var (α, k1), T_Var (β, k2) when α = β ->
-                            yield! kmgu ctx k1 k2
-                                      
-                        | T_Row _ as s, T_Row_Ext (l, t, (T_Row (_, ρo) as r)) ->
-                            let t', s', θ1 = rewrite_row loc t1 t2 s l
-                            match ρo with
-                            | None -> ()
-                            | Some ρ ->
-                                if Set.contains ρ θ1.dom then Report.Error.row_tail_circularity loc ρ θ1
-                                yield! R t t'
-                                yield! R r s'
-
-                        | T_Var (α, k) as tα, t
-                        | t, (T_Var (α, k) as tα) ->
-                            yield! kmgu ctx k t.kind
-                            // TODO: come mai non entra mai nell'if?
-                            if Set.contains α t.fv then Report.Error.circularity loc (S t1) (S t2) (S tα) (S t)
-                            yield! new tsubst (α, t) |> check_circularity
-
-                        | T_App (t1, t2), T_App (t1', t2') ->
-                            yield! R t1 t1'
-                            yield! R t2 t2'
-                                                           
-                        | t1, t2 ->
-                            Report.Error.type_mismatch loc (S t1_) (S t2_) (S t1) (S t2)
-                    }
-                in
-                    R t1_ t2_
-
-
-let multi_mgu_comparison equals fs x =
-    let ret = function
-        | Choice1Of2 Σ -> Σ
-        | Choice2Of2 ex -> raise ex
-    let rs = [ for name, f in fs do yield name, (try Choice1Of2 (f x) with ex -> Choice2Of2 ex) ]
-    let rs' = List.fold (fun z (_, r) ->        
-                    let occurs name = z |> List.map snd |> List.concat |> Seq.exists ((=) name)
-                    in
-                        match [ for name', r' in rs do if not (occurs name') && equals r r' then yield name' ] with
-                        | [] -> z
-                        | names ->  (r, names) :: z)
-                [] rs
-    match rs' with
-    | [] -> unexpected "empty function list" __SOURCE_FILE__ __LINE__
-    | [r, _] -> ret r
-    | _ ->
-        let r1, names1 = List.maxBy (fun (_, names) -> List.length names) rs'
-        L.debug High "functions behaved differently: picking most common result: %s. Results are:\n%s" names1.[0]
-            (mappen_strings (fun (r, names) ->
-                    sprintf "%s:\n\t%s\n"
-                        (flatten_strings ", " names)
-                        (match r with Choice1Of2 (θ, Θ) -> sprintf "tsubst = %O\n\tksubst = %O" θ Θ | Choice2Of2 ex -> pretty_exn_and_inners ex))
-                "\n" rs')
-        #if DEBUG
-        System.Diagnostics.Debugger.Break ()
-        #endif
-        ret r1
-
-
-let multi_mgu =
-    [ "pure", Mgu.Pure.mgu
-      "func", Mgu.Computational.Functional.mgu
-      "monad", Mgu.Computational.StateMonad.mgu ]
-    |> List.map (fun (a, b) -> a, uncurry3 b)
-    |> multi_mgu_comparison
-            (fun r1 r2 ->
-                match r1, r2 with
-                | Choice1Of2 (θ1, Θ1), Choice1Of2 (θ2, Θ2) -> let p x = sprintf "%O" x in p θ1 = p θ2 && p Θ1 = p Θ2
-                | Choice2Of2 ex1, Choice2Of2 ex2           -> let p = pretty_exn_and_inners in p ex1 = p ex2
-                | _ -> false)
-    |> curry3
-
-let mgu = multi_mgu
-
-let try_mgu ctx t1 t2 =
-    try Some (mgu ctx t1 t2)
+let try_mgu ctx Q t1 t2 =
+    try Some (mgu ctx Q t1 t2)
     with :? Report.type_error -> None
     
-type state_builder with
-    member M.unify loc t1 t2 =
+type type_inference_builder with
+    member M.unify loc (t1 : ty) (t2 : ty) =
         M {
-            let! { θ = θ; Θ = Θ; χ = χ } = M.get_state
-            let Σ = θ, Θ
-            let θ, Θ as Σ = mgu { loc = loc; χ = χ } (subst_ty Σ t1) (subst_ty Σ t2)
-            L.mgu "[U] %O == %O // [%O] // [%O]" t1 t2 θ Θ
-            do! M.update_subst Σ
+            let! Q = M.get_Q
+            let! t1 = M.updated t1
+            let! t2 = M.updated t2
+            let! uctx = M.get_uni_context loc
+            let Q, θ = mgu uctx Q t1 t2
+            do! M.set_Q Q
+            do! M.update_θ θ
         }
 
-let try_principal_type_of ctx pt t =
-    try_mgu ctx pt t |> Option.bind (fun Σ -> let t1 = subst_ty Σ pt in if t1 = t then Some Σ else None)
+    member M.subsume loc (t : ty) (ϕ : fxty) =
+        M {
+            let! Q = M.get_Q
+            let! t = M.updated t
+            let! ϕ = M.updated ϕ
+            let! uctx = M.get_uni_context loc
+            let Q, θ = subsume uctx Q t ϕ
+            do! M.set_Q Q
+            do! M.update_θ θ
+        }
 
-let is_principal_type_of ctx pt t = (try_principal_type_of ctx pt t).IsSome
+    member M.unify_fx loc (ϕ1 : fxty) (ϕ2 : fxty) =
+        M {
+            let! Q = M.get_Q
+            let! ϕ1 = M.updated ϕ1
+            let! ϕ2 = M.updated ϕ2
+            let! uctx = M.get_uni_context loc
+            let Q, θ, ϕ = mgu_fx uctx Q ϕ1 ϕ2
+            do! M.set_Q Q
+            do! M.update_θ θ
+            return ϕ
+        }
 
-let is_instance_of ctx pt t =
-    let Σ = mgu ctx pt t
-    let t = subst_ty Σ t
-    in
-        is_principal_type_of ctx pt t   // TODO: non basta unificare: l'unificatore deve essere più piccolo! così si capisce se è un'instance
+    member M.attempt_unify loc t1 t2 =
+        M {
+            let! st = M.get_state
+            try do! M.unify loc t1 t2
+            with :? Report.type_error -> do! M.set_state st          
+        }
+
+type ty with
+    member t1.try_instance_of ctx (t2 : ty) =
+        let Q = prefix.B { for α, k in Seq.append t1.ftv t2.ftv do yield α, Fx_Bottom k }
+        let _, θ = mgu ctx Q t1 t2
+        in
+            if t2.fv.IsSubsetOf θ.dom then Some θ   // TODO: in https://web.cecs.pdx.edu/~mpj/thih/TypingHaskellInHaskell.html they define a "match" function similar to one-way-only MGU, useful here!
+            else None
+
+    member t1.is_instance_of ctx t2 = (t1.try_instance_of ctx t2).IsSome
+
+type fxty with
+    member ϕ.is_instance_of ctx t = ϕ.ftype.is_instance_of ctx t    // TODO: needs testing
+
+
+//let try_principal_type_of ctx pt t =
+//    try_mgu ctx Q_Nil pt t |> Option.bind (function _, θ -> let t1 = subst_ty θ pt in if t1 = t then Some θ else None)
+//
+//let is_principal_type_of ctx pt t = (try_principal_type_of ctx pt t).IsSome
+//
+//let is_instance_of ctx (ϕ1 : fxty) (pt : ty) =
+//    let ϕ2 = Fx_Foralls ([for α in pt.fv do yield α, Fx_Bottom (pt.search_var α).Value], Fx_F_Ty pt)
+//    let _, θ = subsume ctx ϕ1 ϕ2    // CONTINUA: subsumere al contrario? potrebbe funzionare... cioè il pt della overload deve essere un'istanza del flextype inferito
+//    let t = subst_ty θ t
+//    in
+//        is_principal_type_of ctx pt t   // TODO: use HML subsume for checking instances
+//
+//

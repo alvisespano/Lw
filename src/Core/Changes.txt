@@ -1,6 +1,576 @@
 ﻿
+24/10/2016:
+* REFACT: UnitTester flags for dealing with hints and warnings have been renamed from Disable/Enable to Hide/Show
+* FIX: several unit tests have been polished and return now success instead of weak success due to hints
+
+
+12/7/2016:
+* FIX: warning and hint csets are checked correctly in UnitTester now
+
+
+6/7/2016:
+* UP: few improvements in cset management
+* UP: UnitTest module now support custom tests consisting in arbitrary pieces of code, aimed at testing specific internals not related to language constructs
+
+
+30/6/2016:
+* REFACT: Report.Alert.cset extended with set operations and moved to FSharp.Common.Collections
+
+
+29/6/2016:
+* UP: cset type represents complement-able sets (was vset)
+* REFACT: UnitTester rewritten according to new cset system for dealing with alerts (hints and warnings)
+
+
+21/6/2016:
+* UP: unit test internals furtherly improved: scores and infs population is cleaner now and multiple results for each entry are supported (success, weak issue or errors)
+
+
+17/6/2016:
+* UP: UnitTest internals revamped: now each entry computes a list of (score * msg) tuples, which are then sorted according to severity and the final
+      result is the worst in the list
+
+
+13/6/2016:
+* UP: flag manegement in UnitTest revamped even more: it now supports checking whether warnings and hints actually take place, via
+      a special scope-tracer object which can track warnings or hints shot while type-checking 
+
+
+10/6/2016:
+* UP: UnitTest flags for warning and hint manipulation have been extended and tested
+
+
+8-9/6/2016:
+* UP: warning and hint report system revamped: now supports free enabling and disabling, plus it's reused by both hints and warnings
+
+
+7/6/2016:
+* FIX: auto generalization with an empty quantified variable set is now treated as a non-generalization: this fixes the unwanted hint message
+       when no type variable was actually generalized
+
+
+6/6/2016:
+* back to Lw after some weeks off
+* UP: logger supports continuations post-printing
+* FIX: warning and hint messages are now properly normalized now thanks to the new logger continuation mechanism
+
+
+28/4/2016:
+* FIX: some fixes in scoped vars, type annotations and relevant unit tests
+
+
+22/4/2016:
+* FIX: scoped vars removed from scoped vars env by value
+
+
+21/4/2016:
+* FIX: small fixes on type annotations and auto generalization
+* BUG: removal of scoped vars does not work as intended
+
+
+20/4/2016:
+* UP: scoped_vars are now an environment mapping names to records holding the variable and the nesting level
+* UP: scoped var nesting levels is used for filtering top-level-introduced vars in generalization
+
+
+19/4/2016:
+* REFACT: ty.kinded_ftv method has been renamed to ftv and now computes an Env mapping vars to kinds instead of a sequence of pairs
+* REFACT: ty.fv is now implemented using method ftv
+* REFACT: ty.search_var and fxty.search_var do not exist anymore
+
+
+18/4/2016:
+* FIX: fixes in scoped variables
+
+
+15/4/2016:
+* FIX: various fixed in type annotations, type evaluation etc
+* UP: wildcards can now be type expressions too (not only type patterns as before)
+* FIX: when dealing with type annotations, new type variables are added to the prefix - only those which were not already in it
+* FIX: generalization of non-top-level type variables has been restored
+
+
+12/4/2016:
+* FIX: node kind annotation of type expressions has been fixed
+* FIX: free vars of type annotations are now inserted into the prefix
+* BUG: scoped vars are not generalized at top level
+
+
+11/4/2016:
+* FIX: parser reduce/reduce conflicts fixed
+* UP: type function definition now supports co-domain kind annotation, similarly to type annotation of return type in function bindings
+* REFACT: monad builders polished and added methods for annotating inferred kind or type into nodes
+* REFACT: node class now has only 1 type parameter; member 'typed' has now type object and can be freely used for annotating whatever stuff for the price of one dynamic cast
+* UP: both kind inference and type inference now annotate the inferred kind (or type) within the node
+
+
+6/4/2016:
+* REFACT: big refactor of AST, annotations, cases, patterns and so on
+
+
+4-5/4/2016:
+* FIX: some fixes in typing annotations at binding site
+* REFACT: AST annotation subsystem is under redesign
+* REFACT: factories for lambdas have been polished
+* REFACT: various renamings and refactors in AST
+* REFACT: qbinding record type has been extended to support return type annotations and rec bindings alike; rec_qbinding does not exist anymore
+* UP: let bindings support
+
+
+2/4/2016:
+* UP: all annotations, except let rec bindings, are now flex types
+* FIX: annotated lambda parameters are syntactically patt_app_atoms, which means flex types are accepted by the parser: F-type check is done at typing-time
+* UP: UnitTest flags now support showing input and parsed input, and forcing show of successful esits
+
+
+1/4/2016:
+* FIX: parser does not have reduce/reduce conflicts anymore when dealing with foralls
+* UP: typing of annotations revamped and polished
+* BUG: parsing of annotated lambda functions with forall parameters is bugged: need fix
+
+
+30/3/2016:
+* UP: disabled warnings and hints a little revamped: command line arguments have been introduced for both disabling and enabling either of the two by number;
+      moreover, -Wall and -Hall options have been implemented
+* UP: static_error exception and derived now have a static string property telling the name of the error (header now stubs this)
+* BUG: discovered a small bug in normalization
+
+
+29/3/2016:
+* REFACT: UnitTest solution configuration is no more: now unit testing is triggered via command line argument "--unit-test"
+* REFACT: logger class does not support profile channel anymore, and now has a custom_debug method logging in blue and with its own threshold; header must always be specified though
+* REFACT: Log thresholds and related stuff has been polished and are more consistent: test methods are assigned to the debug threshold, uni and resolve channels too; test_weak_ok and
+          test_fail although are treated as unleveled and are subject to no threshold
+* BUG: flex type annotation management must be fixed
+
+
+26/3/2016:
+* UP: solution has now new configurations: Interactive Debug and Release; Interpreter Debug and Release; plus UnitTest
+* UP: UnitTest revamped: sections as well as entries support flags for controlling environments and other details 
+
+
+25/3/2016:
+* NEW: attempt to writen a simpler non-monadic type equivalence algorithm, but I'm not persuaded it would be better so it's now in the TODO list
+* REFACT: pattern and constructor factories for sugars have been polished
+
+
+24/3/2016:
+* REFACT: another file refactor: certains stuff in Ops have been put into new Subst and Equivalence modules
+* FIX: type equality now is more robust and all relevant unit tests are successful
+* BUG: unit tests using previous bindings throw an unbound error (dunno why!)
+
+
+23/3/2016:
+* REFACT: big refactor of former Absyn module: now it is split into several files within a source folder
+* REFACT: another big source layout refactor involving UnitTest
+* FIX: Intrinsic.envs0.δ environment was not forwarded to the initial state of the monad and led to unbound tyep constructors in type evaluation
+* UP: a few very minor TODOs implemented and others cleaned up
+* FIX: type equivalence fixed: T_App case was inverting comparison between arguments (damn!!)
+* BUG: still a subtle bug in type equivalence: quantified vars must be removed from the equivalence monad state and then reput inside
+
+
+20-21/3/2016:
+* REFACT: various refactorings on stuff related with kind inference and type evaluation
+* FIX: various fixes on type management and γ and δ environments
+* BUG: Record type constructor seems to be unbound when type-evaluating tuples
+
+
+18-19/3/2016:
+* REFACT: lots of work in kind inference and type evaluation
+* UP: type variables are not bound into a new environment γα during kind inference
+* UP: all monadic bind functions now return a pair with the bound value and an undo function for unbinding the symbol
+* BUG: populating intrinsics throws an unbound error when encountering type constructor list
+
+
+17/3/2016:
+* FIX: type equivalence fixed
+* UP: kind inference and type evaluation revamped and polished: scoping of quantified variables is supported
+* UP: ty_expr now evaluates to ty and not fxty anymore
+* UP: fxty_expr introduced for evaluation of flex types
+* UNDONE: management of scoped vars need to be completed
+
+
+16/3/2016:
+* REFACT: types, kinds and all relevant data structures are not comparable nor equatable anymore
+* REFACT: type equivalence redesigned: now equivalence function for kinds, tys and fxtys are monadic and in mutual letrec and each 'is_equivalent' member is just an unmonadization
+* BUG: type equivalence is still bugged: probably there's something wrong with the monad state being dirty across multiple type equivalence tests
+* UP: UnitTest typechecker state can be reset explicity now; parse_ty_expr also resets the state everytime
+
+
+15/3/2016:
+* FIX: HML is working as intended: the bug seen yesterday is actually not a bug
+* UP: now let bindings do not reduce to F-types by default anymore
+* BUG: Fx_Foralls equivalence has a subtle bug: part of the prefix may be actually an F-type, so comparison must be performed more smartly
+* TESTS: new tests for type equivalence
+* REFACT: subst_ty rewritten: now it first applied tθ to the type and then it applied kθ to the result
+* REFACT: some debug messages have been polished
+
+
+14/3/2016:
+* REFACT: static_error exception type now has code and syntax_error is a subtype
+* UP: Report numbering system revamped: different types of errors have been assigned a numeric range, e.g. type errors are in the range 200..299
+* UP: UnitTest module upgraded with better support of wrong tests: now specific error numbers can be detected
+* TESTS: new tests on hml and higher rank arguments
+* BUG: a subtle bug has been discovered: when typing "map poly ids"
+
+
+11/3/2016:
+* REFACT: unit tests split into sections at code level, so sections can be disabled by commenting the relevant entry in the "all" list
+* TESTS: new unit tests for type equivalence
+* FIX: type equivalence fixed: all unit tests now succeed
+
+
+10/3/2016:
+* REFACT: Report slightly revamped
+* FIX: Fastprintf discovored being bugged: whenever the result of a printf (or similar function) is unified with a tuple type, Fastprintf implementation crashes. This
+       implies that any formatted use of raise would crash, because the result type of any raise is a type variable that unifies with anything formatted raises using
+       kprintf: after 3 days of debug, I finally came out with a workaround. Anyway in the end Fastprintf does not perform better than F# stdlib one, so it's not worth using
+* UP: Log polished and optimized through a reflection trick: lines that would be masked out due to threshold are now not processed at all
+
+
+7/3/2016:
+* UP: Fastprintf third-part library added to dependencies and in use
+* REFACT: Log refactored heavily and some stuff in FSharp.Common.Prelude too
+
+
+5/3/2016:
+* UP: let rec..and ported to HML and tested briefly. Behaviour is like lambda, i.e. polymorphic uses of rec functions need to be annotated like a lambda parameter
+* FIX: pattern applications not involving a data constructor as left-most term are rejected
+
+
+4/3/2016:
+* UP: some patterns and let rec being upgraded to HML
+
+
+3/3/2016:
+* FIX: var pretty printing polished and fixed for working with various compilation symbols
+* NEW: kinded interface for types having the kind property
+* NEW: type equivalence logic stuffed into a monad: it can now be reused with several types in an easier way
+* FIX: match rule seems to work
+* BUG: let rec seems to be wrong: it's being worked
+
+
+2/3/2016:
+* UP: ty and fxty equality rewritten: it now deals with variables in a special way, such that for example forall 'a 'b. 'a -> 'b is equal to forall 'x 'y. 'x -> 'y and even
+      when quantified variables are out of order, e.g. forall 'a 'b. 'a -> 'b is equal to forall 'y 'x. 'x -> 'y
+* REFACT: UnitTest code simplified: kind of expected flex type is not returned explicitly anymore, as it can always be fetched by calling .kind
+* UP: UnitTest comparison has been improved: it now supports type equality as well as verbatim-equality (using pretty printing)
+* REFACT: some important renaming: M.unify is now M.unify_F, and so mgu is mgu_F; also, new monadic M.unify_fx stands for old mgu_scheme which has now become mgu_fx
+* UP: match rule rewritten using flex types and flex unification
+* FIX: annot rule had wrong translation: now the translated inner expression is set as the whole translated output
+* NEW: method fxty.is_really_flex tests whether the flex type could be actually be a System-F type
+
+
+1/3/2016:
+* UP: UnitTest revamped with flag subsystem for special behaviours
+Evento senza titolo* UP: UnitTest types are now subject to anonymization of all type variables, unless StrictVarNames flag is enabled
+
+
+29/2/2016:
+* UP: Reserved_Cons removed from expr AST: it used to exist because of the evaluator, but it is not necessary as new data constructors X can be bound to Δ as (X, V_Cons (X, []))
+* REFACT: scoped vars have now become a set of vars
+* UP: split_prefix monadic function has now become split_for_gen and calls the pure version, which deals with Γ and scoped vars
+* REFACT: fork monadic methods have been renamed to undo
+* UP: UnitTest module improved even more
+
+
+28/2/2016:
+* UP: some work on scoped type variables
+* REFACT: redesigned how log thresholds are set according to solution configuration and interpreter mode
+* FIX: kind inference and type evaluation debug information revamped
+* FIX: lambda rule of HML has been generalized to support annotations in a transparent way: all ftv are added to the prefix, whether belonging to an annotation or not
+* FIX: subst_ty now substitutes kinds also to the result of a substitution
+
+
+27/2/2016:
+* UP: var normalization upgraded: it now supports a stack of normalization contexts, making the behaviour undoable and fitting with recursive uses; it also supports use of
+      normalization context in a pure way, passing it as argument to pretty_normalized
+* UP: UnitTest module text output reworked and polished
+* FIX: unit tests are currenlty all correct
+* UP: translated type defined for enforcing a strongly typed behaviour of the translation sub-system, which was not robust - now it is
+
+
+26/2/2016:
+* FIX: location column numbers and biases are probably wrong: fixed now but not sure it's really done
+* UP: UnitTest messages rewritten using PPrint library of document formatting combinators
+
+
+25/12/2016:
+* REFACT: enormous and complicated redesign and abstraction of pattern and constructor factories in Absyn
+* FIX: T_Forall is now pretty printed with kind annotations on quantified vars when kind is not star
+* REFACT: Intrinsic.envs0 are now computed lazyly
+* FIX: datatype declarations fixed: need more testing of course, but seems to work
+
+
+24/12/2016:
+* REFACT: Globals.location type removed: it didn't make sense, as the superclass Parsing.location is enough
+* NEW: location can now be merged with another location and subtend an area
+* NEW: make_patterns generalizes the creation of multiple-occurrence constructors and active patterns given the single-shot versions of the constructor and the pattern
+* UP: arrows and apps constructors and active patterns are now created by using make_patterns
+
+
+23/2/2016:
+* REFACT: reserved identifiers tools polished, as well as list special constructor names
+* REFACT: wildcard_reserved_id does not exist anymore: fresh_reserved_id is used instead
+* UP: list support completed
+* UP: credits text in Args module revamped, as well as management of assembly attributes
+* UP: the whole Intrinsic module has been revamped to support datatype definitions and other declarations
+* UP: datatype declaration typechecking is under revamping
+
+
+22/2/2016:
+* REFACT: compilation symbols enabling debug in unification and inference have been polished
+* FIX: subsume fixed
+* NEW: lots of work and rework on UnitTest module
+* REFACT: cputime-based log extension methods moved to Main
+* REFACT: interactive console code is now in a separate Interactive module
+* NEW: new compilation switch for enforcing normal form in unification
+* REFACT: many minor refactors involving exception handling, log and stuff
+
+
+21/2/2016:
+* FIX: finally I found the reason why HML did not work! More tests must be done but it's likely the right direction: generalization (performed by calling split) did not take into account
+       the free variables in Γ; now split call sites have been fixed
+* FIX: ty.search_var did not work and caused active pattern T_ForallsK and all other patterns relying on it to throw an unexpected exception. Now fixed
+* UP: var type has now custom equality and comparison
+* FIX: subsume used to be bugged for a long time, but now a few changed seems to have fixed it; skolem escape check not tested yet, though
+* TEST: finally some tests are successful: the following Lw function seem to typecheck correctly: const, app, id, i (which is the application "id id") and the monomorphic expression "app id 3"
+
+
+20/2/2016:
+* DEBUG: new pure version of HML infer algorithm written in a private module
+
+
+18-19/2/2016:
+* I'm starting to think that HML paper shows a wrong implementation of the type inferece. The prototype in Haskel seem to not perform generalization on (APP) when typing "let app f x = f x".
+* DEBUG: some more debug for HML
+
+
+16-17/2/2016:
+* NEW: new compilation switch: ENABLE_HML_FIXES; currently 2 fixes exist:
+       (1) detection of forall ('a :> _|_). 'a in nf;
+       (2) subsume prunes all variables introduced locally within the result substitution
+* BUG: without any HML fix, inferece still produce 2 unquantified variables in typing "let app f x = f x"
+
+
+15/2/2016:
+* HML seems to work now
+* REFACT: fxty.Fx_Forall is now pretty printed as "Forall" with a capital letter when DEBUG is enabled, in order to distinguish System-F quantification from flexible type quantification
+* FIX: fxty.nf fixed: it now reduces flexible forall ('a :> _|_). 'a to System-F forall 'a. 'a directly. This seems enough to make HML inference correct
+* REFACT: cleaned up a lot ForallsQ and other stuff like that
+* NEW: instantiation of quantifier+unquantified_ty is now done via a static method and not anymore by active patterns
+* NEW: (|Mapped|) active pattern: promoted to Prelude
+* REFACT: refactoring datatype involved in gen_bind for generic multiple binding management
+
+
+12/2/2016:
+* REFACT active patterns dealing with quantification, instantiation, unquantification etc. have been redesigned
+* BUG: still not working: it still inferes the same it used to infer before the first big fix, still with no fxty
+
+
+11/2/2016:
+* REFACT: tksubst is not a type alias anymore but a record
+* FIX: is_instance_of redesigned and refactored as a member of type ty
+* REFACT: monad builders designed reworked
+* REFACT: major refactor done
+* FIX: D_Type declarations now create a dummy Td_Decl when calling type evaluation and kind inference
+* BUG: (|Fx_ForallsQ|) does not handle possible foralls within the internal ty node
+
+
+10/2/2016:
+* REFACT: constraint, types, schemes and flex types instantiation (i.e. variable refreshment) has been widely redesigned
+* REFACT: big refactor of monad builders
+* UP: more modules ported to the new design
+* UP: unification of T_Forall does not unify kinds of the sub-term anymore, as it was done automatically by recursion
+
+
+9/2/2016: [v0.9.1]
+* version bump due to major refactor
+* REFACT: flexible types reimplemented as a new datatype and former type "ty" stands now for System-F types
+* REFACT: substitution system cleaned up
+* REFACT: unquantified types are now detectable via an active pattern
+* REFACT: generalization and instantiation redesigned adn cleaned up, both monadic and not
+* UP: scoped variables now support kind variables as well
+
+
+8/2/2016:
+* REFACT: better printing of debug information on mgu, subsume and mgu_scheme
+* FIX: T_ForallsQ now refreshes quantified variables: it seems that in HML paper that is the expected behaviour
+* DEBUG: lots of debugging on HML
+
+
+6/2/2016:
+* NEW: Unit test module written with a simple system for testing type inference
+* NEW: most tests have been taked from HML prototype tests
+* BUG: discovered a bug in typing "let f = id id", where id : forall 'a. 'a -> 'a
+
+
+5/2/2016:
+* REFACT: let bindings support for annotation has been rewritten
+* FIX: rec bindings support for HML has been introduced - need testing
+* NEW: let bindings convert flex types to F-types by default, unless a flexible type annotation is provided by the user
+
+
+4/2/2016:
+* FIX: tonight I had a revelation and I fixed HML :) Method ty.nf did not adhere precisely to the specification, as it didn't detect types of form "forall ('a :> _|_). 'a" as System-F types,
+       but it rather treated them as flexible, reducing always to _|_. This was the source of all problems, as it made type inference lose type variable information. Now nf works as intended
+       and the whole HML system infers correctly
+* NEW: a new family of active patterns Flex_* have been defined for dealing with flexible types in a semi-typed way
+* REFACT: ty.is_nf method exists no more
+* REFACT: ty.is_ftype method has been rewritten without using structural comparison
+* FIX: columns in error reporting has been increased by 1 by setting col_bias to 1
+
+
+
+3/2/2016:
+* REFACT: var pretty printing changed again: now variables are printed as unquantified only when quantification has been enabled by a forall. In other words, when a T_Forall is encountered
+          quantification is enabled for the type sub-branch; otherwords vars are printed as quantified even if they are unquantified (this is for readability purposes, where vars in substitutions
+          or in sub-terms are better printed without the underscore prefix)
+* FIX: in rule (LAMBDA) the prefix is now reset to original after inferring the sub-term (used to keep the newly inserted variable, which was wrong)
+* FIX: monadic extend was bugged: now there's only a pretty natural extend dealing with the Q within the monad, and no more extend overloads dealing with Q as a parameter
+* FIX: in rule (LAMBDA) uses of former monadic extend overloads have been rewritten using the pure version of extend
+* REFACT: var.reset_normalization does not take a set of quantified variables anymore: it just resets normalization; it is now used only by Report, not by scheme and kscheme pretty printers anymore
+* FIX: var.reset_normalization didn't work as intended when compilation flag DISABLE_VAR_NORM was enabled; now it should
+* REFACT: some new var.add_quantified static overloads dealing with a single var, a sequence of vars and a prefix
+* REFACT: substitution composition (again!!) was reversed: probably it didn't matter anyway, but hey...
+
+
+2/2/2016:
+* REFACT: new open and closed version of rowed types (records and variants)
+* REFACT: all pt_* functions have been renamed to W_* and all pk_* to Wk_*
+* REFACT: Globals module has been lifted up in the source compilation order
+* NEW: ty.constructed_form method implemented according to the HML prototype (though it does not appear in the paper) and called bvy subsume and mgu_scheme
+
+
+1/2/2016:
+* REFACT: much debug over HML
+* FIX: lots of fixes in normalform, subsume and mgu
+* NOTE: the reason why (APP) rule seems to infer always a wrong forall 'a. 'a is that the HML paper might be wrong - not sure though
+
+
+29/1/2016:
+* UP: lambda parameter annotated type now unifies with star
+* REFACT: HML parts of type inference have been monadized
+* UP: unification between type applications now unifies kinds of both left-hands to an arrow
+* UP: several minor TODOs in the task list have been done or pruned
+* REFACT: new small utiliy: ty.fresh_star_var_and_ty: it computes both the var and the ty
+* FIX: substitution composition fixed again: it was applied in reverse order sometimes
+
+
+28/1/2016:
+* UP: kind unification integrated within new mgu algorithm for HML
+
+
+22-27/1/2016:
+* HML being debugged extensively
+* FIX: many fixes, major and minor
+* REFACT: variable printing, scheme printing and lots of other stuff redone
+* REFACT: Report.prompt now supports arbitrary values after the type, i.e. a separator (e.g. "=" for values) and a value; moreover, it introduces an EOL if the printing
+          would truncate due to console buffer width
+* UP: quantified variables (or a whole prefix) can now be added to the set of quantified variables for pretty printing normalized vars; the use-binding-and-IDisposable
+      trick has been used for removing vars from the set when coming up from recursion without the need to pass a parameter to ty.pretty
+
+
+21/1/2016:
+* FIX: when the left-hand pattern of a let-binding is a plain identifier, no trivial unification takes place between the inferred type and the type inferred for the pattern
+
+
+20/1/2016:
+* UP: HML implementation largely done
+* TEST: testing of HML system started: a few early bugs have been fixed, but there's gonna be a lot of work to do yet
+* REFACT: lots of type manipulation stuff, useful for putting asserts checking System-F types, normal form etc.
+* FIX: old type inference code introducing fresh vars into Γ have been updated to introduce a boundary for that var into the prefix as well.
+       One example of this is pt_patt dealing with P_Var term
+
+
+19/1/2016:
+* REFACT: prefix is now a heavyweight type which is basically a native tail-append list; all operations have become members
+* REFACT: ForallK and ForallsK rewritten simply using the ty.kind method on the type bound
+* UP: kind inference and type evaluation for Forall term fixed
+* REFACT: convention for computation expression builder instances changed: now each type having one has a static let
+          binding B within the type namespace using a module qualification trick via F# attributes
+
+
+18/1/2016:
+* REFACT: a lot of minor and major refactors to the whole code
+* UP: scheme unification and unify_scheme implemented
+* UP: prefix update and slicing implemented
+* REFACT: Solve term unification rewritten using a new M.attemp_unify monadic method in place of try_mgu pure function (which still exists btw, as it's been used elsewhere)
+
+
+17/1/2016:
+* REFACT: substitution renamed: now tθ stands for tsubst and kθ for ksubst, leading to a very natural θ for both. Symbols Σ and Θ are not used anymore
+* UP: unification for HML implemented roughly: needs completion and testing of course
+* UP: skolemification of type variables implemented via T_Cons; kinds are a problem though. Probably T_Forall should carry kinds along with quantified variables
+* FIX: split fixed: it used to reverse the prefix, now it keeps the order
+
+
+16/1/2016: [v0.9.0]
+* version bump due to new HML system integration
+* REFACT: predicate is no more as it did not make much sense: every item schemes consist of is now inlined into the scheme record directly
+* REFACT: big refactor doe to new HML system
+* UP: new HML (APP) rule implemented and (ABS) finished
+* UP: lots of other minor upgrades to code: it now compiles but it crashes on something mysterious
+
+
+15/1/2016:
+* REFACT: lots of work in understanding, implementing and integrating HML
+* REFACT: all type definitions for HML has been refactorized into types: scheme, quantified schemes etc are no more
+* UP: primal unannotated lamba inference written; split and extend prefix utilities written as well
+* REFACT: prefixes are not simple lists and no more Env.t
+* REFACT: the bottom type has been lifted to ty: consider that even if bottom = forall 'a. 'a, there is the need to define it as a native type term because in HML quantified variables have bounds, and
+          therefore forall 'a. 'a = forall 'a >= bottom. 'a which would result in a recursive value
+* REFACT: type visitors (Vi_T active patterns) deprecated
+
+
+14/1/2016:
+* UP: new data type definitions for HML: schemes, quantified schemes and types; prefixes are implemented using Env.t
+
+
+11/01/2016:
+* REFACT: Foralls active patterns and virtual constructor; support for universal quantifier in type expressions and type
+* REFACT: support for work on first-class polymorphism started
+
+
+8/01/2016:
+* TODO.txt file reworked
+* looking for a serious test suite: OCaml test suite could do, with a little 
+
+
+7/01/2016:
+* FIX: scoped type variables implemented and seems to work in general. Needs more testing though.
+
+
+22/12/2015:
+* REFACT: var printer greatly redesigned and rewritten: now it deals with named vars more consistently, and new names are generated if already allocated by
+          named vars; it also renames named vars which are accidentally equal to generated names for anonymous vars.
+
+
+18/12/2015:
+* REFACT: more tyvars again: VarPrinterState module rewritten because static members were not suitable for the purpose, as they introduce unit closures
+
+
+15/12/2015:
+* REFACT: var class reworked: former private module for effecting normalization has now become a bunch of static private members; normalization now
+          keeps possible var name
+* REFACT: all prefixes in prompt have now become configurable; prompt prefixes are also trimmed and flattened more consistently now
+
+
+14/12/2015:
+* REFACT: many minor changes are reworks, also involving named type variables
+
+
+10/12/2015:
+* REFACT: support for named type variables: var type reworked and scoping rules of named type variables implemented
+
+
+23/12/2015:
+* REFACT: closed-world overloading introduced: no need for the 'overload' declaration; 'let over' at will; locally resolved via a special tag for constraints
+
+
 18/11/2015:
 * first GitHub publish
+* started writing of documentation on README.md
 
 
 9/11/2015: [v0.8.0]
@@ -10,7 +580,7 @@
 4/11/2015:
 * FIX: usage of substitution composition was sometimes wrong: arguments were inverted in some cases, now should be fixed
 * UP: substitution composition implementation was quite optimized but might have led to unexpected results: now it's been implemented using second
-      operand domain restriction, as in https://en.wikipedia.org/wiki/Substitution_(logic)
+      operand domain restriction, as in "https://en.wikipedia.org/wiki/Substitution_(logic)"
 
 
 3/11/2015:
@@ -307,7 +877,7 @@
 * NEW: tuples have been encoded by using record rows { #1 : t1 .. #n : tn }: this takes place in types as well as in patterns and expressions
 * NEW: kind inference and type evaluation subsystems initiated
 * REFACT: subst have beeen rendered polymorphic and application to types etc. are now global functions
-* TODO: a new environment for binding free type variables is neeeded: χ is just for type constructors/identifiers, which have different scopes than ticked variables
+* TODO: a new environment for binding free type variables is neeeded: γ is just for type constructors/identifiers, which have different scopes than ticked variables
 
 
 15/10/2014:
@@ -470,7 +1040,7 @@
 
 
 21/9/2014:
-* NEW: val is now a first-class expression checking that 
+* NEW: val is now a first-class citizen within the expression syntax, and it behaves like this:
                 Γ ⊢ e : {}. t
           (VAL) -------------------------
                 Γ ⊢ val e : {}. t ~~> e
@@ -509,7 +1079,7 @@
          (AUTO) ---------------------------------------------------------
                 Γ ⊢ e : π - (x#n : t). t' ~~> let x#m = x$k in e
 
-* NEW: warning numbering and filtering sub-system implemented, including cmdline args
+* NEW: warning numbers and filters implemented, including command line arguments enabling/disabling them
 * NEW: translation sub-system implemented and partly tested
 
 
@@ -517,7 +1087,7 @@
 * NEW: performance measure tools implemented in Globals for measuring cpu time
 * OPT: substitution composition is 
 * OPT: custom state monad redesigned: now Bind is not overridden: no more overhead given by constantly composing substitutions and constant applying to Γ and π.
-       Now composition of θ and update of Γ and π is done specifically when unification occurs (x3 speed increase)
+       Now composition of tθ and update of Γ and π is done specifically when unification occurs (x3 speed increase)
 * FIX: named type variables led to bad substitutions: now the numeric unique identifier is computed as the hash code of the name and refresh is sound
 * FIX: refreshing of ungeneralized schemes bound by overload-bindings
 * NEW: ambiguous overloading resolution check implemented
@@ -571,7 +1141,7 @@
 10/9/2014:
 * FIX: normalization of type variables in printing of schemes is now working
 * FIX: when missing a label in a row type, a special error is shown
-* TEST_FEATURES_FEATURESED: unification of record type have been tested quite widely: open records passed as arguments to functions with open records parameters, viceversa and other combinations
+* TEST: unification of record type have been tested quite widely: open records passed as arguments to functions with open records parameters, viceversa and other combinations
 
 
 9/9/2014:
@@ -593,4 +1163,12 @@
 
 
 15/8/2014:
-* NEW: row types implemented roughly 
+* NEW: row types implemented roughly
+
+
+23/7/2014:
+* NEW: ML type inference and most infrastructure written
+
+
+1/1/2014:
+* Lw project started

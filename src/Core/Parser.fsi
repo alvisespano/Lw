@@ -18,6 +18,9 @@ type token =
   | EJECT
   | IMPLIES
   | DATATYPE
+  | DATA
+  | FORALL
+  | BOTTOM
   | LET
   | REC
   | IN
@@ -65,6 +68,7 @@ type token =
   | PIPE
   | AMP
   | BANG
+  | COLONGT
   | COLON
   | COLON2
   | SEMICOLON
@@ -101,6 +105,9 @@ type tokenId =
     | TOKEN_EJECT
     | TOKEN_IMPLIES
     | TOKEN_DATATYPE
+    | TOKEN_DATA
+    | TOKEN_FORALL
+    | TOKEN_BOTTOM
     | TOKEN_LET
     | TOKEN_REC
     | TOKEN_IN
@@ -148,6 +155,7 @@ type tokenId =
     | TOKEN_PIPE
     | TOKEN_AMP
     | TOKEN_BANG
+    | TOKEN_COLONGT
     | TOKEN_COLON
     | TOKEN_COLON2
     | TOKEN_SEMICOLON
@@ -170,8 +178,10 @@ type tokenId =
     | TOKEN_error
 type nonTerminalId = 
     | NONTERM__startinteractive_line
+    | NONTERM__startexpr
     | NONTERM__startprogram
     | NONTERM__starttop_decl
+    | NONTERM__startfxty_expr
     | NONTERM__startty_expr
     | NONTERM_interactive_line
     | NONTERM_program
@@ -182,8 +192,8 @@ type nonTerminalId =
     | NONTERM_top_decls
     | NONTERM_top_decl
     | NONTERM_let_quals
-    | NONTERM_value_level_decl
-    | NONTERM_value_level_decl_
+    | NONTERM_nested_decl
+    | NONTERM_nested_decl_
     | NONTERM_datatype
     | NONTERM_datatype_bindings
     | NONTERM_datatype_bindings_
@@ -191,20 +201,16 @@ type nonTerminalId =
     | NONTERM_let_or_letrec_decl
     | NONTERM_let_or_letrec_decl_
     | NONTERM_let_and_bindings
-    | NONTERM_letrec_and_bindings
     | NONTERM_over_and_bindings
     | NONTERM_ty_expr_and_bindings
-    | NONTERM_ty_expr_rec_and_bindings
     | NONTERM_kind_and_bindings
-    | NONTERM_let_qbinding
-    | NONTERM_letrec_qbinding
     | NONTERM_let_binding
-    | NONTERM_letrec_binding
+    | NONTERM_let_binding_no_qual
     | NONTERM_over_binding
     | NONTERM_ty_expr_binding
-    | NONTERM_ty_expr_rec_binding
     | NONTERM_kind_binding
     | NONTERM_kind_params
+    | NONTERM_fun_patt_param
     | NONTERM_fun_patt_params
     | NONTERM_fun_param_case
     | NONTERM_fun_param_cases
@@ -214,21 +220,27 @@ type nonTerminalId =
     | NONTERM_ty_fun_param_cases
     | NONTERM_ty_fun_param_cases_
     | NONTERM_id
-    | NONTERM_typed_param
-    | NONTERM_kinded_param
-    | NONTERM_kind_annotation
+    | NONTERM_type_annotated
+    | NONTERM_kind_annotated
     | NONTERM_kind
     | NONTERM_kind_arrow_atom
     | NONTERM_kind_tuple
     | NONTERM_kind_tuple_atom
     | NONTERM_kind_arg
     | NONTERM_kind_args
-    | NONTERM_ty_expr_annotation
+    | NONTERM_fxty_forall_param
+    | NONTERM_ty_forall_param
+    | NONTERM_fxty_forall_params
+    | NONTERM_ty_forall_params
+    | NONTERM_fxty_expr
+    | NONTERM_fxty_expr_
     | NONTERM_ty_expr
     | NONTERM_ty_expr_tuple_atom
     | NONTERM_ty_expr_htuple_atom
     | NONTERM_ty_expr_app_atom
+    | NONTERM_ty_expr_unquantified
     | NONTERM_ty_expr_
+    | NONTERM_ty_expr_unquantified_
     | NONTERM_ty_expr_htuple
     | NONTERM_ty_expr_htuple_atom_
     | NONTERM_ty_expr_tuple
@@ -300,7 +312,9 @@ val prodIdxToNonTerminal: int -> nonTerminalId
 
 /// This function gets the name of a token as a string
 val token_to_string: token -> string
-val interactive_line : (Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> token) -> Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> ( Lw.Core.Absyn.interactive_line ) 
-val program : (Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> token) -> Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> ( Lw.Core.Absyn.program ) 
-val top_decl : (Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> token) -> Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> ( Lw.Core.Absyn.decl ) 
-val ty_expr : (Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> token) -> Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> ( Lw.Core.Absyn.ty_expr ) 
+val interactive_line : (Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> token) -> Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> ( Lw.Core.Absyn.Ast.interactive_line ) 
+val expr : (Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> token) -> Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> ( Lw.Core.Absyn.Ast.expr ) 
+val program : (Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> token) -> Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> ( Lw.Core.Absyn.Ast.program ) 
+val top_decl : (Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> token) -> Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> ( Lw.Core.Absyn.Ast.decl ) 
+val fxty_expr : (Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> token) -> Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> ( Lw.Core.Absyn.Ast.fxty_expr ) 
+val ty_expr : (Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> token) -> Microsoft.FSharp.Text.Lexing.LexBuffer<'cty> -> ( Lw.Core.Absyn.Ast.ty_expr ) 

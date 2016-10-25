@@ -1,0 +1,50 @@
+(*
+ * Lw test program
+ * (c) 2014, 2015 Alvise Spano'
+ *)
+
+namespace Test 
+
+//let x = fun f (x : 'b) y -> ((f : _ -> 'a) x, y) : 'a * _
+ 
+let id x = x
+
+let ids = [id]
+
+// let ids : list ('a -> 'a) = ids
+
+let rec map f = function
+    | [] -> []
+    | x :: xs -> f x :: map f xs
+            
+
+let poly (f : forall 'a. 'a -> 'a) = f 1, f true
+            
+let tmp1 () =            
+    let ids : list ('a -> 'a) = ids
+    in
+        map poly ids
+
+
+(*
+let patt_in_non_letrec f x =
+    match x with
+    | [] -> 3
+    | x :: xs -> f x
+
+    let app f x = f x
+let id x = x
+
+let i = app id id
+
+let x = app id 3
+
+let revapp x f = f x
+
+let comb (id : forall 'a. 'a -> 'a) = id id
+
+let poly (f : forall 'a. 'a -> 'a) = f 1, f true
+
+let a = poly id
+*)
+

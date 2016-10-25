@@ -1,7 +1,7 @@
 ﻿(*
  * Lw
  * Eval.fs: evaluator
- * (C) 2000-2014 Alvise Spano' @ Universita' Ca' Foscari di Venezia
+ * (C) Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
  
 module Lw.Interpreter.Eval
@@ -10,29 +10,31 @@ module Lw.Interpreter.Eval
 #nowarn "40"
 
 open System
-open FSharp.Common.Prelude
 open FSharp.Common.Parsing
 open FSharp.Common.Log
 open FSharp.Common
 open Lw.Core.Absyn
+open Lw.Core.Absyn.Misc
+open Lw.Core.Absyn.Var
+open Lw.Core.Absyn.Kind
+open Lw.Core.Absyn.Sugar
+open Lw.Core.Absyn.Ast
 open Lw.Core.Globals
 open System.Threading
 
 type [< NoComparison; NoEquality >] context = {
     cancellation_token : CancellationToken
-
 }
 with
-    static member non_cancellable = { cancellation_token = CancellationToken.None }
+    static member uncancellable = { cancellation_token = CancellationToken.None }
 
-type env = Env.t<id, value>
+type venv = Env.t<ident, value>
 
 and [< NoComparison; CustomEquality >] value =
     | V_Const of lit
-    | V_Cons of id * value list
+    | V_Cons of ident * value list
     | V_Tuple of value list
-    | V_Record of Env.t<id, value>
-    // TODO: remove string item from V_Redux pair in order to increase performance a little, thanks to many sprintf's not occuring anymore
+    | V_Record of Env.t<ident, value>
     | V_Redux of string * (context -> value -> value)
 with
     override this.ToString () = this.pretty
@@ -60,10 +62,10 @@ with
         | V_Record env        -> sprintf "{ %s }" (env.pretty "=" "; ")
 
 module Report =
-    type runtime_error (message, loc) =
-        inherit located_error ("runtime error", message, loc)
+    type eval_error (msg, loc) =
+        inherit runtime_error ("eval error", msg, loc)
 
-    let E loc fmt = throw_formatted (fun msg -> new runtime_error (msg, loc)) fmt
+    let E loc fmt = throw_formatted (fun msg -> new eval_error (msg, loc)) fmt
 
     let incomplete_cases loc v = E loc "match cases are incomplete for value: %O" v
     let unexpected_value loc name expected source_file line v = unexpected "%s at %O does not evaluate to a %s value: %O" source_file line name loc expected v
@@ -77,18 +79,19 @@ let beta_redux ctx loc v1 v2 =
     | _              -> Report.unexpected_value loc "left hand of application" "closure" __SOURCE_FILE__ __LINE__ v1
 
 
-let rec enclose ctx (x, e, Δ : env ref as cl) = V_Redux (Config.Interactive.pretty_closure cl, (fun ctx v -> eval_expr ctx ((!Δ).bind x v) e))
+let rec enclose ctx (x, e, Δ : venv ref as cl) = V_Redux (Config.Interactive.pretty_closure cl, (fun ctx v -> eval_expr ctx ((!Δ).bind x v) e))
 
-// TODO: implement Δ with a fast hashmap: do not worry about scoping as the bindings can be left inside the map and overwritten, as type checking already dealt with scoping
+// TODOL: implement Δ with a fast hashmap: do not worry about scoping as the bindings can be left inside the map and overwritten, as type checking already dealt with scoping
 and eval_expr (ctx : context) Δ (e0 : expr) =
     ctx.cancellation_token.ThrowIfCancellationRequested ()
     let E Δ e = eval_expr ctx Δ e
-    match e0.value with
+    let ue = match e0.translated with Translated u -> u
+    match ue with
     | Lit lit            -> V_Const lit
     | FreeVar x
     | Var x              -> Δ.lookup x
-    | PolyCons x         
-    | Reserved_Cons x    -> V_Cons (x, [])
+//    | Reserved_Cons x    
+    | PolyCons x         -> V_Cons (x, [])
     | Lambda ((x, _), e) -> enclose ctx (x, e, ref Δ)           
     | Tuple ([] | [_])   -> unexpected "empty or unary tuple" __SOURCE_FILE__ __LINE__
     | Tuple es           -> V_Tuple (List.map (E Δ) es)
@@ -110,9 +113,9 @@ and eval_expr (ctx : context) Δ (e0 : expr) =
         let v1 = E Δ e1
         in
             E Δ (match v1 with
-                 | V_Const (Bool true)  -> e2
-                 | V_Const (Bool false) -> e3
-                 | _                    -> Report.unexpected_value e1.loc "if-guard expression" "boolean" __SOURCE_FILE__ __LINE__ v1)
+                 | V_Const (lit.Bool true)  -> e2
+                 | V_Const (lit.Bool false) -> e3
+                 | _                        -> Report.unexpected_value e1.loc "if-guard expression" "boolean" __SOURCE_FILE__ __LINE__ v1)
 
     | Combine es ->
         let rec R = function
@@ -129,8 +132,8 @@ and eval_expr (ctx : context) Δ (e0 : expr) =
                 cases |> List.pick (fun (p, weo, e) ->                    
                                         match eval_patt ctx Δ p v with
                                         | Some Δ when (something (fun we -> match E Δ we with
-                                                                            | V_Const (Bool b) -> b
-                                                                            | wv               -> Report.unexpected_value we.loc "when-guard in match case" "boolean" __SOURCE_FILE__ __LINE__ wv)
+                                                                            | V_Const (lit.Bool b) -> b
+                                                                            | wv                   -> Report.unexpected_value we.loc "when-guard in match case" "boolean" __SOURCE_FILE__ __LINE__ wv)
                                                             true weo)
                                             -> Some (E Δ e)
                                         | _ -> None)
@@ -164,14 +167,13 @@ and eval_patt ctx Δ p v =
     match p.value, v with
     | P_Var x, v                                            -> Some (Δ.bind x v)
     | P_Or (p1, p2), v                                      -> match R p1 v with None -> R p2 v | Some _ as r -> r
-    | P_And (p1, p2), v                                     -> match R p1 v, R p2 v with Some Δ1, Some Δ2 -> Some (Δ1 + Δ2) | _ -> None
-    | P_Cons x, V_Cons (x', []) when x = x'                 -> Some Δ   // TODO: this case is probably unneeded because the case below includes this one as well
-    | P_Apps ((P_Cons x) :: ps), V_Cons (x', vs)
-        when x = x' && ps.Length = vs.Length                -> Some (List.fold2 (fun Δ p v -> either Δ (R (ULo p) v)) Δ ps vs)
+    | P_And (p1, p2), v                                     -> match R p1 v, R p2 v with Some Δ1, Some Δ2 -> Some (Δ1 + Δ2) | _ -> None  
+    | P_Apps1 (ULo (P_Cons x) :: ps), V_Cons (x', vs)
+        when x = x' && List.length ps = List.length vs      -> Some (List.fold2 (fun Δ p v -> either Δ (R p v)) Δ ps vs)
     | P_Lit lit, V_Const lit' when lit = lit'               -> Some Δ
     | P_Tuple ps, V_Tuple vs when ps.Length = vs.Length     -> Some (List.fold2 (fun Δ p v -> either Δ (R p v)) Δ ps vs)
     | P_Annot (p, _), v                                     -> R p v
-    | P_As (p, x), v                                        -> Option.map (fun (Δ : env) -> Δ.bind x v) (R p v)
+    | P_As (p, x), v                                        -> Option.map (fun (Δ : venv) -> Δ.bind x v) (R p v)
     | P_Wildcard, _                                         -> Some Δ
     | P_Record xps, V_Record venv
         when List.forall (fun (x, _) ->
@@ -183,14 +185,15 @@ and eval_decl ctx Δ0 (d0 : decl) =
     match d0.value with
     | D_Bind bs ->
         let bs = bs |> List.map (function { patt = ULo (P_Var x); expr = e } -> x, eval_expr ctx Δ0 e
-                                        | { patt = p }                       -> not_implemented "pattern in let-bindings: %O" __SOURCE_FILE__ __LINE__ p)
+                                        | { patt = p }                       -> unexpected_case __SOURCE_FILE__ __LINE__ p)
         in            
             Δ0.binds bs
 
-    | D_Rec bs ->
+    | D_RecBind bs ->
         let rec Δ' = 
-            List.fold (fun (Δ : env) { par = (x, _); expr = e } -> Δ.bind x (V_Redux (Config.Interactive.pretty_rec_closure (x, e, Δ),
-                                                                                      fun ctx v -> beta_redux ctx e.loc (eval_expr ctx Δ' e) v)))   // DO NOT CURRY variable 'v' or recursion won't stop
+            List.fold (fun (Δ : venv) -> function
+                    | { patt = ULo (P_Var x); expr = e } -> Δ.bind x (V_Redux (Config.Interactive.pretty_rec_closure (x, e, Δ), fun ctx v -> beta_redux ctx e.loc (eval_expr ctx Δ' e) v)) // DO NOT CURRY variable 'v' or recursion won't stop
+                    | b -> unexpected_case __SOURCE_FILE__ __LINE__ b.patt)
                 Δ0 bs
         in
             Δ'
@@ -198,13 +201,16 @@ and eval_decl ctx Δ0 (d0 : decl) =
     | D_Reserved_Multi ds ->
         List.fold (eval_decl ctx) Δ0 ds
 
+    | D_Datatype { dataconss = bs } ->
+        Δ0.binds (List.map (fun (b : signature_binding<_>) -> b.id, V_Cons (b.id, [])) bs)
+
     | D_Overload _
     | D_Kind _   
-    | D_Datatype _
     | D_Type _     -> Δ0
 
     | D_Open _ -> Report.unexpected_after_translation d0.loc  __SOURCE_FILE__ __LINE__ d0
                 
+
 let eval_prg ctx Δ0 prg =
     let Δ = List.fold (eval_decl ctx) Δ0 prg.decls
     in

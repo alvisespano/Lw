@@ -1,0 +1,50 @@
+﻿
+namespace Test
+
+
+let f (x : 'a :: 'b -> 'c) = x
+
+// check type variable scoping
+//
+
+// these 2 should compile because top-level tyvars are independent
+let f (x : 'pippo) = if x = 1 then "caz" else "pip"
+let g (y : 'pippo) = if y then 'a' else 'b'
+
+let h () =
+    let f (x : 'pippo) = if x = 1 then "caz" else "pip"
+    let g (y : 'pippo) = if y then 'a' else 'b'    // this should not compile because nested-lets introduce tyvars in same 
+    in
+        f, g
+    
+
+// check naming after mgu
+//
+
+let named_identity (x : 'pippo) = x
+
+
+// check generalization of named tyvars
+//
+
+let auto_ungeneralized x y =
+    let ungeneralized z = x, z
+    in
+        ungeneralized y
+
+let named_ungeneralized (x : 'pippo) (y : 'baudo) =
+    let ungeneralized (z : 'pippo) = x, z
+    in
+        ungeneralized y
+        
+let rec f2 g h x y = g (x : 'bau) + h (y : 'bau)
+and e (x : 'bau) = x 
+
+
+let f3 (x : 'ragno) (y : 'topo) =
+    let rec g1 (a : 'topo) = g2 a
+    and g2 (c : 'mucca) = let b = c = 3 in g1 y e
+    let h1 (a : 'mucca) = a = x
+    in
+        do { x = true; h1 }
+

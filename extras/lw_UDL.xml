@@ -26,8 +26,8 @@
             <Keywords name="Folders in comment, close"></Keywords>
             <Keywords name="Keywords1">let in if then else with match fun function do and</Keywords>
             <Keywords name="Keywords2">val over open overload rec where</Keywords>
-            <Keywords name="Keywords3">namespace type kind datatype datakind data</Keywords>
-            <Keywords name="Keywords4">int bool list option unit float string char</Keywords>
+            <Keywords name="Keywords3">namespace type kind datatype data</Keywords>
+            <Keywords name="Keywords4">int bool list option unit float string char forall</Keywords>
             <Keywords name="Keywords5"></Keywords>
             <Keywords name="Keywords6">\&apos;</Keywords>
             <Keywords name="Keywords7">[] :: true false ()</Keywords>

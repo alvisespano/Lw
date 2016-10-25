@@ -9,45 +9,31 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>Interpreter</RootNamespace>
     <AssemblyName>Interpreter</AssemblyName>
-    <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <TargetFSharpCoreVersion>4.4.0.0</TargetFSharpCoreVersion>
     <Name>Interpreter</Name>
     <TargetFrameworkProfile />
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Interpreter Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
-    <OutputPath>bin\Debug\</OutputPath>
+    <OutputPath>bin\Interpreter Debug\</OutputPath>
     <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT</DefineConstants>
     <WarningLevel>5</WarningLevel>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <DocumentationFile>
     </DocumentationFile>
     <Prefer32Bit>false</Prefer32Bit>
-    <StartArguments>test\misc.lw</StartArguments>
-    <StartWorkingDirectory>..\..</StartWorkingDirectory>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <Tailcalls>true</Tailcalls>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>RELEASE</DefineConstants>
-    <WarningLevel>5</WarningLevel>
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DocumentationFile>
-    </DocumentationFile>
-    <Prefer32Bit>false</Prefer32Bit>
-    <StartArguments>test\misc.lw</StartArguments>
+    <StartArguments>test\firstclass_poly.lw</StartArguments>
     <StartWorkingDirectory>..\..</StartWorkingDirectory>
   </PropertyGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Interactive|AnyCPU' ">
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Interactive Release|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
@@ -58,43 +44,22 @@
     <DocumentationFile />
     <Prefer32Bit>false</Prefer32Bit>
     <StartArguments>--interactive test/interactive.lw</StartArguments>
-    <OutputPath>bin\Interactive\</OutputPath>
+    <OutputPath>bin\Interactive Release\</OutputPath>
     <StartWorkingDirectory>..\..</StartWorkingDirectory>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'UnitTest|AnyCPU' ">
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'UnitTest Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
-    <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT;UNIT_TEST</DefineConstants>
+    <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT</DefineConstants>
     <WarningLevel>5</WarningLevel>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <DocumentationFile />
     <Prefer32Bit>false</Prefer32Bit>
-    <StartArguments>test\misc.lw</StartArguments>
-    <OutputPath>bin\UnitTest\</OutputPath>
+    <StartArguments>--unit-test -v</StartArguments>
+    <OutputPath>bin\UnitTest Debug\</OutputPath>
     <StartWorkingDirectory>..\..</StartWorkingDirectory>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Test Features|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <OutputPath>bin\Test\</OutputPath>
-    <WarningLevel>5</WarningLevel>
-    <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT;TEST_FEATURES</DefineConstants>
-    <Optimize>true</Optimize>
-    <Tailcalls>true</Tailcalls>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Test Performance|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <Tailcalls>true</Tailcalls>
-    <DefineConstants>WAIT_FOR_KEY_AT_EXIT;TEST_PERFORMANCE</DefineConstants>
-    <WarningLevel>5</WarningLevel>
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DocumentationFile />
-    <Prefer32Bit>false</Prefer32Bit>
-    <StartArguments>test\misc.lw</StartArguments>
-    <StartWorkingDirectory>..\..</StartWorkingDirectory>
-    <OutputPath>bin\Profiling\</OutputPath>
   </PropertyGroup>
   <Choose>
     <When Condition="'$(VisualStudioVersion)' == '11.0'">
@@ -112,34 +77,94 @@
   <PropertyGroup>
     <PreBuildEvent />
   </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Interactive Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <Tailcalls>false</Tailcalls>
+    <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT</DefineConstants>
+    <WarningLevel>5</WarningLevel>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DocumentationFile />
+    <Prefer32Bit>false</Prefer32Bit>
+    <StartArguments>--interactive test/interactive.lw</StartArguments>
+    <StartWorkingDirectory>..\..</StartWorkingDirectory>
+    <OutputPath>bin\Interactive Debug\</OutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Interpreter Release|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <Tailcalls>false</Tailcalls>
+    <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT</DefineConstants>
+    <WarningLevel>5</WarningLevel>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DocumentationFile />
+    <Prefer32Bit>false</Prefer32Bit>
+    <StartArguments>test\firstclass_poly.lw</StartArguments>
+    <StartWorkingDirectory>..\..</StartWorkingDirectory>
+    <OutputPath>bin\Interpreter Release\</OutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'UnitTest Release|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <Tailcalls>false</Tailcalls>
+    <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT</DefineConstants>
+    <WarningLevel>5</WarningLevel>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DocumentationFile />
+    <Prefer32Bit>false</Prefer32Bit>
+    <StartArguments>--unit-test</StartArguments>
+    <StartWorkingDirectory>..\..</StartWorkingDirectory>
+    <OutputPath>bin\UnitTest Release\</OutputPath>
+  </PropertyGroup>
   <ItemGroup>
     <None Include="App.config" />
     <Content Include="packages.config" />
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Config.fs" />
+    <Compile Include="Globals.fs" />
     <Compile Include="Args.fs" />
     <Compile Include="Eval.fs" />
     <Compile Include="Intrinsic.fs" />
-    <Compile Include="UnitTest.fs" />
+    <Compile Include="Interactive.fs" />
+    <Compile Include="UnitTester.fs" />
+    <Compile Include="UnitTest\TypeEquivalence.fs" />
+    <Compile Include="UnitTest\Basic.fs" />
+    <Compile Include="UnitTest\HML.fs" />
+    <Compile Include="UnitTest\Other.fs" />
+    <Compile Include="UnitTest\All.fs" />
     <Compile Include="Main.fs" />
     <None Include="test\misc.lw" />
     <None Include="test\interactive.lw" />
+    <None Include="test\overloading.lw" />
+    <None Include="test\tyvars.lw" />
   </ItemGroup>
   <ItemGroup>
+    <!--Reference Include="FSharp.Core">
+      <HintPath>..\packages\FSharp.Core.3.1.2.5\lib\net40\FSharp.Core.dll</HintPath>
+      <Private>True</Private>
+    </Reference-->
+    <Reference Include="FSharp.Core, Version=4.4.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" />
+    <Reference Include="FSharp.Data.TypeProviders" />
     <Reference Include="FsLexYacc.Runtime">
       <HintPath>..\packages\FsLexYacc.Runtime.6.1.0\lib\net40\FsLexYacc.Runtime.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="mscorlib" />
-    <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
+    <Reference Include="PPrint">
+      <HintPath>..\packages\PPrint.2.0.0\lib\portable-net45+netcore45+wpa81+wp8\PPrint.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Data.Linq" />
     <Reference Include="System.Numerics" />
     <ProjectReference Include="..\..\..\FSharp.Common\FSharp.Common.fsproj">
       <Name>FSharp.Common</Name>
-      <Project>{7c493012-2911-43fe-8ad3-f052c3084e3c}</Project>
+      <Project>{3e721011-6cce-4187-a49a-dac093de8e0f}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\Core\Core.fsproj">

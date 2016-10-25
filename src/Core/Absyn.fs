@@ -103,39 +103,39 @@ let rec (|Apps|_|) (|App|_|) = function
     | App (x1, x2)               -> Some [x1; x2]
     | _                          -> None
 
+let Foralls forall = function
+    | [], t -> t
+    | αs, t -> List.foldBack (fun α t -> forall (α, t)) αs t
+
+let rec (|Foralls|) (|Forall|_|) = function
+    | Forall (α, Foralls (|Forall|_|) (αs, t)) -> (α :: αs, t)
+    | Forall (α, t)                            -> ([α], t)
+    | t                                        -> ([], t)
+
 type annotable =
     abstract annot_sep : string
 
-type 'n param = id * 'n option
+type param<'id, 'n>  = 'id * 'n option
+
+type 'n id_param = param<id, 'n>
 
 let pretty_param sep (id, tyo) =
     match tyo with
-        | None   -> id
-        | Some a -> sprintf "%s %s %O" id sep a
+        | None   -> sprintf "%O" id
+        | Some a -> sprintf "%O %s %O" id sep a
 
 
 // variables
 //
 
-module private VarPrinterState =
-    let cnt = ref 0
-    let env : Env.t<int, int> option ref = ref None
-    let forall : Set<int> option ref = ref None
-
-// TODO: reimplement variables by means of pointers; reimplement substitution application accordingly as well
-type var =
-    | Va of int
-    | Va_Named of string * int
+type var = Va of int * string option
 with
-    override this.ToString () = this.pretty
-
     member this.uid =
         match this with
-        | Va n | Va_Named (_, n) -> n
+        | Va (n, _) -> n
 
-    member private __.rename fmt n =
-        // TODO: fix named tyvars
-        let start, endd = Config.Printing.dynamic.ty_var_range
+    static member private auto_name fmt n =
+        let start, endd = Config.Printing.dynamic.tyvar_range
         let start, endd = Convert.ToInt32 start, Convert.ToInt32 endd
         let bas = endd - start + 1
         let chr n = n + start |> Convert.ToChar |> Convert.ToString
@@ -145,71 +145,107 @@ with
 
     member private this.pretty_fmt fmt =
         match this with
-        | Va_Named (s, n) ->
+        | Va (n, Some s) ->
             let r = sprintf fmt s
             #if DEBUG_TYVARS
-            sprintf "%s_%d" r (n - Config.Printing.named_ty_var_bias)
+            sprintf "%s_%d" r n
             #else
             r
             #endif
 
-        | Va n ->
-            let r = this.rename fmt n
+        | Va (n, None) ->
+            let r = var.auto_name fmt n
             #if DEBUG_TYVARS
             sprintf "%s?%d" r n
             #else
             r
             #endif
 
-    member this.pretty_quantified = this.pretty_fmt Config.Printing.dynamic.ty_var_fmt
-    member this.pretty_fv = this.pretty_fmt Config.Printing.dynamic.ty_freevar_fmt
+    member this.pretty_quantified = this.pretty_fmt Config.Printing.dynamic.tyvar_quantified_fmt
+    member this.pretty_unquantified = this.pretty_fmt Config.Printing.dynamic.tyvar_unquantified_fmt
 
-    static member fresh = Va (fresh_int ())
+    static member fresh = Va (fresh_int (), None)
+    static member fresh_named s = Va (fresh_int (), Some s)
 
     member this.refresh =
         match this with
-        | Va_Named (s, _) -> Va_Named (s, fresh_int () + Config.Printing.named_ty_var_bias)
-        | Va _            -> Va (fresh_int ())
+        | Va (_, so) -> Va (fresh_int (), so)
 
-    static member named s = Va_Named (s, s.GetHashCode () + Config.Printing.named_ty_var_bias)
 
-    static member reset_normalization αso =
-        VarPrinterState.cnt := 0
-        VarPrinterState.env := Some Env.empty
-        VarPrinterState.forall := Option.map (Set.map (fun (α : var) -> α.uid)) αso
+// this module is needed and cannot be turn into static members within the var class because static members are unit closures and cannot be constants
+[< CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix) >]
+module private var =
+    // TODO: add thread-safe support with a mutex or something
+    let cnt = ref 0
+    let env : Env.t<int, string> option ref = ref None
+    let forall : Set<int> ref = ref Set.empty
+
+
+type var with
+    static member reset_normalization ?quantified_vars =
+        #if !DEBUG_TYVARS
+        let quantified_vars = defaultArg quantified_vars Set.empty
+        var.cnt := 0
+        var.env := Some Env.empty
+        var.forall := Set.map (fun (α : var) -> α.uid) quantified_vars
+        #endif
         { new IDisposable with
-            member __.Dispose () =
-                VarPrinterState.env := None
-                VarPrinterState.forall := None
+            member __.Dispose () = var.env := None
         }
 
+    override this.ToString () = this.pretty
+
     member this.pretty =
-        let env = VarPrinterState.env
-        match !env with
-        | None     -> this.pretty_quantified
+        match !var.env with
+        | None     -> this.pretty_quantified  // when env is None it means normalization is disabled, so tyvars are printed as quantified by default
         | Some env ->
-            let α =
+            let name =
                 match env.search this.uid with
-                | None   -> let n = !VarPrinterState.cnt
-                            let α = VarPrinterState.cnt := n + 1; Va n
-                            VarPrinterState.env := Some (env.bind this.uid α.uid)
-                            α
-                | Some n -> Va n
-            in
-                match !VarPrinterState.forall with
-                | Some αs -> if Set.contains this.uid αs then α.pretty_quantified else α.pretty_fv
-                | None    -> α.pretty_quantified
+                | Some s -> s
+                | None ->
+                    let name_exists s = env.exists (fun _ s' -> s' = s)
+                    let next_fresh_name () =
+                        let r = var.auto_name "%s" !var.cnt
+                        var.cnt := !var.cnt + 1
+                        r
+                    match this with
+                    | Va (_, None) ->
+                        let rec R () =
+                            let r = next_fresh_name ()
+                            in
+                                if name_exists r then R () else r
+                        in
+                            R ()
+
+                    | Va (_, Some s) ->
+                        let rec R s cnt =
+                            if name_exists s then R (sprintf Config.Printing.changed_var_name_fmt s cnt) (cnt + 1) else s
+                        in
+                            R s 0
+
+            var.env := Some (env.bind this.uid name)
+            #if DEBUG_TYVARS
+            let fmt = 
+                match this with
+                | Va (_, Some _) -> Config.Printing.named_var_fmt
+                | Va (_, None)   -> Config.Printing.anonymous_var_fmt
+            sprintf fmt name this.uid
+            #else
+            name
+            #endif
+            |> sprintf (if Set.contains this.uid !var.forall then Config.Printing.dynamic.tyvar_quantified_fmt else Config.Printing.dynamic.tyvar_unquantified_fmt)
+
 
 
 // kinds
 //
 
-type kind =
+type [< Diagnostics.DebuggerDisplay("{ToString()}") >] kind =
     | K_Var of var
     | K_Cons of id * kind list
 with
     interface annotable with
-        member __.annot_sep = "::"
+        member __.annot_sep = Config.Printing.kind_annotation_sep
 
 let K_Arrow (k1, k2) = K_Cons ("->", [k1; k2])
 let (|K_Arrow|_|) = function
@@ -261,8 +297,9 @@ type kind with
 
     static member fresh_var = K_Var var.fresh
 
-type kinded_param = kind param
+type kinded_param = kind id_param
 
+type kinded_var_param = param<var, kind>
 
 // bindings and cases
 //
@@ -274,7 +311,7 @@ with
     override this.ToString () = this.pretty
     member this.pretty = sprintf "%O%O = %O" this.qual this.patt this.expr
 
-type [< NoComparison; NoEquality >] rec_qbinding<'q, 'par, 'e, 'a when 'e :> annotable> = { qual : 'q; par : 'par param; expr : node<'e, 'a> }
+type [< NoComparison; NoEquality >] rec_qbinding<'q, 'par, 'e, 'a when 'e :> annotable> = { qual : 'q; par : 'par id_param; expr : node<'e, 'a> }
 with
     override this.ToString () = this.pretty
     member this.pretty = sprintf "%O%O = %O" this.qual (pretty_param this.expr.value.annot_sep this.par) this.expr
@@ -301,7 +338,7 @@ let pretty_cases cases = mappen_strings pretty_case "\n  | " cases
 // rows
 //
 
-let make_rows rowed ((|Rowed|_|) : id -> _ -> _) =
+let internal make_rows rowed ((|Rowed|_|) : id -> _ -> _) =
     let Record = rowed Config.Typing.TyCons.Rows.record
     let (|Record|_|) = (|Rowed|_|) Config.Typing.TyCons.Rows.record
     let Variant = rowed Config.Typing.TyCons.Rows.variant
@@ -346,11 +383,10 @@ type [< NoComparison; NoEquality >] ty_upatt =
     | Tp_Row of (id * ty_patt) list * ty_patt option
 with
     interface annotable with
-        member __.annot_sep = "::"
+        member __.annot_sep = Config.Printing.kind_annotation_sep
 
 and [< NoComparison; NoEquality >] ty_uexpr =
     | Te_PolyVar of id
-//    | Te_Var of id
     | Te_Id of id
     | Te_Lambda of kinded_param * ty_expr
     | Te_HTuple of ty_expr list
@@ -359,9 +395,10 @@ and [< NoComparison; NoEquality >] ty_uexpr =
     | Te_Match of ty_expr * ty_case list
     | Te_Annot of ty_expr * kind
     | Te_Row of (id * ty_expr) list * ty_expr option
+    | Te_Forall of (kinded_param * ty_expr option) * ty_expr
 with
     interface annotable with
-        member __.annot_sep = "::"
+        member __.annot_sep = Config.Printing.kind_annotation_sep   // TODO: redesign this annot_sep thing
 
 and [< NoComparison; NoEquality >] ty_udecl =
     | Td_Bind of ty_binding list
@@ -376,7 +413,7 @@ and ty_patt = node<ty_upatt, kind>
 and ty_decl = node<ty_udecl, unit>
 and ty_case = case<ty_upatt, ty_uexpr, kind>
 
-and typed_param = ty_expr param
+and typed_param = ty_expr id_param
 
 let private Te_Primitive name = Te_Id name
 let Te_Unit = Te_Primitive "unit"
@@ -385,6 +422,9 @@ let Te_Unit = Te_Primitive "unit"
 
 let Te_Apps τs = (Apps (fun (τ1, τ2) -> Lo τ1.loc <| Te_App (τ1, τ2)) τs).value
 let (|Te_Apps|_|) = (|Apps|_|) (function Te_App (ULo τ1, ULo τ2) -> Some (τ1, τ2) | _ -> None)
+
+let Te_Foralls (αs, τ) = (Foralls (fun (α, τ) -> Lo τ.loc <| Te_Forall (α, τ)) (αs, τ)).value
+let (|Te_Foralls|) = (|Foralls|) (function Te_Forall (α, ULo τ) -> Some (α, τ) | _ -> None)
 
 let Te_Arrow_Cons = Te_Id "->"
 let (|Te_Arrow_Cons|_|) = function
@@ -444,8 +484,8 @@ type ty_upatt with
             | Tp_Cons x             -> x
             | Tp_Tuple ([] | [_])   -> unexpected "empty or unary tuple type pattern" __SOURCE_FILE__ __LINE__
             | Tp_Tuple ps           -> sprintf "(%s)" (flatten_stringables " * " ps)
-            | Tp_Record row         -> sprintf "{ %s }" (pretty_row "; " ":" row)
-            | Tp_Variant row        -> sprintf "< %s >" (pretty_row " | " ":" row)
+            | Tp_Record row         -> sprintf "{ %s }" (pretty_row "; " Config.Printing.type_annotation_sep row)
+            | Tp_Variant row        -> sprintf "< %s >" (pretty_row " | " Config.Printing.type_annotation_sep row)
             | Tp_HTuple ([] | [_])  -> unexpected "empty or unary tupled type pattern" __SOURCE_FILE__ __LINE__
             | Tp_HTuple ps          -> sprintf "(%s)" (flatten_stringables ", " ps)
             | Tp_App (App s)        -> s
@@ -454,7 +494,7 @@ type ty_upatt with
             | Tp_Or (p1, p2)        -> sprintf "(%O | %O)" p1 p2
             | Tp_And (p1, p2)       -> sprintf "(%O & %O)" p1 p2
             | Tp_Wildcard           -> "_"
-            | Tp_Row (bs, o)        -> sprintf "(| %s |)" (pretty_row " | " ":" (bs, o))
+            | Tp_Row (bs, o)        -> sprintf "(| %s |)" (pretty_row " | " Config.Printing.type_annotation_sep (bs, o))
 
 type ty_uexpr with
     override this.ToString () = this.pretty
@@ -469,26 +509,27 @@ type ty_uexpr with
         let (|Te_Sym|_|) = (|Sym|_|) (function Te_Id x -> Some (x, x) | _ -> None)
         match this with
             | Te_Sym x                 -> sprintf "(%O)" x
-            | Te_PolyVar x             -> sprintf Config.Printing.dynamic.ty_var_fmt x
-//            | Te_Var x
+            | Te_PolyVar x             -> sprintf Config.Printing.dynamic.tyvar_quantified_fmt x
             | Te_Id x                  -> x
             | Te_Tuple ([] | [_])      -> unexpected "empty or unary tuple type expression" __SOURCE_FILE__ __LINE__
             | Te_Tuple es              -> sprintf "(%s)" (flatten_stringables " * " es)
-            | Te_Record row            -> sprintf "{ %s }" (pretty_row "; " ":" row)
-            | Te_Variant row           -> sprintf "< %s >" (pretty_row " | " ":" row)
+            | Te_Record row            -> sprintf "{ %s }" (pretty_row "; " Config.Printing.type_annotation_sep row)
+            | Te_Variant row           -> sprintf "< %s >" (pretty_row " | " Config.Printing.type_annotation_sep row)
             | Te_HTuple ([] | [_])     -> unexpected "empty or unary tupled type expression" __SOURCE_FILE__ __LINE__
             | Te_HTuple es             -> sprintf "(%s)" (flatten_stringables ", " es)
 
-            // NOTE: arrow must be matched BEFORE app 
+            // arrow must be matched BEFORE app 
             | Te_Arrow (Te_Arrow _ as t1, t2) -> sprintf "(%O) -> %Os" t1 t2
             | Te_Arrow (t1, t2)               -> sprintf "%O -> %O" t1 t2
 
             | Te_App (App s)           -> s
-            | Te_Lambda (ka, e)        -> sprintf "fun %s -> %O" (pretty_param "::" ka) e
+            | Te_Lambda (kpar, τ)      -> sprintf "fun %s -> %O" (pretty_param Config.Printing.kind_annotation_sep kpar) τ
             | Te_Annot (e, ty)         -> sprintf "(%O : %O)" e ty
             | Te_Let (d, e)            -> sprintf "let %O in %O" d e
             | Te_Match (e, cases)      -> sprintf "match %O with\n| %s" e (pretty_cases cases)
-            | Te_Row (bs, o)           -> sprintf "(| %s |)" (pretty_row " | " ":" (bs, o))
+            | Te_Row (bs, o)           -> sprintf "(| %s |)" (pretty_row " | " Config.Printing.type_annotation_sep (bs, o))
+            | Te_Forall (((x, ko), None), τ2)    -> sprintf "forall %s. %O" (pretty_param Config.Printing.kind_annotation_sep (var.fresh_named x, ko)) τ2
+            | Te_Forall (((x, ko), Some τ1), τ2) -> sprintf "forall (%s >= %O). %O" (pretty_param Config.Printing.kind_annotation_sep (var.fresh_named x, ko)) τ1 τ2
 
 type ty_udecl with       
     override this.ToString () = this.pretty
@@ -638,7 +679,7 @@ type [< NoComparison; NoEquality >] uexpr =
     | Eject of expr
 with
     interface annotable with
-        member __.annot_sep = ":"
+        member __.annot_sep = Config.Printing.type_annotation_sep
  
 and binding = qbinding<decl_qual, upatt, uexpr, unit>
 and rec_binding = rec_qbinding<decl_qual, ty_expr, uexpr, unit>
@@ -686,10 +727,10 @@ type uexpr with
             | Sym x                 -> sprintf "(%s)" x
             | Var x                 -> sprintf "%s" x
             | Reserved_Cons x       -> x
-            | FreeVar x             -> sprintf Config.Printing.freevar_fmt x    // TODO: why is freevars' print fmt configurable while other exprs' aren't?
+            | FreeVar x             -> sprintf Config.Printing.freevar_fmt x
             | PolyCons x            -> sprintf Config.Printing.polycons_fmt x
             | App (A s)             -> s
-            | Lambda (ta, e)        -> sprintf "fun %s -> %O" (pretty_param ":" ta) e
+            | Lambda (tpar, e)      -> sprintf "fun %s -> %O" (pretty_param Config.Printing.type_annotation_sep tpar) e
             | Select (e, id)        -> sprintf "%O.%s" e id
             | Restrict (e, id)      -> sprintf "%O \ %s" e id
             | If (e1, e2, e3)       -> sprintf "if %O then %O else %O" e1 e2 e3
