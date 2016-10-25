@@ -28,6 +28,6 @@ The Lw interpreter can be used in a few ways:
  
 Visual Studio users may activate the "Interactive" solution configuration on the left of the *play* button and launch the interpreter in interactive mode.
 
-### Language spec
+### Language specification
 
 Please read the Lw [spec document](doc/spec.md) for further details.
