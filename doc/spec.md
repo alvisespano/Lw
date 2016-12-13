@@ -277,9 +277,9 @@ let a = f 3                            // a : string
 First of all, notice that in the type scheme of `f` there occur 2 distinct `convert` constraints: that's because each single occurrence of an overloaded symbol is collected separately within the constraint set, as it may be solved by means of different instances. Secondly, the resolution of both `convert`'s relies on the co-domain for being solved, hence the context-dependentness.
 
 
-#### Ambiguities and semi-automatic resolution
+#### Ambiguities and Assisted Resolution
 
-Context-dependent overloading may lead to ambiguities. Consider the following:
+Context-dependent overloading may lead to ambiguities. And we cannot do much about this - consider the following:
 
 ```ocaml
 overload parse : string -> 'a
@@ -289,7 +289,7 @@ let parse_and_pretty x = pretty (parse x)
 ```
 
 The type inferred is `parse_and_pretty : forall 'a. { pretty : 'a -> string; parse : string -> 'a } => string -> string`.
-Now, look at the type part of the type scheme: no type variable occurs even if `'a` is universally quantified - indeed `'a` does appear in the constraints part. But only there. This is a situation where further unification of the type part would be useless for resolving the constraints: no matter how you will use `parse_and_pretty` in your code, there's no way the type checker can deduce a type for `'a`. This basically means that **any combination of `pretty` and `parse` candidates would do** - and that's what, technically speaking, is considered **ambiguious**.
+Now, look at the type part: no type variable occurs in `string -> string` even if `'a` is universally quantified; actually, `'a` appears only in the constraints part. This is a situation where further unification of the type part would be useless for resolving the constraints: no matter how you will use `parse_and_pretty` in your code, there's no way the type checker can deduce a type for `'a`. This basically means that **any combination of `pretty` and `parse` candidates would do** - and that's what, technically speaking, is considered **ambiguious**.
 
 ```ocaml
 let over parse s = sscanf "%d" s    // parse : string -> int
