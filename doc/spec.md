@@ -134,10 +134,10 @@ Ticking an identifier in general means *do not consider it as unbound*: this app
 ###### Unicode, greek letters and special symbols
 
 Lw supports Unicode lexing and pretty printing. Use of **greek letters for type variables** in place of ticked identifiers is supported as well as some other special symbols, such as the reveserd-A symbol instead of the *forall* keyword for universally quantifying polymorphic type variables, or the reversed-E symbol in place of the *exists* keyword for explicitly denoting existential types. Virtually all Unicode symbols are usable as identifiers.
-One might for instance define the *is_in* (&0220a) function like this - assuming that some `find : ('a -> bool) -> list 'a` function is defined:
+One might for instance define the *is_in* (&#8712;) function like this - assuming that some `find : ('a -> bool) -> list 'a` function is defined:
 
 ```ocaml
-let (&0220a) a b = find (fun x -> x = a) b
+let (&#8712;) a b = find (fun x -> x = a) b
 ```
 
 ###### Quick lambdas
