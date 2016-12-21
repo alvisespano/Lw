@@ -7,21 +7,3 @@ Among its highlights: type and kind inference, System-F types and first-class po
 
 Resolution of type constraints is central to many language mechanisms, which, combined with overloading, leads to a form of static dispatching that can either be automatic or assisted by the programmer; dually, row-typed records are subject to dynamic dispatching by nature and enables structural subtyping - a.k.a. sound duck typing. And here lies one of Lw's most notable and novel features: users can turn type constraints into records and viceversa anytime by using a pair of special inject/eject operators, converting a non-first-class entity which basically resembles a dictionary into a first-class record value, and the other way round. This makes two worlds communicate: the world of static resolution and the world of dynamic resolution. Languages out there typically do not define a clear symmetry in this respect; plus, a lot of boilterplate code is often required for switching between the two worlds, if possible at all.
 In Lw this symmetry is crucial and explitly designed, encouraging code reuse.
-
-
-
-
-
-
-
-
- at its core phylosophy Lw attempts to solve dualisms such as 
- duality seamlessly Ideal for coding big scale applications as well as scripting small programs, Lw .
-Most language features offer a dual approach: the heavyweight declarative approach which large software architectures deserve together with its lightweight inferred counterpart which resembles made scripting languages so popular lately - hence the full name Lightweight.
-
-The script-like flavour of of ML combined with the power of static types flavour many programmers expect nowadays for prototyping
-
-
-
-Among the highlights: 
-But what makes Lw unique is the way these features are tied together, unleashing some novel ways of writing and reusing code. For example, type constraints resolution is central to most language mechanisms in Lw, leading to a form of static dispatching that can either be automatic or assisted by the programmer; dually, row-type records are subject to dynamic dispatching and enables structural subtyping - a.k.a. fully inferred and sound duck typing. And here lies the magic: users can turn type constraints into records and viceversa anytime by using a special operator, converting non-first-class static type constraints into a first-class record type and the other way round. This makes two worlds communicate: the world of static resolution and the world of dynamic resolution. Languages typically do not define a clear symmetry in this respect, and anyway a lot of boilterplate code is often required for switching between the two worlds - when possible at all. In Lw this symmetry is crucial and explitly designed, encouraging code reuse.

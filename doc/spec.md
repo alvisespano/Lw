@@ -29,7 +29,7 @@ Lw originated from ML and has been influenced by the big languages out there, su
 #### Lw vs. OCaml
 
 OCaml is a great language and Lw has learned a number of lessons from it.
-All the basic ML subset of constructs are equivalent when not equal, and even some syntactic choices are the same - e.g. the `function` keyword standing for the lambda abstraction with pattern matching.
+All the basic ML constructs are equivalent when not equal, and even some syntactic choices are the same - e.g. the `function` keyword standing for the lambda abstraction with pattern matching.
 Lw does not have a module system though, nor an object system. Lw has a very powerful form of row-typed records, though, and that resembles the way object types work in OCaml.
 Moreover, Lw has heavyweight GADTs as well as lightweight polymorphic variants, as late OCaml revisions do - but in Lw everything is more tied together and does not feel like a language extension.
 Overloading is another story though: OCaml does not support any form of overloading and it does not support the form of constrained polymorphism that Lw offers as central mechanism. This is a major difference.
@@ -117,27 +117,27 @@ Each let-binding or series of mutally-recursive let-rec-bindings can omit its ow
 This is different, for example, from F# indentantion-aware lightweight syntax: lexing and parsing in Lw discards whitespaces and end-of-line, totally ignoring indentation.
 
 Beware though: do not confuse multiple `let`'s without the `in` with the `let..and..in` construct. These are two distinct things.
-Mulitple let-bindings separated by an `and` are *bound to the same environment* and are syntactically considered as one sigle declaration, thus requiring one single `in` in theory and in practice. Multiple `let`'s, instead, are supposed to have one `in` each, but Lw supports a *syntactic sugar* that allows for multiple `let`'s to be written without each own's `in` except the last one - and that's as if they were declared in cascade, thus each one may refer to the ones above.
-Pay attention to the example above: `R` and `g` are *bound in `and`*, thus not needing the `in` anyway; while the first `k` and the aforementioned `R` and `g` couple are distinct let-bindings and are supposed to need one `in` each (one for the `k` and one for the couple), but in Lw you can omit it. Scoping rules still applies though, as proved by the last couple `k` and `swap`.
+Mulitple let-bindings separated by an `and` are *bound to the same environment* and are syntactically considered as one sigle declaration, thus requiring one single `in` in theory and in practice. Multiple `let`'s, instead, are supposed to have one `in` each, but Lw supports a *syntactic sugar* that allows for multiple `let`'s to be written without each own's `in` except the last one - and that's as if they were declared in cascade, thus each definion may refer to the symbols bound above.
+Pay attention to the example above: `R` and `g` are *`and`-bound*, thus not needing an `in` for each binding anyway; while the first `k` and the `R`-and-`g` couple are distinct let-bindings and are supposed to have their own `in`'s (one for the `k` and one for the couple), but in Lw you can omit them. Scoping rules still applies though, as shown by the last couple `k` and `swap`.
 
 ###### Identifiers and naming conventions
 
-Variable identifiers in expressions can both be lower-case and upper-case; data constructors must be capitalized though. A number of other ticked, back-ticked and marked identifiers exist and will be introduced in dedicated sections: however casing rules are consistent and usually mimic the general one for plain variable identifiers.
+Variable identifiers in expressions can be lower-case or upper-case; data constructors must be capitalized though. Also ticked, back-ticked and marked identifiers exist and will be explained in dedicated sections: the same casing rule applies to those as well.
 
 **All identifiers are Snake-case, except data constructors which are Pascal-case** (or *capitalized Camel-case*, if you prefer).
-Local variable identifiers may be short, while public bindings should be meaningful and reasonably long.
+Ideally, local identifiers should be short but public identifiers should be meaningful and reasonably long.
 Record labels are considered identifiers, thus are Snake-case, and the same applies to type and kind names.
-In the type sub-language ticked snake-cased identifiers are free type variables, possibly universally quantified; not to be confused with type-function parameters or locally let-bound type names which are plain identifiers - as they both are in the expression laguange.
+In the type language ticked snake-cased identifiers are free type variables, possibly universally quantified; not to be confused with type-function parameters or locally let-bound type names which are plain identifiers - as they both are in the expression laguange.
 
 Ticking an identifier in general means *do not consider it as unbound*: this applies both to the type language and the expression language. In the former it refers to generalizable type variables, in the former to constrained free variables (a.k.a. implicit parameters).
 
 ###### Unicode, greek letters and special symbols
 
-Lw supports Unicode lexing and pretty printing. Use of **greek letters for type variables** in place of ticked identifiers is supported as well as some other special symbols, such as the ? symbol in place of the *forall* keyword for universally quantifying polymorphic type variables in type schemes, or the ? symbol in place of the *exists* keyword for explicitly denoting existential types. In general, all Unicode symbols are usable as function or operator identifiers or whatever.
-One might for instance define the *is_in* function like this - assuming naively that `find : ('a -> bool) -> list 'a` is defined for lists:
+Lw supports Unicode lexing and pretty printing. Use of **greek letters for type variables** in place of ticked identifiers is supported as well as some other special symbols, such as the reveserd-A symbol instead of the *forall* keyword for universally quantifying polymorphic type variables, or the reversed-E symbol in place of the *exists* keyword for explicitly denoting existential types. Virtually all Unicode symbols are usable as identifiers.
+One might for instance define the *is_in* (&0220a) function like this - assuming that some `find : ('a -> bool) -> list 'a` function is defined:
 
 ```ocaml
-let (?) a b = find (fun x -> x = a) b
+let (&0220a) a b = find (fun x -> x = a) b
 ```
 
 ###### Quick lambdas
