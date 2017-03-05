@@ -1,4 +1,8 @@
-﻿
+﻿3/3/2017:
+* UP: several upgrades at UnitTester system for scoring warnings and hints
+* FIX: unit tests fixed and ALL working - including HML - except section "Higher Rank"
+
+
 24/10/2016:
 * REFACT: UnitTester flags for dealing with hints and warnings have been renamed from Disable/Enable to Hide/Show
 * FIX: several unit tests have been polished and return now success instead of weak success due to hints

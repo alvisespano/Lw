@@ -5,6 +5,11 @@
 
 namespace Test 
 
+let auto (id : forall 'z. 'z -> 'z) = id
+
+(*
+
+
 //let x = fun f (x : 'b) y -> ((f : _ -> 'a) x, y) : 'a * _
  
 let id x = x
@@ -46,5 +51,7 @@ let comb (id : forall 'a. 'a -> 'a) = id id
 let poly (f : forall 'a. 'a -> 'a) = f 1, f true
 
 let a = poly id
+*)
+
 *)
 

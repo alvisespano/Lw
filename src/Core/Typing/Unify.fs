@@ -130,8 +130,8 @@ module internal Mgu =
           #endif
           #if DEBUG_UNI && DEBUG_HML
           L.uni High "[sub] %O :> %O\n      Q = %O\n" t ϕ Q0
-          let Q, θ as r =
           #endif
+          let Q, θ as r =
             assert t.is_nf
             assert ϕ.is_nf
             match t, ϕ with            
@@ -153,8 +153,8 @@ module internal Mgu =
                 r
           #if DEBUG_UNI && DEBUG_HML
           L.uni High "[sub=] %O :> %O\n       %O\n       Q' = %O" t ϕ θ Q
-          r
           #endif
+          r
 
 
         and mgu_fx ctx (Q : prefix) (ϕ1 : fxty) (ϕ2 : fxty) =
@@ -164,8 +164,8 @@ module internal Mgu =
           #endif
           #if DEBUG_UNI && DEBUG_HML
           L.uni Normal "[mgu-scheme] %O == %O\n             Q = %O" ϕ1 ϕ2 Q
-          let Q', θ, ϕ as r =
           #endif
+          let Q', θ, ϕ as r =
             assert ϕ1.is_nf
             assert ϕ2.is_nf
             match ϕ1, ϕ2 with
@@ -180,8 +180,8 @@ module internal Mgu =
                     Q4, θ3, FxU_ForallsQ (Q5, S θ3 t1)
           #if DEBUG_UNI && DEBUG_HML
           L.uni Normal "[mgu-scheme=] %O == %O\n              %O\n              Q' = %O\n              res = %O" ϕ1 ϕ2 θ Q' ϕ
-          r
           #endif
+          r
 
 
         // TODOL: rewrite the whole unification with monads?
@@ -322,7 +322,7 @@ type ty with
         let Q = prefix.B { for α, k in Seq.append t1.ftv t2.ftv do yield α, Fx_Bottom k }
         let _, θ = mgu ctx Q t1 t2
         in
-            if t2.fv.IsSubsetOf θ.dom then Some θ   // TODO: in https://web.cecs.pdx.edu/~mpj/thih/TypingHaskellInHaskell.html they define a "match" function similar to one-way-only MGU, useful here!
+            if t2.fv.IsSubsetOf θ.dom then Some θ   // TODO: in https://web.cecs.pdx.edu/~mpj/thih/TypingHaskellInHaskell.html a "match" function similar to one-way-only MGU is defined - useful here!
             else None
 
     member t1.is_instance_of ctx t2 = (t1.try_instance_of ctx t2).IsSome
