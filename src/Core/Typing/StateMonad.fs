@@ -472,9 +472,6 @@ type node_type_inference_builder<'e> (e : node<'e>, ctx) =
         //with get () = e.translated
         with set x = e.translated <- Translated x
 
-    member __.already_translated
-        with set x = e.translated <- x
-
     member __.typed
         with get () = e.typed :?> fxty
         and set (t : fxty) = e.typed <- t

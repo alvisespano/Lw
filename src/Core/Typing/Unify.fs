@@ -322,7 +322,7 @@ type ty with
         let Q = prefix.B { for α, k in Seq.append t1.ftv t2.ftv do yield α, Fx_Bottom k }
         let _, θ = mgu ctx Q t1 t2
         in
-            if t2.fv.IsSubsetOf θ.dom then Some θ   // TODO: in https://web.cecs.pdx.edu/~mpj/thih/TypingHaskellInHaskell.html they define a "match" function similar to one-way-only MGU, useful here!
+            if t2.fv.IsSubsetOf θ.dom then Some θ   // TODO: in https://web.cecs.pdx.edu/~mpj/thih/TypingHaskellInHaskell.html a "match" function similar to one-way-only MGU is defined - useful here!
             else None
 
     member t1.is_instance_of ctx t2 = (t1.try_instance_of ctx t2).IsSome

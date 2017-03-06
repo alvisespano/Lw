@@ -140,6 +140,7 @@
     <None Include="test\console.lw" />
     <None Include="test\overloading.lw" />
     <None Include="test\tyvars.lw" />
+    <None Include="test\firstclass_poly.lw" />
   </ItemGroup>
   <ItemGroup>
     <!--Reference Include="FSharp.Core">

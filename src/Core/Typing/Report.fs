@@ -347,9 +347,8 @@ module Hint =
         H 5 loc Low "type annotation %O has been automatically generalized to %O" t t'
 
     // TODO: this might become a warning that could be avoided by using a special instantiation operator ":>"
-    let type_annotation_is_instantiation loc tann ϕinf =
-        H 6 loc High "type annotation %O is an instance of the inferred type %O, which is more generic. \
-        This means there is a loss of type information. \
-        It may affect code referring to the value or binding being defined here: additional type annotations may be needed in call sites or it may prevent code from benefitting of first-class polymorphic. \
+    let fxty_instantiation_via_annotation_in_binding loc x (tann : ty) (ϕinf : fxty) =
+        H 6 loc High "annotated type %O is an instance of the inferred type %O, which is more generic. \
+        This means there is a loss of type information, which may prevent code using symbol %s from benefitting of first-class polymorphic. \
         Remove this annotation unless you know exactly what you are doing."
-            tann ϕinf
+            tann ϕinf x

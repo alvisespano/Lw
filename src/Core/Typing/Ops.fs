@@ -19,6 +19,7 @@ open Lw.Core.Typing
 open Lw.Core.Typing.Defs
 open Lw.Core.Typing.Subst
 open Lw.Core.Typing.Equivalence
+  
 
 
 // various utils
@@ -150,17 +151,22 @@ type ty with
     member t.instantiated = t.instantiate_wrt t.fv
 
     member t.nf =
-        match t with
-        | T_Closure _
-        | T_Var _
-        | T_Cons _ -> t
+        let r =
+            match t with
+            | T_Closure _
+            | T_Var _
+            | T_Cons _ -> t
 
-        | T_App (t1, t2) -> T_App (t1.nf, t2.nf)
-        | T_HTuple ts    -> T_HTuple (List.map (fun (t : ty) -> t.nf) ts)
+            | T_App (t1, t2) -> T_App (t1.nf, t2.nf)
+            | T_HTuple ts    -> T_HTuple (List.map (fun (t : ty) -> t.nf) ts)
 
-        | T_Forall (α, t2) ->
-            if not <| Set.contains α t2.fv then t2.nf
-            else T_Forall (α, t2.nf)
+            | T_Forall (α, t2) ->
+                if not <| t2.ftv.contains_key α then t2.nf
+                else T_Forall (α, t2.nf)
+        #if DEBUG_NF
+        L.debug High "[F-nf] nf(%O) = %O" t r
+        #endif
+        r
 
     member t.is_nf = t.is_equivalent t.nf
         
@@ -181,7 +187,7 @@ type fxty with
             | Fx_F_Ty t        -> Fx_F_Ty t.nf
             | Fx_Bottom _ as ϕ -> ϕ 
             | Fx_Forall ((α, ϕ1), ϕ2) ->
-                if not <| Set.contains α ϕ2.fv then ϕ2.nf
+                if not <| ϕ2.ftv.contains_key α then ϕ2.nf
                 else
                     match ϕ2.nf with
                     | Fx_F_Ty (T_Var (β, _)) when α = β -> ϕ1.nf

@@ -36,14 +36,15 @@ let Uid = ['A'-'Z'] idbody
 let Lid = ['a'-'z' '_'] idbody
 let id = Uid | Lid
 
-rule comment = parse
-	| '*' (')' | '/')	{ tokenize lexbuf }
-	| newline			{ newline lexbuf; comment lexbuf } 
-	| _					{ comment lexbuf }
+rule comment level = parse
+	| "(*"          	{ comment (level + 1) lexbuf }
+	| "*)"	            { if level = 0 then tokenize lexbuf else comment (level - 1) lexbuf }
+	| newline			{ newline lexbuf; comment level lexbuf } 
+	| _					{ comment level lexbuf }
 
 and linecomment = parse
-    | newline       { newline lexbuf; tokenize lexbuf }
-    | _             { linecomment lexbuf }
+    | newline           { newline lexbuf; tokenize lexbuf }
+    | _                 { linecomment lexbuf }
 
 and tokenize = parse
 	| eof				{ EOF }
@@ -51,7 +52,7 @@ and tokenize = parse
 	| newline			{ newline lexbuf; tokenize lexbuf }
 
 	| "//"				{ linecomment lexbuf }
-	| ('/' | '(') '*'	{ comment lexbuf }
+	| "(*"          	{ comment 0 lexbuf }
      
 	| "->"			{ ARROW }
 	| '+'			{ PLUS }

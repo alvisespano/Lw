@@ -6,41 +6,46 @@ Keep in mind that features may change anytime, since Lw is a work in progress.
 
 ## Introduction
 
-Lw is a general purpose, statically typed, strict, impure, functional-first programming language that supports cutting-edge features and advanced forms of polymorphism for writing robust, reusable and succinct code.
+Lw is a general purpose, statically typed, strict, impure, functional programming language supporting cutting-edge features and advanced forms of polymorphism for writing robust, reusable and succinct code.
 
-Ideal for writing big as well as small programs, as most heavyweight declarative language features has a lightweight inferred counterpart as well, it integrates state-of-the-art advancements in the programming language field together with a number of novel bits invented or reinterpreted by me throughout more than 15 years of research, passion and work.
+Ideal for writing big as well as small programs, as most heavyweight declarative features offer a lightweight inferred counterpart as well, it integrates state-of-the-art advancements in the programming language field together with a number of novel bits invented or reinterpreted by me throughout more than 15 years of research, passion and work.
 
-Among the highlights: type and kind inference, System-F types and first-class polymorphism, open-world overloading with automatic context-dependant resolution, implicit function parameters, union types supporting fully-inferred Generalized Algebraic Datatypes, row types for polymorphic variants and records, overloading of data constructors and record labels, powerful kind system supporting higher-order polymorphism, kind polymorphism, value-to-type & type-to-kind promotion and demotion, first-class modules and much more.
+Among the highlights: type and kind inference, System-F types and first-class polymorphism, open-world overloading with automatic context-dependant resolution, implicit function parameters and controlled dynamic scoping, fully-inferred Generalized Algebraic Datatypes, row types for polymorphic variants and records with first-class labels, powerful kind system supporting higher-order polymorphism and kind polymorphism, value-to-type & type-to-kind promotion and demotion, first-class modules and much more.
 
-But what makes Lw unique is the way these features are tied together, unleashing some novel ways of writing and reusing code. For example, type constraints resolution is central to most language mechanisms in Lw, leading to a form of static dispatching that can either be automatic or assisted by the programmer; dually, row-type records are subject to dynamic dispatching and enables structural subtyping - a.k.a. fully inferred and sound duck typing. And here lies the magic: users can turn type constraints into records and viceversa anytime by using a special operator, converting non-first-class static type constraints into a first-class record type and the other way round. This makes two worlds communicate: the world of static resolution and the world of dynamic resolution. Languages typically do not define a clear symmetry in this respect, and anyway a lot of boilterplate code is often required for switching between the two worlds - when possible at all. In Lw this symmetry is crucial and explitly designed, encouraging code reuse.
+But what makes Lw unique is the way these features are tied together, unleashing some novel ways of writing and reusing code. Notably, type constraints resolution is central to most language mechanisms in Lw, leading to a form of static dispatching that can either be automatic or assisted by the programmer; dually, row-typed records are subject to dynamic dispatching by nature and enables structural subtyping - a.k.a. fully inferred and sound duck typing. And here lies the magic: users can turn type constraints into a function over records and viceversa anytime by using a pair of special eject/inject operators, converting a compile-time entity (constraints) which basically resembles a dictionary into a runtime value (records), and the other way round. This makes two worlds communicate: the world of static resolution and the world of dynamic resolution. Languages out there typically do not define a clear symmetry in this respect; moreover, a lot of boilterplate code is often required for switching between the two worlds - if possible at all. In Lw this symmetry is crucial and explitly designed, encouraging code reuse.
 
 
 #### &lambda;&omega; = Lw = Lightweight
 
-The language full name is Lightweight, which stands for one of its core principles: almost every feature has little to no impact on code verbosity and size, while retaining robustness and safeness intact. By default everything is statically inferred, automatic or implicit and most features do not require declarations of any sort - hence the name Lightweight. Nonetheless, the so-called declarative approach is an option as well: users can define heavyweight types and enforce a stronger typing discipline when needed or desired.
+The language full name is Lightweight, which reveals its phylosophy: almost every feature has little to no impact on code verbosity and size, yet retaining robustness and safeness intact. By default most features are statically inferred, automatic or implicit, thus not requiring declarations of sorts - hence the name Lightweight. Nonetheless, the so-called declarative or heavyweight approach is an option as well: users can define heavyweight types and enforce a stricter type discipline when needed.
 
 The `L` and `w` letters also stand for greek &lambda; and &omega;, tributing the theoretical heritage behind Lw: &lambda;-calculus and System-*F*&omega;.
 
 
 ### Comparisons with the **big** languanges
 
-Lw originated from ML and has been influenced by the big languages out there, such as OCaml, Haskell and F#. Its core language constructs are the typical ones you would expect from a modern functional language: let bindings, lambda abstractions, application, currying, pattern matching are all there and work as you would expect. Ideally, a programmer may simply write Lw code that resembles well-known functional code without ever caring about additional features - this makes learning Lw very easy for those already familiar with ML-like languages.
+Lw originates from ML and has been influenced by the big functional languages out there, namely OCaml, Haskell and F#.
+But it also shares some of the phylosophy of non-functional commercial languages, such as C++ and Python.
+
+#### Lw extends ML
+
+Core language constructs are the same of most ML-like functional language: let and let-rec bindings, lambda abstractions, application, currying, pattern matching, type inference - it's all there and works as you would expect. Virtually, a programmer may write Lw code without knowing a single thing about advanced features and by just using basic ML constructs; or one may just copy-and-paste some non-objective OCaml or F# code and make it compile in Lw with little to no effort. This makes learning Lw very easy for those already familiar with ML-like languages and porting applications an affordable task.
 
 #### Lw vs. OCaml
 
-OCaml is a great language and Lw has learned a number of lessons from it.
-All the basic ML constructs are equivalent when not equal, and even some syntactic choices are the same - e.g. the `function` keyword standing for the lambda abstraction with pattern matching.
-Lw does not have a module system though, nor an object system. Lw has a very powerful form of row-typed records, though, and that resembles the way object types work in OCaml.
-Moreover, Lw has heavyweight GADTs as well as lightweight polymorphic variants, as late OCaml revisions do - but in Lw everything is more tied together and does not feel like a language extension.
+OCaml is a great language and has been a major inspiration for designing Lw.
+All basic constructs are equivalent when not equal, and even some syntactic sugars are the same - e.g. the `function` keyword standing for the lambda abstraction with pattern matching.
+Lw does not have a module system though, nor an object system. It has a powerful form of row-typed records though, which resembles the way object types work in OCaml.
+Moreover, Lw supports GADTs as well as polymorphic variants - as later OCaml revisions do - but in Lw everything is more tied together and does not feel like a language extension.
 Overloading is another story though: OCaml does not support any form of overloading and it does not support the form of constrained polymorphism that Lw offers as central mechanism. This is a major difference.
 
 #### Lw vs. F# #
 
-F# is a great language too. That's the language Lw is currently implemented in, by the way. And most core features of F# are the same of OCaml, therefore the same of Lw. Moveover, Lw supports computation expressions and monads as F# does, although F# uses builder classes and objects for defining custom semantics of *banged* constructs, while Lw uses an system based on constraints and overloading for that purpose. Active patterns are another F# feature that Lw inherited, even though in a slightly more consistent way: in F# active patterns are functions returning `option` while data constructors aren't; in Lw every data constructors, whether a GADT or a polymorphic variant, can be either used as a function returning `option`, rendering them equivalent to active patterns.
+F# is a great language too. That's the language currently used for implementing the prototype of Lw interpreter and compiler, by the way. Most core features of Lw are the same of F#, because F# actually resembles OCaml. Moveover, Lw supports computation expressions and monads as F# does (and OCaml doesn't), though F# adopts a design based on writing methods for a builder object defining custom semantics of *banged* constructs, while Lw adopts overloading and constraints for that purpose, enforcing a stronger type discipline. Active patterns is another F# feature that inspired Lw first-class patterns: in F# active patterns are functions returning `option` while data constructors are not first-class entities; in Lw, instead, data constructors, GADTs, polymorphic variants and even record labels and patterns are first-class, thus can be passed as arguments or manipulated as values.
 
 #### Lw vs. Haskell
 
-Haskell is arguably the most sophisticate language out there - a comparison with the *king* is therefore necessary. And it's exactly here that Lw can stretch its muscles: Haskell type classes are the feature that best resembles Lw type constraints and overloading. With a difference though: overloading in Lw is more granular, more widespread and less declarative, as there's no need to define top level hierarchies of type classes. Moreover, Lw offers a unique feature: you can easily switch between the static world of type constraints and the dynamic world of records, which is something not even Haskell does. Finally, Lw is strict and impure while Haskell is lazy and pure: this means that writing mixed functional and imperative code is much easier in Lw and you don't need to write complex monadic functors every time you have to print a string. Basically with Lw you can have the same or even more power of Haskell, but lighter mechanisms and strict semantics.
+Haskell is arguably the most sophisticate language out there - a comparison with the king of languages is therefore necessary. And it's exactly here that Lw can stretch its muscles: Haskell type classes are the feature that best resembles Lw type constraints and overloading. With a difference though: overloading in Lw is more granular, more widespread and less declarative, as there's no need to define top level hierarchies of type classes. Moreover, Lw offers a unique feature: you can easily switch between the static world of type constraints and the dynamic world of records, which is something not even Haskell does. Finally, Lw is strict and impure while Haskell is lazy and pure: this means that writing mixed functional and imperative code is much easier in Lw and you don't need to write complex monadic functors every time you have to print a string. Basically with Lw you can have the same or even more power of Haskell, but lighter mechanisms and strict semantics.
 
 
 ## A tour of Lw
@@ -134,10 +139,10 @@ Ticking an identifier in general means *do not consider it as unbound*: this app
 ###### Unicode, greek letters and special symbols
 
 Lw supports Unicode lexing and pretty printing. Use of **greek letters for type variables** in place of ticked identifiers is supported as well as some other special symbols, such as the reveserd-A symbol instead of the *forall* keyword for universally quantifying polymorphic type variables, or the reversed-E symbol in place of the *exists* keyword for explicitly denoting existential types. Virtually all Unicode symbols are usable as identifiers.
-One might for instance define the *is_in* (&0220a) function like this - assuming that some `find : ('a -> bool) -> list 'a` function is defined:
+One might for instance define the *is_in* (&#8712;) function like this - assuming that some `find : ('a -> bool) -> list 'a` function is defined:
 
 ```ocaml
-let (&0220a) a b = find (fun x -> x = a) b
+let (&#8712;) a b = find (fun x -> x = a) b
 ```
 
 ###### Quick lambdas
