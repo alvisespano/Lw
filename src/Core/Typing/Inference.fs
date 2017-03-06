@@ -40,7 +40,7 @@ type node_type_inference_builder<'e> with
         }
 
 type [< NoComparison; NoEquality >] gen_binding = {
-    qual   : decl_qual
+    qual        : decl_qual
     expr        : expr
     id          : ident
     constraints : constraints

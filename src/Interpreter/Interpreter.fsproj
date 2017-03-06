@@ -15,25 +15,25 @@
     <Name>Interpreter</Name>
     <TargetFrameworkProfile />
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Interpreter Debug|AnyCPU' ">
+  <PropertyGroup>
+    <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
-    <OutputPath>bin\Interpreter Debug\</OutputPath>
+    <OutputPath>bin\Debug\</OutputPath>
     <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT</DefineConstants>
     <WarningLevel>5</WarningLevel>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <DocumentationFile>
     </DocumentationFile>
     <Prefer32Bit>false</Prefer32Bit>
-    <StartArguments>test\firstclass_poly.lw</StartArguments>
+    <StartArguments>test\overloading.lw</StartArguments>
     <StartWorkingDirectory>..\..</StartWorkingDirectory>
   </PropertyGroup>
-  <PropertyGroup>
-    <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Interactive Release|AnyCPU' ">
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Console Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
@@ -43,9 +43,9 @@
     <PlatformTarget>AnyCPU</PlatformTarget>
     <DocumentationFile />
     <Prefer32Bit>false</Prefer32Bit>
-    <StartArguments>--interactive test/interactive.lw</StartArguments>
-    <OutputPath>bin\Interactive Release\</OutputPath>
+    <StartArguments>--console test/console.lw</StartArguments>
     <StartWorkingDirectory>..\..</StartWorkingDirectory>
+    <OutputPath>bin\Console Debug\</OutputPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'UnitTest Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -60,6 +60,48 @@
     <StartArguments>--unit-test -v</StartArguments>
     <OutputPath>bin\UnitTest Debug\</OutputPath>
     <StartWorkingDirectory>..\..</StartWorkingDirectory>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>true</Optimize>
+    <Tailcalls>false</Tailcalls>
+    <DefineConstants>RELEASE</DefineConstants>
+    <WarningLevel>5</WarningLevel>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DocumentationFile />
+    <Prefer32Bit>false</Prefer32Bit>
+    <StartArguments>test\firstclass_poly.lw</StartArguments>
+    <StartWorkingDirectory>..\..</StartWorkingDirectory>
+    <OutputPath>bin\Release\</OutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Console Release|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>true</Optimize>
+    <Tailcalls>false</Tailcalls>
+    <DefineConstants>RELEASE</DefineConstants>
+    <WarningLevel>5</WarningLevel>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DocumentationFile />
+    <Prefer32Bit>false</Prefer32Bit>
+    <StartArguments>--console test/console.lw</StartArguments>
+    <OutputPath>bin\Console Release\</OutputPath>
+    <StartWorkingDirectory>..\..</StartWorkingDirectory>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'UnitTest Release|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>true</Optimize>
+    <Tailcalls>false</Tailcalls>
+    <DefineConstants>RELEASE</DefineConstants>
+    <WarningLevel>5</WarningLevel>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DocumentationFile />
+    <Prefer32Bit>false</Prefer32Bit>
+    <StartArguments>--unit-test</StartArguments>
+    <StartWorkingDirectory>..\..</StartWorkingDirectory>
+    <OutputPath>bin\UnitTest Release\</OutputPath>
   </PropertyGroup>
   <Choose>
     <When Condition="'$(VisualStudioVersion)' == '11.0'">
@@ -77,48 +119,6 @@
   <PropertyGroup>
     <PreBuildEvent />
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Interactive Debug|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <Tailcalls>false</Tailcalls>
-    <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT</DefineConstants>
-    <WarningLevel>5</WarningLevel>
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DocumentationFile />
-    <Prefer32Bit>false</Prefer32Bit>
-    <StartArguments>--interactive test/interactive.lw</StartArguments>
-    <StartWorkingDirectory>..\..</StartWorkingDirectory>
-    <OutputPath>bin\Interactive Debug\</OutputPath>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Interpreter Release|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <Tailcalls>false</Tailcalls>
-    <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT</DefineConstants>
-    <WarningLevel>5</WarningLevel>
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DocumentationFile />
-    <Prefer32Bit>false</Prefer32Bit>
-    <StartArguments>test\firstclass_poly.lw</StartArguments>
-    <StartWorkingDirectory>..\..</StartWorkingDirectory>
-    <OutputPath>bin\Interpreter Release\</OutputPath>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'UnitTest Release|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <Tailcalls>false</Tailcalls>
-    <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT</DefineConstants>
-    <WarningLevel>5</WarningLevel>
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DocumentationFile />
-    <Prefer32Bit>false</Prefer32Bit>
-    <StartArguments>--unit-test</StartArguments>
-    <StartWorkingDirectory>..\..</StartWorkingDirectory>
-    <OutputPath>bin\UnitTest Release\</OutputPath>
-  </PropertyGroup>
   <ItemGroup>
     <None Include="App.config" />
     <Content Include="packages.config" />
@@ -128,7 +128,7 @@
     <Compile Include="Args.fs" />
     <Compile Include="Eval.fs" />
     <Compile Include="Intrinsic.fs" />
-    <Compile Include="Interactive.fs" />
+    <Compile Include="Console.fs" />
     <Compile Include="UnitTester.fs" />
     <Compile Include="UnitTest\TypeEquivalence.fs" />
     <Compile Include="UnitTest\Basic.fs" />
@@ -137,7 +137,7 @@
     <Compile Include="UnitTest\All.fs" />
     <Compile Include="Main.fs" />
     <None Include="test\misc.lw" />
-    <None Include="test\interactive.lw" />
+    <None Include="test\console.lw" />
     <None Include="test\overloading.lw" />
     <None Include="test\tyvars.lw" />
   </ItemGroup>

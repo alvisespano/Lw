@@ -79,7 +79,7 @@ let beta_redux ctx loc v1 v2 =
     | _              -> Report.unexpected_value loc "left hand of application" "closure" __SOURCE_FILE__ __LINE__ v1
 
 
-let rec enclose ctx (x, e, Δ : venv ref as cl) = V_Redux (Config.Interactive.pretty_closure cl, (fun ctx v -> eval_expr ctx ((!Δ).bind x v) e))
+let rec enclose ctx (x, e, Δ : venv ref as cl) = V_Redux (Config.Console.pretty_closure cl, (fun ctx v -> eval_expr ctx ((!Δ).bind x v) e))
 
 // TODOL: implement Δ with a fast hashmap: do not worry about scoping as the bindings can be left inside the map and overwritten, as type checking already dealt with scoping
 and eval_expr (ctx : context) Δ (e0 : expr) =
@@ -192,7 +192,7 @@ and eval_decl ctx Δ0 (d0 : decl) =
     | D_RecBind bs ->
         let rec Δ' = 
             List.fold (fun (Δ : venv) -> function
-                    | { patt = ULo (P_Var x); expr = e } -> Δ.bind x (V_Redux (Config.Interactive.pretty_rec_closure (x, e, Δ), fun ctx v -> beta_redux ctx e.loc (eval_expr ctx Δ' e) v)) // DO NOT CURRY variable 'v' or recursion won't stop
+                    | { patt = ULo (P_Var x); expr = e } -> Δ.bind x (V_Redux (Config.Console.pretty_rec_closure (x, e, Δ), fun ctx v -> beta_redux ctx e.loc (eval_expr ctx Δ' e) v)) // DO NOT CURRY variable 'v' or recursion won't stop
                     | b -> unexpected_case __SOURCE_FILE__ __LINE__ b.patt)
                 Δ0 bs
         in

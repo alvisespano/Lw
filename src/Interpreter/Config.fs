@@ -25,11 +25,11 @@ open FSharp.Common
 
 [<Measure>] type sec
 
-type mode = Mode_Interpreter | Mode_Interactive | Mode_UnitTest
+type mode = Mode_Interpreter | Mode_Console | Mode_UnitTest
 
 let mutable mode = Mode_Interpreter
 
-module Interactive =
+module Console =
     let prompt = ">"
     let pretty_prompt_decl x σ v = sprintf "%s : %O = %O" x σ v
     let pretty_prompt_expr σ v = pretty_prompt_decl "_" σ v
@@ -62,7 +62,7 @@ module Log =
     
     module Presets =
 
-        let set_thresholds_for_interactive () =
+        let set_thresholds_for_console () =
             cfg.debug_threshold <- Normal
             #if DEBUG
             cfg.msg_threshold <- Low

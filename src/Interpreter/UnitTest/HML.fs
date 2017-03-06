@@ -4,8 +4,9 @@ module Lw.Interpreter.UnitTest.HML
 open Lw.Interpreter.UnitTester
 open Lw.Interpreter.UnitTester.Aux
 
+// dependencies: Basic
 let hml =
-    "HML", [flag.KeepBindingsAtEnd; flag.HideHints],
+    "HML", [flag.KeepBindingsAtEnd; flag.HideHints; flag.Dependencies [Basic.lists; Basic.hindley_milner]],
     [
     "let i x = x in i 1, i true, i",            type_ok "int * bool * (forall 'a. 'a -> 'a)"
     "fun (i : forall 'a. 'a -> 'a) ->

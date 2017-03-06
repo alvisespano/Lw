@@ -124,65 +124,65 @@ module internal Mgu =
             | _                    -> false
  
         let rec subsume ctx (Q0 : prefix) (t : ty) (ϕ : fxty) =
-          #if ENFORCE_NF_IN_UNI
-          let t = t.nf
-          let ϕ = ϕ.nf
-          #endif
-          #if DEBUG_UNI && DEBUG_HML
-          L.uni High "[sub] %O :> %O\n      Q = %O\n" t ϕ Q0
-          let Q, θ as r =
-          #endif
-            assert t.is_nf
-            assert ϕ.is_nf
-            match t, ϕ with            
-            | _, FxU0_Bottom k ->          // this case is not in the HML paper but it is necessary or it will recur infinitely
-                Q0, kmgu ctx t.kind k                    
+            #if ENFORCE_NF_IN_UNI
+            let t = t.nf
+            let ϕ = ϕ.nf
+            #endif
+            #if DEBUG_UNI && DEBUG_HML
+            L.uni High "[sub] %O :> %O\n      Q = %O\n" t ϕ Q0
+            #endif
+            let Q, θ as r =
+                assert t.is_nf
+                assert ϕ.is_nf
+                match t, ϕ with            
+                | _, FxU0_Bottom k ->          // this case is not in the HML paper but it is necessary or it will recur infinitely
+                    Q0, kmgu ctx t.kind k                    
 
-            | T_ForallsK0 (αks, t1), FxU0_ForallsQ (Mapped fxty.instantiate_unquantified (Q', t2)) ->
-                assert Q0.is_disjoint Q'
-                let skcs, t1' = t1.skolemize_unquantified αks
-                let Q1, θ1 = mgu ctx (Q0 + Q') t1' t2
-                let Q2, Q3 = Q1.split Q0.dom
-                #if DISABLE_HML_FIXES
-                let θ2 = { θ1 with t = θ1.t.remove Q3.dom }
-                let r = Q2, θ2
-                #else
-                let r = Q1, { θ1 with t = θ1.t.remove (Q3.dom + Q'.dom) }   // HACK: Q'.dom contains variables created by the intantiation, and therefore must be removed
-                #endif
-                check_skolems_escape ctx skcs r
-                r
-          #if DEBUG_UNI && DEBUG_HML
-          L.uni High "[sub=] %O :> %O\n       %O\n       Q' = %O" t ϕ θ Q
-          r
-          #endif
+                | T_ForallsK0 (αks, t1), FxU0_ForallsQ (Mapped fxty.instantiate_unquantified (Q', t2)) ->
+                    assert Q0.is_disjoint Q'
+                    let skcs, t1' = t1.skolemize_unquantified αks
+                    let Q1, θ1 = mgu ctx (Q0 + Q') t1' t2
+                    let Q2, Q3 = Q1.split Q0.dom
+                    #if DISABLE_HML_FIXES
+                    let θ2 = { θ1 with t = θ1.t.remove Q3.dom }
+                    let r = Q2, θ2
+                    #else
+                    let r = Q1, { θ1 with t = θ1.t.remove (Q3.dom + Q'.dom) }   // HACK: Q'.dom contains variables created by the intantiation, and therefore must be removed
+                    #endif
+                    check_skolems_escape ctx skcs r
+                    r
+            #if DEBUG_UNI && DEBUG_HML
+            L.uni High "[sub=] %O :> %O\n       %O\n       Q' = %O" t ϕ θ Q
+            #endif
+            r
 
 
         and mgu_fx ctx (Q : prefix) (ϕ1 : fxty) (ϕ2 : fxty) =
-          #if ENFORCE_NF_IN_UNI
-          let ϕ1 = ϕ1.nf
-          let ϕ2 = ϕ2.nf
-          #endif
-          #if DEBUG_UNI && DEBUG_HML
-          L.uni Normal "[mgu-scheme] %O == %O\n             Q = %O" ϕ1 ϕ2 Q
-          let Q', θ, ϕ as r =
-          #endif
-            assert ϕ1.is_nf
-            assert ϕ2.is_nf
-            match ϕ1, ϕ2 with
-            | (FxU0_Bottom k, (_ as ϕ))
-            | (_ as ϕ, FxU0_Bottom k) -> Q, kmgu ctx k ϕ.kind, ϕ
+            #if ENFORCE_NF_IN_UNI
+            let ϕ1 = ϕ1.nf
+            let ϕ2 = ϕ2.nf
+            #endif
+            #if DEBUG_UNI && DEBUG_HML
+            L.uni Normal "[mgu-scheme] %O == %O\n             Q = %O" ϕ1 ϕ2 Q
+            #endif
+            let Q', θ, ϕ as r =
+                assert ϕ1.is_nf
+                assert ϕ2.is_nf
+                match ϕ1, ϕ2 with
+                | (FxU0_Bottom k, (_ as ϕ))
+                | (_ as ϕ, FxU0_Bottom k) -> Q, kmgu ctx k ϕ.kind, ϕ
 
-            | FxU0_ForallsQ  (Mapped fxty.instantiate_unquantified (Q1, t1)), FxU0_ForallsQ (Mapped fxty.instantiate_unquantified (Q2, t2)) ->
-                assert (let p (a : prefix) b = a.is_disjoint b in p Q Q1 && p Q1 Q2 && p Q Q2)  // instantiating ϕ1 and ϕ2 makes this assert always false
-                let Q3, θ3 = mgu ctx (Q + Q1 + Q2) t1 t2
-                let Q4, Q5 = Q3.split (Q.dom + (fv_Γ (subst_jenv θ3 ctx.Γ)))    // TODOH: abstract this code by using get_ungeneralizable_vars
-                in
-                    Q4, θ3, FxU_ForallsQ (Q5, S θ3 t1)
-          #if DEBUG_UNI && DEBUG_HML
-          L.uni Normal "[mgu-scheme=] %O == %O\n              %O\n              Q' = %O\n              res = %O" ϕ1 ϕ2 θ Q' ϕ
-          r
-          #endif
-
+                | FxU0_ForallsQ  (Mapped fxty.instantiate_unquantified (Q1, t1)), FxU0_ForallsQ (Mapped fxty.instantiate_unquantified (Q2, t2)) ->
+                    assert (let p (a : prefix) b = a.is_disjoint b in p Q Q1 && p Q1 Q2 && p Q Q2)  // instantiating ϕ1 and ϕ2 makes this assert always false
+                    let Q3, θ3 = mgu ctx (Q + Q1 + Q2) t1 t2
+                    let Q4, Q5 = Q3.split (Q.dom + (fv_Γ (subst_jenv θ3 ctx.Γ)))    // TODOH: abstract this code by using get_ungeneralizable_vars
+                    in
+                        Q4, θ3, FxU_ForallsQ (Q5, S θ3 t1)
+            #if DEBUG_UNI && DEBUG_HML
+            L.uni Normal "[mgu-scheme=] %O == %O\n              %O\n              Q' = %O\n              res = %O" ϕ1 ϕ2 θ Q' ϕ
+            #endif
+            r
+            
 
         // TODOL: rewrite the whole unification with monads?
         and mgu (ctx : uni_context) Q0 t1_ t2_ : prefix * tksubst =
