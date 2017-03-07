@@ -36,7 +36,8 @@ type logger with
     member this.test_weak_ok fmt = this.log_unleveled "WEAK" Config.Log.test_weak_ok_color fmt
     member this.test_failed fmt = this.log_unleveled "FAIL" Config.Log.test_failed_color fmt
 
-[< RequireQualifiedAccess >]
+
+[< RequireQualifiedAccess; NoComparison >]
 type flag =
     | Verbatim
     | Unbind
@@ -52,22 +53,48 @@ type flag =
     | ShowWarnings
     | ShowHint of int
     | ShowHints
-    | No of flag
+    | Dependencies of section list
 with
-    static member private fold_flags p flag flags =
-        List.fold (fun r -> function flag' when flag = flag'      -> true
-                                   | No flag' when flag = flag' -> false
-                                   | _                            -> r)
-            false flags |> p
+//    static member private fold_flags p flag flags = List.fold (fun r flag' -> flag = flag' || r) false flags |> p
+//    static member pick_when_enabled f flgs = List.pick f flgs
+//    static member is_enabled flg flgs = Option.isSome <| flag.pick_when_enabled (fun flg' -> if flg' = flg then Some () else None) flgs 
+//    static member private fold_flags p flag flags =
+//        List.fold (fun r -> function flag' when flag = flag'      -> true
+//                                   | Dont flag' when flag = flag' -> false
+//                                   | _                            -> r)
+//            false flags |> p
 
-    static member is_enabled = flag.fold_flags id
+    static member try_pick (|Flag|_|) flgs = List.tryPick (function Flag x -> Some x | _ -> None) flgs
+    static member is_enabled (|Flag|_|) flgs = Option.isSome <| flag.try_pick (|Flag|_|) flgs 
+    static member contains flg flgs = flag.is_enabled (function flg' when flg' = flg -> Some () | _ -> None) flgs
 
-[< RequireQualifiedAccess >]
-type [< NoComparison; NoEquality >] result =
+
+and [< NoComparison; CustomEquality; RequireQualifiedAccess  >] result =
     | TypedOk of string option
-    | StaticError of Type * int option
-    | TypeEq of string * bool
+    | StaticError of (Type * int option)
+    | TypeEq of (string * bool)
     | Custom of (unit -> bool)
+
+    override this.GetHashCode () =
+        match this with
+        | TypedOk x     -> hash (1, x)
+        | StaticError x -> hash (2, x)
+        | TypeEq x      -> hash (3, x)
+        | Custom _      -> unexpected_case __SOURCE_FILE__ __LINE__ this
+    
+    override x.Equals yobj =
+        CustomCompare.equals_with (fun a b ->
+            match a, b with
+            | TypedOk x, TypedOk y          -> x = y
+            | TypeEq x, TypeEq y            -> x = y
+            | StaticError x, StaticError y  -> x = y
+            | _                             -> false)
+            x yobj
+
+and entry = string * (result * flag list)
+and section = string * flag list * entry list
+
+
 
 [< RequireQualifiedAccess; CustomEquality; CustomComparison >]
 type score = Ok | Weak | Failed
@@ -90,7 +117,6 @@ with
         | score.Ok     -> 1
         | score.Weak   -> 2
         | score.Failed -> 3
-
 
 // TODO: reuse this for interactive as well
 type typechecker () =
@@ -198,25 +224,36 @@ let expected_static_error_infos T ecodeo =
 // entries and sections
 //
 
-type entry = string * (result * flag list)
-type section = string * flag list * entry list
+type section_data (name, num, flags) =
+    member this.is_flag_enabled (|Flag|_|) = flag.is_enabled (|Flag|_|) this.flags
+    member this.contains_flag flg = flag.contains flg this.flags
+    member val name = name
+    member val num = num
+    abstract flags : flag list
+    default val flags = flags
 
-type section_data = {
-    name : string
-    num : int
-    flags : flag list
-}
+type entry_data (name, num, flags, input) =
+    inherit section_data (name, num, flags)
+    new (sd : section_data, input) = new entry_data (sd.name, sd.num, sd.flags, input)
+    member val input = input
+    override val flags = base.flags @ flags
 
-type entry_data = {
-    section : section_data
-    input : string
-    flags : flag list
-}
-with
-    member this.all_flags = this.flags @ this.section.flags
-    member this.try_pick f = List.tryPick f this.all_flags
-    member this.is_flag_enabled fl = flag.is_enabled fl this.all_flags
-    member this.enabled_flags = List.filter this.is_flag_enabled this.all_flags
+
+//type [< NoComparison >] section_data = {
+//    name : string
+//    num : int
+//    flags : flag list
+//}
+//type entry_data = {
+//    section : section_data
+//    input : string
+//    flags : flag list
+//}
+//with
+//    member this.all_flags = this.flags @ this.section.flags
+//    member this.try_pick f = List.tryPick f this.all_flags
+//    member this.is_flag_enabled fl = flag.is_enabled fl this.all_flags
+//    member this.enabled_flags = List.filter this.is_flag_enabled this.all_flags
 
 
 let entry_info sec n = "entry", txt (sprintf "#%d in section \"%s\"" (n + 1) sec)
@@ -274,9 +311,9 @@ let parse_expr_or_decl s =
            | e               -> unexpected "syntax error while parsing expression or declaration: %s\n%O" __SOURCE_FILE__ __LINE__ s e
 
 
-let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
+let test_entry (tchk : typechecker) (sd : section_data) ((s1, (res, flags)) : entry) =
     let entry_infs = [ entry_info sd.name sd.num ]
-    let ed = { section = sd; input = s1; flags = flags }
+    let ed = new entry_data (sd, s1)
 
     let print_result score msgs infs =
         let result =
@@ -286,13 +323,13 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
             | len -> pp_infos [ for i = 1 to len do yield sprintf Config.UnitTest.multiple_results_item_fmt i, txt msgs.[i - 1] ]
         let infs = pp_infos ([sprintf "result%s" (if List.length msgs > 1 then "s" else ""), result] @ infs)
         match score with
-        | score.Ok when ed.is_flag_enabled flag.ShowSuccessful -> L.pp L.test_ok infs
+        | score.Ok when ed.contains_flag flag.ShowSuccessful -> L.pp L.test_ok infs
         | score.Weak -> L.pp L.test_weak_ok infs
         | score.Failed -> L.pp L.test_failed infs
         | _ -> ()
 
     let log doc =
-        if ed.is_flag_enabled flag.Verbose then
+        if ed.contains_flag flag.Verbose then
             L.pp L.testing doc
 
 
@@ -326,7 +363,7 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
                     | flag.ShowWarning n -> w.enable n; eh, ew.add n
                     | flag.ShowHint n    -> h.enable n; eh.add n, ew
                     | _                   -> eh, ew)
-            (E, E) ed.all_flags
+            (E, E) ed.flags
 
 //    let expected_hints, expected_warns =
 //        let expected_alert (|All|_|) (|One|_|) =
@@ -388,7 +425,7 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
                 | D_RecBind [{ patt = ULo (P_SimpleVar (x, _)) }]
                 | D_Bind [{ patt = ULo (P_SimpleVar (x, _)) }] ->
                     let r = tchk.lookup_var_Γ x
-                    if ed.is_flag_enabled flag.Unbind then
+                    if ed.contains_flag flag.Unbind then
                         tchk.envs <- envs0
                         log (txt "restoring:" </> txt x <+> txt ":" <+> fxty (tchk.lookup_var_Γ x))
                     r
@@ -446,11 +483,11 @@ let test_entry (tchk : typechecker) sd ((s1, (res, flags)) : entry) =
 
     // typability with specific type result
     | result.TypedOk (Some s) ->        
-        let ϕok = tchk.parse_fxty_expr (s, not (ed.is_flag_enabled flag.NoAutoGen)) |> snd            
+        let ϕok = tchk.parse_fxty_expr (s, not (ed.contains_flag flag.NoAutoGen)) |> snd            
         in
             try
                 let ϕres, infs1 = typecheck_expr_or_decl ()
-                let compare_test = if ed.is_flag_enabled flag.Verbatim then fxty_compare_test_verbatim else fxty_compare_test_eq
+                let compare_test = if ed.contains_flag flag.Verbatim then fxty_compare_test_verbatim else fxty_compare_test_eq
                 let b3 = compare_test ϕres ϕok
                 let infs = infs1 b3 @ expected_infos ϕok
                 let score =
@@ -524,22 +561,41 @@ let score_infos scores =
 let section_infos sec (span : TimeSpan) (scores : score list) =
     ["section", txt sec; "entries", fmt "%d" scores.Length; "cpu time", txt span.pretty; "results", pp_infos (score_infos scores)]
 
-let test_section (tchk : typechecker) ((sec, flags, entries) : section) =
-    let envs0 = tchk.envs
-    let scores, span = cputime (List.mapi (fun i -> test_entry tchk { name = sec; num = i; flags = flags })) entries
-    let infs = section_infos sec span scores
-    L.pp (L.msg High) (pp_infos infs)
-    if not <| flag.is_enabled flag.KeepBindingsAtEnd flags then
-        tchk.envs <- envs0
-    scores
+type tested_sections () =
+    let tbl = new Collections.Generic.Dictionary<string, score list> ()
+    
+    member __.search s =
+        match tbl.TryGetValue s with
+        | true, scores -> Some scores
+        | false, _     -> None
 
-let test_sections (secs : section list) =
-    let tchk = new typechecker ()
+    member __.add s scores = tbl.Add (s, scores)
+
+let private tested_sections = new tested_sections ()
+
+let rec test_section (tchk : typechecker) ((name, flags, entries) : section) =
+    match tested_sections.search name with
+    | Some scores -> scores
+    | None ->
+        let _ = flags |> flag.try_pick (function 
+            | flag.Dependencies secs -> Some <| test_sections tchk [ for name, flags, entries in secs do yield name, flag.KeepBindingsAtEnd :: flags, entries ]
+            | _ -> None)
+        let envs0 = tchk.envs
+        let scores, span = cputime (List.mapi (fun i -> test_entry tchk (new section_data (name, i, flags)))) entries
+        let infs = section_infos name span scores
+        L.pp (L.msg High) (pp_infos infs)
+        if not <| flag.contains flag.KeepBindingsAtEnd flags then
+            tchk.envs <- envs0
+        tested_sections.add name scores
+        scores
+
+and test_sections (tchk : typechecker) (secs : section list) =
     let scores, span = cputime (fun () -> List.map (test_section tchk) secs |> List.concat) () 
     let infs = section_infos (mappen_strings (fun (name, _, _) -> name) ", " secs) span scores
     L.pp (L.msg Unmaskerable) (pp_infos infs)
     List.sumBy (function score.Ok | score.Weak -> 1 | _ -> 0) scores
 
+let test_sections_from_scratch = test_sections (new typechecker ())
 
 
 // some shortcuts to be used by unit tests

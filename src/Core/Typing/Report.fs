@@ -349,6 +349,6 @@ module Hint =
     // TODO: this might become a warning that could be avoided by using a special instantiation operator ":>"
     let fxty_instantiation_via_annotation_in_binding loc x (tann : ty) (ϕinf : fxty) =
         H 6 loc High "annotated type %O is an instance of the inferred type %O, which is more generic. \
-        This means there is a loss of type information, which may prevent code using symbol %s from benefitting of first-class polymorphic. \
+        This means there is a loss of type information that may prevent code using symbol '%s' from benefitting of first-class polymorphism. \
         Remove this annotation unless you know exactly what you are doing."
             tann ϕinf x
