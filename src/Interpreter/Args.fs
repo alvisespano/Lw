@@ -58,13 +58,12 @@ let usage () =
 let private other s =
     filename <- s
 
-
 let private infos =
   [|
     Entry.bool "unicode" (fun b -> CC.Printing.dynamic.unicode <- b) "enable/disable Unicode output" (Some CC.Printing.dynamic.unicode)
     Entry.flag "greek" (fun b -> CC.Printing.dynamic.greek_tyvars <- true) "enable greek letters for type variables"
     
-    Entry.flag "interactive" (fun () -> C.mode <- C.Mode_Interactive) "enable interactive mode, possibly after interpretation of a given source file"
+    Entry.flag "console" (fun () -> C.mode <- C.Mode_Console) "enable console mode, possibly after the interpretation of a given source file"
     Entry.flag "unit-test" (fun () -> C.mode <- C.Mode_UnitTest) "switch to unit-test mode, ignoring input files and performing all tests"
 
     Entry.flag "pedantic" (fun () -> C.Log.cfg.all_thresholds <- Min) "set all log thresholds to level Min"

@@ -142,7 +142,7 @@ let test_unpack r =
 // test patterns
 
 let test_pattern_matching () =
-	let type solver a = { a : a }
+	let type solver t = { a : t }
 	let color_to_rgb x =
 		match x where solver with
 		| Red     -> 1., 0., 0.

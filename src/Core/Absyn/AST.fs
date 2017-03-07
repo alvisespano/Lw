@@ -50,7 +50,7 @@ let pretty_and_bindings bs = flatten_stringables "\nand " bs
 type [< NoEquality; NoComparison >] qbinding<'q, 'p, 'e> = { qual : 'q; patt : node<'p>; expr : node<'e> }
 with
     override this.ToString () = this.pretty
-    member this.pretty = sprintf "%O%O = %O" this.qual this.patt this.expr
+    member this.pretty = sprintf "%s%O = %O" (let s = this.qual.ToString () in if String.IsNullOrEmpty s then s else s + " ") this.patt this.expr
 
 //type rec_qbinding<'q, 'p, 't, 'e, 'a when 't :> annotable> = qbinding<'q, 'p, 't, 'e, 'a>
 
@@ -60,10 +60,10 @@ with
     member this.pretty = sprintf "%s%s = %O" this.id (soprintf " (%s)" (match this.pars with [] -> None | αs -> Some (flatten_stringables ", " αs))) this.kind
 
 // used by overload and data constructor bindings
-type [< NoComparison; NoEquality >] signature_binding<'t> = { id : ident; signature : node<'t> }
+type [< NoComparison; NoEquality >] signature_binding<'t when 't :> annotation> = { id : ident; signature : node<'t> }
 with
-    override __.ToString () = not_implemented "signature_binding.ToString: use pretty instead" __SOURCE_FILE__ __LINE__
-    member this.pretty sep = sprintf "%O %s %O" this.id sep this.signature
+    override this.ToString () = this.pretty //not_implemented "signature_binding.ToString: use pretty instead" __SOURCE_FILE__ __LINE__
+    member this.pretty = sprintf "%O %s %O" this.id this.signature.value.annotation_sep this.signature
 
 type [< NoComparison; NoEquality >] case<'p, 'e> = node<'p> * node<'e> option * node<'e>
 
@@ -293,7 +293,7 @@ type ty_udecl with
             | Td_RecBind []
             | Td_Kind []
             | Td_Bind []    -> unexpected "empty declaration list" __SOURCE_FILE__ __LINE__
-            | Td_RecBind bs     -> sprintf "type %s" (pretty_and_bindings bs)
+            | Td_RecBind bs -> sprintf "type %s" (pretty_and_bindings bs)
             | Td_Kind bs    -> sprintf "kind %s" (pretty_and_bindings bs)
             | Td_Bind bs    -> sprintf "let %s" (pretty_and_bindings bs)
 
@@ -536,7 +536,7 @@ type udecl with
             | D_Type bs           -> sprintf "type %s" (pretty_and_bindings bs)
             | D_Kind bs           -> sprintf "kind %s" (pretty_and_bindings bs)
             | D_Bind bs           -> sprintf "let %s" (pretty_and_bindings bs)
-            | D_RecBind bs            -> sprintf "let rec %s" (pretty_and_bindings bs)
+            | D_RecBind bs        -> sprintf "let rec %s" (pretty_and_bindings bs)
             | D_Overload bs       -> sprintf "overload %s" (pretty_and_bindings bs)
             | D_Open (q, e)       -> sprintf "open %O%O" q e
             | D_Datatype dt       -> sprintf "datatype %s :: %O with %s" dt.id dt.kind (flatten_stringables " | " dt.dataconss)

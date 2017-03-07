@@ -1,6 +1,17 @@
+<<<<<<< HEAD
+﻿
+1/3/2017:
+* UP: UnitTester supports new flag Dependencies
+
+
+28/2/2017:
+* Submitted a paper on Lw for ICFP 2017: "Ejecting Records and Injecting Constraints"
+* RAFACT: Interactive renamed to Console
+=======
 ﻿3/3/2017:
 * UP: several upgrades at UnitTester system for scoring warnings and hints
 * FIX: unit tests fixed and ALL working - including HML - except section "Higher Rank"
+>>>>>>> origin/development
 
 
 24/10/2016:

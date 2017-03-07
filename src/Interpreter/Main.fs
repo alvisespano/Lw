@@ -70,12 +70,11 @@ let interpret (envs : Intrinsic.envs) filename =
 
 [<EntryPoint>]
 let main _ =
-    AppDomain.CurrentDomain.ProcessExit.Add (fun _ -> printfn "scimmia"; Threading.Thread.Sleep(2))
+//    AppDomain.CurrentDomain.ProcessExit.Add (fun _ -> Threading.Thread.Sleep(2))
     let code =      
         try            
             Lw.Interpreter.Args.parse ()
-            #if RELEASE
-            #else
+            #if DEBUG
             L.msg Low "%s" (Args.credits ())
             L.debug Min "CWD: %s" System.Environment.CurrentDirectory
             #endif
@@ -84,7 +83,7 @@ let main _ =
             match Config.mode with
             | Config.Mode_UnitTest ->
                 Config.Log.Presets.set_thresholds_for_unit_test ()
-                UnitTester.test_sections UnitTest.All.all
+                UnitTester.test_sections_from_scratch UnitTest.All.all
 
             | Config.Mode_Interpreter ->
                 Config.Log.Presets.set_thresholds_for_interpreter ()
@@ -93,11 +92,11 @@ let main _ =
                     0
                 else failwith "no input source file specified"
 
-            | Config.Mode_Interactive ->
-                Config.Log.Presets.set_thresholds_for_interactive ()
+            | Config.Mode_Console ->
+                Config.Log.Presets.set_thresholds_for_console ()
                 if not (String.IsNullOrWhiteSpace Args.filename) then
                     envs <- interpret envs Args.filename
-                Interactive.read_and_eval_loop envs
+                Console.read_and_eval_loop envs
                 0
 
         with e -> handle_exn_and_return e

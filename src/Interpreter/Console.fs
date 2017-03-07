@@ -1,10 +1,10 @@
 ﻿(*
  * Lw
- * Interactive.fs: interactive console
+ * console.fs: interactive console
  * (C) Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
  
-module Lw.Interpreter.Interactive
+module Lw.Interpreter.Console
 
 open System
 open System.Threading
@@ -21,20 +21,20 @@ module A = Lw.Core.Absyn.Ast
 
 let print_env_diffs (Γ1 : jenv) Γ2 (Δ1 : Eval.venv) Δ2 =
     for (_, { jenv_value.scheme = σ }), (x, v) in Seq.zip (Γ2 - Γ1) (Δ2 - Δ1) do
-        L.log_line (Config.Interactive.pretty_prompt_decl x σ v)
+        L.log_line (Config.Console.pretty_prompt_decl x σ v)
 
 let print_decl_bindings (Γ : jenv) (Δ : Eval.venv) d =
     for x in Typing.Ops.vars_in_decl d do
         let σ = Γ.lookup (jenv_key.Var x)
         let v = Δ.lookup x
-        L.log_line (Config.Interactive.pretty_prompt_decl x σ v)
+        L.log_line (Config.Console.pretty_prompt_decl x σ v)
 
 let read_and_eval_loop (envs : Intrinsic.envs) =
     print_env_diffs Intrinsic.envs.envs0.Γ envs.Γ Intrinsic.envs.envs0.Δ envs.Δ
-    L.msg Low "entering interactive mode"
+    L.msg Low "entering console mode"
 
     let default_ctrl_c_handler = new ConsoleCancelEventHandler (fun _ _ ->
-        L.msg Unmaskerable "CTRL-C signal intercepted: forcing interactive exit"
+        L.msg Unmaskerable "CTRL-C signal intercepted: forcing console exit"
         exit Config.Exit.ctrl_c)
     Console.CancelKeyPress.AddHandler default_ctrl_c_handler
 
@@ -58,7 +58,7 @@ let read_and_eval_loop (envs : Intrinsic.envs) =
             async {
                 let p = Process.GetCurrentProcess ()
                 while true do
-                    do! Async.Sleep (int <| Config.Interactive.watchdog_interval * 1000.0)
+                    do! Async.Sleep (int <| Config.Console.watchdog_interval * 1000.0)
                     L.hint High "evaluation is in progress (cpu time: %s)..." p.UserProcessorTime.pretty
             }
         async {
@@ -75,7 +75,7 @@ let read_and_eval_loop (envs : Intrinsic.envs) =
     while true do
         try
             lock L <| fun () ->
-                printf "\n%s " Config.Interactive.prompt
+                printf "\n%s " Config.Console.prompt
                 stdout.Flush ()
             let W f e = watchdog (fun c -> cputime (f { Eval.context.cancellation_token = c } !rΔ) e)
             let tspan, vspan =
@@ -83,7 +83,7 @@ let read_and_eval_loop (envs : Intrinsic.envs) =
                 | A.Line_Expr e ->
                     let t, tspan = cputime (unM Typing.Inference.W_expr) e
                     let v, vspan = W Eval.eval_expr e
-                    L.log_line (Config.Interactive.pretty_prompt_expr t v)
+                    L.log_line (Config.Console.pretty_prompt_expr t v)
                     tspan, vspan
 
                 | A.Line_Decl d ->
@@ -93,7 +93,7 @@ let read_and_eval_loop (envs : Intrinsic.envs) =
                     rΔ := Δ'
                     print_decl_bindings Γ' Δ' d
                     tspan, vspan
-            let s = sprintf "-- typing %s / eval %s --" tspan.pretty vspan.pretty
+            let s = sprintf "-- typing %s / eval %s" tspan.pretty vspan.pretty
             L.log_line (sprintf "%s%s" (spaces (Console.BufferWidth - s.Length)) s)
 
         with :? OperationCanceledException -> ()

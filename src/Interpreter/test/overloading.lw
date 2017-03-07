@@ -1,11 +1,20 @@
 ﻿
-
 namespace Test
 
+// questa funziona
+let test1 () =
+    let f x = x
+    let g = f
+    let n = f 3
+    let h = f f
+    let k = h h
+    in
+        f, g, n, h
 
+// l'overloading invece non funziona con HML
 let test_overload_symbol_escape () =
     let overload f : 'a -> 'a
-    let over f x = x
+//    let over f x = x
     let over f x = x + 1
     in
         f
