@@ -52,11 +52,11 @@ type flag =
     | ShowWarnings
     | ShowHint of int
     | ShowHints
-    | Dont of flag
+    | No of flag
 with
     static member private fold_flags p flag flags =
         List.fold (fun r -> function flag' when flag = flag'      -> true
-                                   | Dont flag' when flag = flag' -> false
+                                   | No flag' when flag = flag' -> false
                                    | _                            -> r)
             false flags |> p
 

@@ -5,7 +5,7 @@ open Lw.Interpreter.UnitTester
 open Lw.Interpreter.UnitTester.Aux
 
 let hml =
-    "HML", [flag.KeepBindingsAtEnd; flag.HideHints],
+    "HML", [flag.KeepBindingsAtEnd; flag.HideHints ],
     [
     "let i x = x in i 1, i true, i",            typed_ok_as "int * bool * (forall 'a. 'a -> 'a)"
     "fun (i : forall 'a. 'a -> 'a) ->
