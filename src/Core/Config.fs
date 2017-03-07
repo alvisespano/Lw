@@ -183,18 +183,6 @@ module Parsing =
 module Report = 
     let syntax_error_code = 1
 
-// TODO: old implementation to be removed
-//    let mutable disabled_warnings : int Set = Set.empty       
-//    let mutable disabled_hints : int Set = Set.empty
-//
-//    let disable_warning n = disabled_warnings <- Set.add n disabled_warnings
-//    let enable_warning n = disabled_warnings <- Set.remove n disabled_warnings
-//    let disable_hint n = disabled_hints <- Set.add n disabled_hints
-//    let enable_hint n = disabled_hints <- Set.remove n disabled_hints
-//
-//    let is_warning_enabled n = not (Set.contains n disabled_warnings)
-//    let is_hint_enabled n = not (Set.contains n disabled_hints)
-
     // weak entities disabled by default
     let disabled_warnings : int Set = Set.empty       
     let disabled_hints : int Set = Set.empty

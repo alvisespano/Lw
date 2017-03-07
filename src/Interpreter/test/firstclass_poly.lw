@@ -5,6 +5,10 @@
 
 namespace Test 
 
+let id x = x
+
+let f () = let id : 'a -> 'a = id in id
+
 let auto (id : forall 'z. 'z -> 'z) = id
 
 (*

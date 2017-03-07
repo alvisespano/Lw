@@ -315,7 +315,7 @@ module Warn =
     let unused_quantified_type_variable loc α t =
         W 13 loc Normal "quantified type variable %O does not occur in type %O" α t
 
-    let unquantified_variables_in_type loc t =
+    let unquantified_variables_in_forall_annotation loc t =
         W 14 loc Low "type expression has unquantified type variables: %O" t
 
 

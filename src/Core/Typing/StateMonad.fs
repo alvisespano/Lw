@@ -401,27 +401,24 @@ type type_inference_builder (loc, ctx) =
             return! M.bind_Γ jk { mode = jm; scheme = { constraints = cs; fxty = ϕ } }
         }
 
-    member M.maybe_auto_geneneralize (t : ty) =
+    member M.auto_generalize is_hint_enabled (t : ty) =
         M {
-            let! ungeneralizables = M.get_ungeneralizable_vars
-            let αs = t.fv - ungeneralizables
-            if Set.isEmpty αs then return None
-            else
-                if t.is_unquantified then
-                    for α in αs do do! M.remove_scoped_var α    // remove newly quantified vars from scoped vars as if they were in a forall
-                    return Some (T_Foralls (Set.toList αs, t))
+            if ctx.is_top_level then
+                // autogen only when type expression occurs at top-level
+                let! ungeneralizables = M.get_ungeneralizable_vars
+                let αs = t.fv - ungeneralizables
+                if Set.isEmpty αs then return t
                 else
-                    if not (Set.isEmpty αs) then Report.Warn.unquantified_variables_in_type loc t
-                    return None
-        }
-
-    member M.auto_generalize is_hint_enabled t =
-        M {
-            let! ϕo = M.maybe_auto_geneneralize t
-            match ϕo with
-            | None    -> return t
-            | Some t' -> if is_hint_enabled then Report.Hint.auto_generalization_occurred loc t t'
-                         return t'
+                    if t.is_unquantified then
+                        // TODO: does this make sense?
+                        for α in αs do do! M.remove_scoped_var α    // remove newly quantified vars from scoped vars as if they were in a forall
+                        let r = T_Foralls (Set.toList αs, t)
+                        if is_hint_enabled then Report.Hint.auto_generalization_occurred loc t r
+                        return r
+                    else
+                        if not (Set.isEmpty αs) then Report.Warn.unquantified_variables_in_forall_annotation loc t
+                        return t
+            else return t
         }
 
     member M.extend_fresh_star =

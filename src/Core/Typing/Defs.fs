@@ -547,11 +547,11 @@ type ty with
             | T_Arrow (LArrow _ as t1, t2) -> sprintf "(%s) -> %s" (R t1) (R t2)
             | T_Arrow (t1, t2)             -> sprintf "%s -> %s" (R t1) (R t2)
 
-            | T_App (App s)          -> s
-            | T_Closure (x, _, τ, _) -> sprintf "<[%O]>" (Te_Lambda ((x, None), τ))
+            | T_App (App s)           -> s
+            | T_Closure (x, _, τ, _)  -> sprintf "<[%O]>" (Te_Lambda ((x, None), τ))
 
-            | T_ForallsK arg  -> pretty_forall (sprintf "%O" << T_Var) Config.Printing.dynamic.forall arg
-            | T_Forall _ as t -> unexpected_case __SOURCE_FILE__ __LINE__ t
+            | T_ForallsK arg          -> pretty_forall (sprintf "%O" << T_Var) Config.Printing.dynamic.forall arg
+            | T_Forall _ as t         -> unexpected_case __SOURCE_FILE__ __LINE__ t
         and R = pretty_kinded_wrapper R'
         in
             R this

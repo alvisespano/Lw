@@ -143,7 +143,7 @@ let check_rec_value_restriction ctx loc (t : ty) =
 //
 
 type type_inference_builder with
-    member inline M.extend_fv_of (t : ^t) =
+    member inline M.extend_with_fv_of (t : ^t) =
         M {
             for α, k in (^t : (member ftv : _) t) do
                 let! Q = M.get_Q
@@ -154,7 +154,7 @@ type type_inference_builder with
 let private W_fxty_annot ctx loc x (ϕann : fxty) (ϕinf : fxty) =
     let M = new type_inference_builder (loc, ctx)
     M {
-        do! M.extend_fv_of ϕann
+        do! M.extend_with_fv_of ϕann
         let! ϕ = M {
             match ϕann.maybe_ftype with
             | Some tann ->
@@ -201,7 +201,7 @@ let W_F_ty_annot_in_param ctx τo =
                     L.debug Low "lambda param annotation: %O ~~~> %O" τ t
                     return t
         }
-        do! M.extend_fv_of t
+        do! M.extend_with_fv_of t
         return t
     }
 
