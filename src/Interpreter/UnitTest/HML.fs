@@ -5,7 +5,7 @@ open Lw.Interpreter.UnitTester
 open Lw.Interpreter.UnitTester.Aux
 
 let hml =
-    "HML", [KeepBindingsAtEnd; ShowHints; ShowSuccessful; ShowWarnings; Dependencies [Basic.lists; Basic.hindley_milner]],
+    "HML", [KeepBindingsAtEnd; HideHints; Dependencies [Basic.lists; Basic.hindley_milner]],
     [
     "let i x = x in i 1, i true, i",            typed_ok_as "int * bool * (forall 'a. 'a -> 'a)"
     "fun (i : forall 'a. 'a -> 'a) ->
@@ -22,10 +22,11 @@ let hml =
     "let ids : list ('a -> 'a) = ids",                      typed_ok_as_ "forall 'a. list ('a -> 'a)" [Unbind]     // autogen takes place for top-level lets
     "let ids : forall 'a. list ('a -> 'a) = ids",           typed_ok_as_ "list ('a -> 'a)" [Unbind]                // this must be equivalent to the one above
 
-    "let id : 'a -> 'a = id in id 1, id true",              typed_ok_as "int * bool"
+    "let id : 'a -> 'a = id in id 1, id true",              wrong_type
+    "let id : forall 'a. 'a -> 'a = id in id 1, id true",   typed_ok_as_ "int * bool" [Unbind]
     "let id : 'a -> 'a = id in id",                         typed_ok_as_ "'a -> 'a" [NoAutoGen]
-    "let ids : list ('a -> 'a) = ids in ids",               typed_ok_as_ "list ('a -> 'a)" [NoAutoGen]
 
+    "let ids : list ('a -> 'a) = ids in ids",               typed_ok_as_ "list ('a -> 'a)" [NoAutoGen]
     "let ids : forall 'a. list ('a -> 'a) = ids in ids",    typed_ok_as "forall 'a. list ('a -> 'a)"
     "let ids : list (forall 'a. 'a -> 'a) = ids in ids",    typed_ok_as "list (forall 'a. 'a -> 'a)"
     "let ids : forall 'a. list ('a -> 'a) = ids in ids",    typed_ok_as "forall 'a. list ('a -> 'a)"
@@ -48,7 +49,7 @@ let hml =
 
     "let ids : forall 'a. list ('a -> 'a) = ids
      in
-        map poly ids",                          wrong_type_ [ShowHint 7]
+        map poly ids",                          wrong_type_ [ShowHint 12]
    
     "let ids : list ('a -> 'a) = ids
      in

@@ -215,7 +215,7 @@ let expected_static_error_infos T ecodeo =
 // entries and sections
 //
 
-type section_data ( (name, flags, entries) ) =
+type section_data (name, flags, entries) =
     member this.is_flag_enabled (|Flag|_|) = flag.is_enabled (|Flag|_|) this.flags
     member this.contains_flag (flg : flag) = flg.is_in this.flags
     member val name = name
@@ -223,30 +223,12 @@ type section_data ( (name, flags, entries) ) =
     abstract flags : flag list
     default val flags = flags
 
-type entry_data (name, num, flags, input) =
-    inherit section_data (name, num, flags)
-    new (sd : section_data, (input, (res, flags) : entry)) = new entry_data (sd.name, sd.num, sd.flags, input)
+type entry_data (sd : section_data, num, input, res, flags) =
+    inherit section_data (sd.name, sd.flags, sd.entries)
     member val input = input
     member val num = num
-    override val flags = base.flags @ flags
-
-
-//type [< NoComparison >] section_data = {
-//    name : string
-//    num : int
-//    flags : flag list
-//}
-//type entry_data = {
-//    section : section_data
-//    input : string
-//    flags : flag list
-//}
-//with
-//    member this.all_flags = this.flags @ this.section.flags
-//    member this.try_pick f = List.tryPick f this.all_flags
-//    member this.is_flag_enabled fl = is_enabled fl this.all_flags
-//    member this.enabled_flags = List.filter this.is_flag_enabled this.all_flags
-
+    member val res = res
+    override val flags = sd.flags @ flags
 
 let entry_info sec n = "entry", txt (sprintf "#%d in section \"%s\"" (n + 1) sec)
 let ok_or_no_info b doc = (txt (sprintf "(%s)" (if b then "OK" else "NO"))) <+> doc
@@ -303,9 +285,9 @@ let parse_expr_or_decl s =
            | e               -> unexpected "syntax error while parsing expression or declaration: %s\n%O" __SOURCE_FILE__ __LINE__ s e
 
 
-let test_entry (tchk : typechecker) (sd : section_data) (e : entry) =
-    let entry_infs = [ entry_info sd.name sd.num ]
-    let ed = new entry_data (sd, e)
+let test_entry (tchk : typechecker) (sd : section_data) num ((input, (res, flags)) : entry) =
+    let entry_infs = [ entry_info sd.name num ]
+    let ed = new entry_data (sd, num, input, res, flags)
 
     let print_result score msgs infs =
         let result =
@@ -417,8 +399,8 @@ let test_entry (tchk : typechecker) (sd : section_data) (e : entry) =
 
     // type equality
     | result.TypeEq (s2, is_eq) ->
-        log (txt "input:" </> txt s1 <+> txt "=" <+> txt s2)
-        let τ1, ϕ1 = tchk.parse_fxty_expr s1
+        log (txt "input:" </> txt input <+> txt "=" <+> txt s2)
+        let τ1, ϕ1 = tchk.parse_fxty_expr input
         let τ2, ϕ2 = tchk.parse_fxty_expr s2
         log (txt "parsed:" </> fmt "%O" τ1 <+> txt "=" <+> fmt "%O" τ2)
         let b1, b2, b3 = tyeq_compare_test ϕ1 ϕ2
@@ -460,7 +442,7 @@ let test_entry (tchk : typechecker) (sd : section_data) (e : entry) =
 
             with :? static_error as e ->
                 (score.Failed, sprintf "unwanted %s" (error_name_of_exn e)),
-                    static_error_infos s1 e @ expected_infos ϕok
+                    static_error_infos input e @ expected_infos ϕok
 
     // generic typability
     | result.TypedOk None ->        
@@ -470,7 +452,7 @@ let test_entry (tchk : typechecker) (sd : section_data) (e : entry) =
             in
                 (score.Ok, "typed successfully"), infs1
         with :? static_error as e ->
-            (score.Failed, sprintf "unwanted %s" (error_name_of_exn e)), static_error_infos s1 e
+            (score.Failed, sprintf "unwanted %s" (error_name_of_exn e)), static_error_infos input e
 
     // expected static error                
     | result.StaticError (T, codeo) ->
@@ -494,7 +476,7 @@ let test_entry (tchk : typechecker) (sd : section_data) (e : entry) =
                 | false, true  -> score.Failed, sprintf "wrong %s" errname
                 | false, false -> score.Failed, sprintf "wrong code %d and %s" e.code errname
             in
-                score, static_error_infos s1 e @ expected_static_error_infos T codeo
+                score, static_error_infos input e @ expected_static_error_infos T codeo
 
     // process score rusults
     |> fun (score0, infs) ->
@@ -535,11 +517,11 @@ let rec test_section (tchk : typechecker) (sec : section) =
     match tested_sections.search sd.name with
     | Some scores -> scores
     | None ->
-        let _ = flags |> flag.try_pick (function 
+        let _ = sd.flags |> flag.try_pick (function 
             | Dependencies secs -> Some <| test_sections tchk [ for name, flags, entries in secs do yield name, KeepBindingsAtEnd :: flags, entries ]
             | _ -> None)
         let envs0 = tchk.envs
-        let scores, span = cputime (List.mapi (test_entry tchk sd) sd.entries)
+        let scores, span = cputime (List.mapi (fun i e -> let r = test_entry tchk sd i e in r)) sd.entries
         let infs = section_infos sd.name span scores
         L.pp (L.msg High) (pp_infos infs)
         if not <| KeepBindingsAtEnd.is_in sd.flags then

@@ -20,10 +20,11 @@ module private InFSharp =
 let temp1 : section =
     "Temp1", [ShowSuccessful; Verbose; ShowHints; ShowWarnings],
     [
-    "let id x = x",                                         typed_ok_as "'a -> 'a"
-    "let id : 'a -> 'a = id in id 1, id true",              wrong_type
-    "let id : forall 'a. 'a -> 'a = id in id 1, id true",   typed_ok_as_ "int * bool" [Unbind]
-    "let id : 'a -> 'a = id in id",                         typed_ok_as_ "'a -> 'a" [NoAutoGen]
+    "let id x = x",                                 typed_ok_as "'a -> 'a"
+
+    "let ids : forall 'a. list ('a -> 'a) = ids
+     in
+        map poly ids",                              wrong_type_ [ShowHint 12]
     ]
 
 let all : section list =
