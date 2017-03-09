@@ -341,7 +341,10 @@ module Hint =
         H 3 loc Normal "datatype %s defines a data constructor %s whose type %O has type variables that cannot be generalized" c x tx
 
     let scoped_vars_wont_be_generalized loc what scoped_vars =
-        H 4 loc Min "scoped %s variable%s %s won't be generalized" what (if Seq.length scoped_vars > 1 then "s" else "") (flatten_stringables ", " scoped_vars)
+        H 4 loc Min "scoped %s variable%s %s %s not being generalized" what
+            (if Seq.length scoped_vars > 1 then "s" else "")
+            (flatten_stringables ", " scoped_vars)
+            (if Seq.length scoped_vars > 1 then "are" else "is")
 
     let auto_generalization_occurred loc t t' =
         H 5 loc Low "type annotation %O has been automatically generalized to %O" t t'
@@ -350,5 +353,11 @@ module Hint =
     let fxty_instantiation_via_annotation_in_binding loc x (tann : ty) (ϕinf : fxty) =
         H 6 loc High "annotated type %O is an instance of the inferred type %O, which is more generic. \
         This means there is a loss of type information that may prevent code using symbol '%s' from benefitting of first-class polymorphism. \
+        Remove this annotation unless you know exactly what you are doing."
+            tann ϕinf x
+
+    let instantiation_via_annotation_in_binding loc x (tann : ty) (ϕinf : fxty) =
+        H 7 loc High "annotated type %O is monomorphic, thus the inferred type %O is being instantiated. \
+        Symbol '%s' is losing polymorphism here. \
         Remove this annotation unless you know exactly what you are doing."
             tann ϕinf x

@@ -148,7 +148,7 @@ type ty with
         in
             S t
 
-    member t.instantiated = t.instantiate_wrt t.fv
+//    member t.instantiated = t.instantiate_wrt t.fv
 
     member t.nf =
         let r =

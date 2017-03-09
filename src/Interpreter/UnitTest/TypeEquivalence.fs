@@ -32,7 +32,7 @@ let type_equivalence : section =
     "forall 'a 'b. 'a -> 'b -> 'b",             type_eq "forall 'b 'a. 'a -> 'b -> 'b"
     "forall 'a 'b. 'a -> 'b -> 'b",             type_eq "forall 'b 'a. 'b -> 'a -> 'a"
     "forall 'a 'b. 'a -> 'b",                   type_neq "forall 'a. 'a -> int"
-    "forall 'a 'b. 'a -> 'b",                   type_neq_ "forall 'a 'b. 'a -> 'c" [flag.HideWarning 13]
+    "forall 'a 'b. 'a -> 'b",                   type_neq_ "forall 'a 'b. 'a -> 'c" [HideWarning 13]
 
     "forall 'a ('b :> _|_). 'a -> 'b",           type_eq "forall 'a. forall 'b. 'a -> 'b"
 

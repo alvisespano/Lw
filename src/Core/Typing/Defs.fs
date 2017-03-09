@@ -556,6 +556,7 @@ type ty with
         in
             R this
 
+    // an F-type is monomorphic when no quantification occurs at any level
     member this.is_monomorphic =
         match this with
         | T_Forall _        -> false
@@ -581,6 +582,7 @@ type ty with
         | T_Arrows ts     -> List.last ts
         | _               -> t
 
+    // an F-type is unquantified when no forall occurs at top-level
     member t.is_unquantified =
         match t with
         | T_Forall _ -> false
@@ -592,7 +594,7 @@ type ty with
 let Fx_ForallsQ (Q : prefix, ϕ : fxty) = Fx_Foralls (Seq.toList Q, ϕ)
 let FxU_ForallsQ (Q, t : ty) = Fx_ForallsQ (Q, Fx_F_Ty t)
 
-// all outer quantified vars are taken, both from the flex type and from possible F-type quantifiers, hence right hand is guaranteed unquantified
+// all outer quantified vars are taken, both from the flex type and from possible F-type quantifiers, hence right hand is granted unquantified
 let (|FxU_ForallsQ|FxU_Unquantified|FxU_Bottom|) = function
     | Fx_Foralls (qs, Fx_F_Ty (T_ForallsK (αks, t))) -> assert t.is_unquantified; FxU_ForallsQ (prefix.ofSeq qs + prefix.of_bottoms αks, t)
     | Fx_Foralls (qs, Fx_F_Ty t)                     -> assert t.is_unquantified; FxU_ForallsQ (prefix.ofSeq qs, t)
@@ -633,11 +635,12 @@ type fxty with
         | Fx_Forall ((α, ϕ1), ϕ2) -> let r2 = ϕ2.fv in if Set.contains α r2 then ϕ1.fv + (Set.remove α r2) else r2
         | Fx_F_Ty t               -> t.fv
 
-    member this.is_monomorphic =
-        match this with
-        | Fx_Bottom _
-        | Fx_Forall _ -> false
-        | Fx_F_Ty t   -> t.is_monomorphic
+// REMOVE
+//    member this.is_monomorphic =
+//        match this with
+//        | Fx_Bottom _
+//        | Fx_Forall _ -> false
+//        | Fx_F_Ty t   -> t.is_monomorphic
 
 
 

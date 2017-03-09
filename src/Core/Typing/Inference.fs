@@ -151,6 +151,7 @@ type type_inference_builder with
                     do! M.extend (α, Fx_Bottom k)            
         }
 
+[< Obsolete >]
 let private W_fxty_annot ctx loc x (ϕann : fxty) (ϕinf : fxty) =
     let M = new type_inference_builder (loc, ctx)
     M {
@@ -180,11 +181,46 @@ let W_fxty_annot_in_binding ctx x (τ : fxty_expr) (ϕinf : fxty) =
         do! M.kunify loc K_Star k
         let! ϕann = M {
             match ϕann.maybe_ftype with
-            | Some tann -> let! t = M.auto_generalize true tann in return Fx_F_Ty t // autogen when the annotation is a F-type
+            | Some tann -> let! t = M.auto_generalize true tann
+                           return Fx_F_Ty t
             | None      -> return ϕann
         }
-        return! W_fxty_annot ctx loc x ϕann ϕinf
+//        return! W_fxty_annot ctx loc x ϕann ϕinf
+
+        do! M.extend_with_fv_of ϕann
+        match ϕann.maybe_ftype with
+        | Some tann ->
+            do! M.subsume loc tann ϕinf
+            Report.Hint.fxty_instantiation_via_annotation_in_binding loc x tann ϕinf
+            yield tann
+        | None ->
+            yield! M.unify_fx loc ϕann ϕinf                       
+
+
+//        match ϕann.maybe_ftype, ϕinf.maybe_ftype with
+//        | Some tann, _ when tann.is_monomorphic ->
+//            match ϕinf with
+//            | FxU0_Bottom _ -> return unexpected_case __SOURCE_FILE__ __LINE__ "bottom inferred in annotated let-binding"
+//            | FxU0_ForallsQ (Q, t) ->
+//                let _, t = fxty.instantiate_unquantified (Q, t)
+//                do! M.unify loc tann t
+//                Report.Hint.instantiation_via_annotation_in_binding loc x tann ϕinf
+//                yield tann
+//
+//        | Some tann, Some tinf ->
+//            do! M.unify loc tann tinf
+//            yield tinf
+//
+//        | Some tann, None ->
+//            do! M.subsume loc tann ϕinf
+//            Report.Hint.fxty_instantiation_via_annotation_in_binding loc x tann ϕinf
+//            yield tann
+//
+//        | None, _ ->
+//            yield! M.unify_fx loc ϕann ϕinf                       
     }
+
+
 
 let W_F_ty_annot_in_param ctx τo =
     let M = new type_inference_builder (ctx)

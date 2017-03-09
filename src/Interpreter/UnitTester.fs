@@ -37,7 +37,7 @@ type logger with
     member this.test_failed fmt = this.log_unleveled "FAIL" Config.Log.test_failed_color fmt
 
 
-[< RequireQualifiedAccess; NoComparison >]
+[< NoComparison >]
 type flag =
     | Verbatim
     | Unbind
@@ -55,18 +55,9 @@ type flag =
     | ShowHints
     | Dependencies of section list
 with
-//    static member private fold_flags p flag flags = List.fold (fun r flag' -> flag = flag' || r) false flags |> p
-//    static member pick_when_enabled f flgs = List.pick f flgs
-//    static member is_enabled flg flgs = Option.isSome <| flag.pick_when_enabled (fun flg' -> if flg' = flg then Some () else None) flgs 
-//    static member private fold_flags p flag flags =
-//        List.fold (fun r -> function flag' when flag = flag'      -> true
-//                                   | Dont flag' when flag = flag' -> false
-//                                   | _                            -> r)
-//            false flags |> p
-
     static member try_pick (|Flag|_|) flgs = List.tryPick (function Flag x -> Some x | _ -> None) flgs
     static member is_enabled (|Flag|_|) flgs = Option.isSome <| flag.try_pick (|Flag|_|) flgs 
-    static member contains flg flgs = flag.is_enabled (function flg' when flg' = flg -> Some () | _ -> None) flgs
+    member flg.is_in flgs = flag.is_enabled (function flg' when flg' = flg -> Some () | _ -> None) flgs
 
 
 and [< NoComparison; CustomEquality; RequireQualifiedAccess  >] result =
@@ -224,18 +215,19 @@ let expected_static_error_infos T ecodeo =
 // entries and sections
 //
 
-type section_data (name, num, flags) =
+type section_data ( (name, flags, entries) ) =
     member this.is_flag_enabled (|Flag|_|) = flag.is_enabled (|Flag|_|) this.flags
-    member this.contains_flag flg = flag.contains flg this.flags
+    member this.contains_flag (flg : flag) = flg.is_in this.flags
     member val name = name
-    member val num = num
+    member val entries = entries
     abstract flags : flag list
     default val flags = flags
 
 type entry_data (name, num, flags, input) =
     inherit section_data (name, num, flags)
-    new (sd : section_data, input) = new entry_data (sd.name, sd.num, sd.flags, input)
+    new (sd : section_data, (input, (res, flags) : entry)) = new entry_data (sd.name, sd.num, sd.flags, input)
     member val input = input
+    member val num = num
     override val flags = base.flags @ flags
 
 
@@ -252,7 +244,7 @@ type entry_data (name, num, flags, input) =
 //with
 //    member this.all_flags = this.flags @ this.section.flags
 //    member this.try_pick f = List.tryPick f this.all_flags
-//    member this.is_flag_enabled fl = flag.is_enabled fl this.all_flags
+//    member this.is_flag_enabled fl = is_enabled fl this.all_flags
 //    member this.enabled_flags = List.filter this.is_flag_enabled this.all_flags
 
 
@@ -311,9 +303,9 @@ let parse_expr_or_decl s =
            | e               -> unexpected "syntax error while parsing expression or declaration: %s\n%O" __SOURCE_FILE__ __LINE__ s e
 
 
-let test_entry (tchk : typechecker) (sd : section_data) ((s1, (res, flags)) : entry) =
+let test_entry (tchk : typechecker) (sd : section_data) (e : entry) =
     let entry_infs = [ entry_info sd.name sd.num ]
-    let ed = new entry_data (sd, s1)
+    let ed = new entry_data (sd, e)
 
     let print_result score msgs infs =
         let result =
@@ -323,13 +315,13 @@ let test_entry (tchk : typechecker) (sd : section_data) ((s1, (res, flags)) : en
             | len -> pp_infos [ for i = 1 to len do yield sprintf Config.UnitTest.multiple_results_item_fmt i, txt msgs.[i - 1] ]
         let infs = pp_infos ([sprintf "result%s" (if List.length msgs > 1 then "s" else ""), result] @ infs)
         match score with
-        | score.Ok when ed.contains_flag flag.ShowSuccessful -> L.pp L.test_ok infs
+        | score.Ok when ed.contains_flag ShowSuccessful -> L.pp L.test_ok infs
         | score.Weak -> L.pp L.test_weak_ok infs
         | score.Failed -> L.pp L.test_failed infs
         | _ -> ()
 
     let log doc =
-        if ed.contains_flag flag.Verbose then
+        if ed.contains_flag Verbose then
             L.pp L.testing doc
 
 
@@ -353,52 +345,17 @@ let test_entry (tchk : typechecker) (sd : section_data) ((s1, (res, flags)) : en
         let h = Report.hints
         List.fold (fun (eh, ew) ->
                     function
-                    | flag.HideWarnings  -> w.disable_all; eh, U
-                    | flag.HideHints     -> h.disable_all; U, ew
-                    | flag.HideWarning n -> w.disable n; eh, ew.add n
-                    | flag.HideHint n    -> h.disable n; eh.add n, ew
+                    | HideWarnings  -> w.disable_all; eh, U
+                    | HideHints     -> h.disable_all; U, ew
+                    | HideWarning n -> w.disable n; eh, ew.add n
+                    | HideHint n    -> h.disable n; eh.add n, ew
 
-                    | flag.ShowWarnings  -> w.enable_all; eh, U
-                    | flag.ShowHints     -> h.enable_all; U, ew
-                    | flag.ShowWarning n -> w.enable n; eh, ew.add n
-                    | flag.ShowHint n    -> h.enable n; eh.add n, ew
+                    | ShowWarnings  -> w.enable_all; eh, U
+                    | ShowHints     -> h.enable_all; U, ew
+                    | ShowWarning n -> w.enable n; eh, ew.add n
+                    | ShowHint n    -> h.enable n; eh.add n, ew
                     | _                   -> eh, ew)
             (E, E) ed.flags
-
-//    let expected_hints, expected_warns =
-//        let expected_alert (|All|_|) (|One|_|) =
-//            if (ed.try_pick (|All|_|)).IsSome then Alert.cset.universe
-//            else Alert.cset.empty
-//            +
-//            Alert.cset [ for flag in ed.enabled_flags do
-//                                match flag with
-//                                | One n -> yield n
-//                                | _ -> () ]
-//        in
-//            expected_alert (function flag.ShowHints | flag.HideHints -> Some () | _ -> None) (function flag.HideHint n | flag.ShowHint n -> Some n | _ -> None),
-//            expected_alert (function flag.ShowWarnings | flag.HideWarnings -> Some () | _ -> None) (function flag.HideWarning n | flag.ShowWarning n -> Some n | _ -> None)
-//
-//    use D =
-//        let undo f unf = f (); disposable_by unf
-//        let restore (m : Alert.manager) = let x = m.state in fun () -> m.state <- x
-//        let disable_all (m : Alert.manager) = undo (fun () -> m.disable_all) (restore m)
-//        let disable1 (m : Alert.manager) n = undo (fun () -> m.disable n) (restore m)
-//        let enable_all (m : Alert.manager) = undo (fun () -> m.enable_all) (restore m)
-//        let enable1 (m : Alert.manager) n = undo (fun () -> m.enable n) (restore m)
-//        let w = Report.warnings
-//        let h = Report.hints
-//        let disps = 
-//            let a (cs : Alert.cset) m =
-//                if cs.is_empty then [disable_all m]
-//                elif cs.is_universe then [enable_all m]
-//                elif cs.is_complemented then unexpected_case __SOURCE_FILE__ __LINE__ "alert cset is complemented"
-//                else [ for n in cs.get |> fst do yield enable1 m n ]
-//            in
-//                a expected_warns w @ a expected_hints h
-//
-//
-//        in
-//            disposable_by (fun () -> for d in List.rev disps do d.Dispose ())   // dispose in reverse order for restoring state correctly
 
     let wh_infs () =
         let flatten (tr : Alert.tracer) (expected : Alert.cset) =
@@ -425,7 +382,7 @@ let test_entry (tchk : typechecker) (sd : section_data) ((s1, (res, flags)) : en
                 | D_RecBind [{ patt = ULo (P_SimpleVar (x, _)) }]
                 | D_Bind [{ patt = ULo (P_SimpleVar (x, _)) }] ->
                     let r = tchk.lookup_var_Γ x
-                    if ed.contains_flag flag.Unbind then
+                    if ed.contains_flag Unbind then
                         tchk.envs <- envs0
                         log (txt "restoring:" </> txt x <+> txt ":" <+> fxty (tchk.lookup_var_Γ x))
                     r
@@ -483,11 +440,11 @@ let test_entry (tchk : typechecker) (sd : section_data) ((s1, (res, flags)) : en
 
     // typability with specific type result
     | result.TypedOk (Some s) ->        
-        let ϕok = tchk.parse_fxty_expr (s, not (ed.contains_flag flag.NoAutoGen)) |> snd            
+        let ϕok = tchk.parse_fxty_expr (s, not (ed.contains_flag NoAutoGen)) |> snd            
         in
             try
                 let ϕres, infs1 = typecheck_expr_or_decl ()
-                let compare_test = if ed.contains_flag flag.Verbatim then fxty_compare_test_verbatim else fxty_compare_test_eq
+                let compare_test = if ed.contains_flag Verbatim then fxty_compare_test_verbatim else fxty_compare_test_eq
                 let b3 = compare_test ϕres ϕok
                 let infs = infs1 b3 @ expected_infos ϕok
                 let score =
@@ -573,20 +530,21 @@ type tested_sections () =
 
 let private tested_sections = new tested_sections ()
 
-let rec test_section (tchk : typechecker) ((name, flags, entries) : section) =
-    match tested_sections.search name with
+let rec test_section (tchk : typechecker) (sec : section) =
+    let sd = new section_data (sec)
+    match tested_sections.search sd.name with
     | Some scores -> scores
     | None ->
         let _ = flags |> flag.try_pick (function 
-            | flag.Dependencies secs -> Some <| test_sections tchk [ for name, flags, entries in secs do yield name, flag.KeepBindingsAtEnd :: flags, entries ]
+            | Dependencies secs -> Some <| test_sections tchk [ for name, flags, entries in secs do yield name, KeepBindingsAtEnd :: flags, entries ]
             | _ -> None)
         let envs0 = tchk.envs
-        let scores, span = cputime (List.mapi (fun i -> test_entry tchk (new section_data (name, i, flags)))) entries
-        let infs = section_infos name span scores
+        let scores, span = cputime (List.mapi (test_entry tchk sd) sd.entries)
+        let infs = section_infos sd.name span scores
         L.pp (L.msg High) (pp_infos infs)
-        if not <| flag.contains flag.KeepBindingsAtEnd flags then
+        if not <| KeepBindingsAtEnd.is_in sd.flags then
             tchk.envs <- envs0
-        tested_sections.add name scores
+        tested_sections.add sd.name scores
         scores
 
 and test_sections (tchk : typechecker) (secs : section list) =
@@ -606,7 +564,7 @@ module Aux =
 
     let typed_ok_as_ s l : result * flag list = result.TypedOk (Some s), l
     let typed_ok_ l : result * flag list = result.TypedOk None, l
-    let type_is_ s l : result * flag list = result.TypedOk (Some s), [flag.Verbatim] @ l
+    let type_is_ s l : result * flag list = result.TypedOk (Some s), [Verbatim] @ l
     let type_eq_ s l : result * flag list = result.TypeEq (s, true), l
     let type_neq_ s l : result * flag list = result.TypeEq (s, false), l
 

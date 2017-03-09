@@ -38,7 +38,7 @@ let type_annotations =
     ]
 
 let scoped_type_variables =
-    "Scoped Type Variables", [flag.HideHints],
+    "Scoped Type Variables", [HideHints],
     [ 
     "let i (x : 'bar) = x in i 1, i true, i",   wrong_type     // this is considered non-top-level also in OCaml, so no generalization
     "let y =
@@ -48,7 +48,7 @@ let scoped_type_variables =
     ]
 
 let lists =
-    "Lists", [flag.KeepBindingsAtEnd],
+    "Lists", [KeepBindingsAtEnd],
     [
     "let rec map f = function
         | [] -> []
@@ -69,7 +69,7 @@ let lists =
     ]
 
 let hindley_milner =
-    "Hindley-Milner", [flag.KeepBindingsAtEnd],
+    "Hindley-Milner", [KeepBindingsAtEnd],
     [
     "fun x -> x",                               typed_ok_as "forall 'a. 'a -> 'a"
     "fun f x -> f x",                           typed_ok_as "forall 'a 'b. ('a -> 'b) -> 'a -> 'b"

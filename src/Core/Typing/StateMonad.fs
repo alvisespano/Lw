@@ -411,7 +411,7 @@ type type_inference_builder (loc, ctx) =
                 else
                     if t.is_unquantified then
                         // TODO: does this make sense?
-                        for α in αs do do! M.remove_scoped_var α    // remove newly quantified vars from scoped vars as if they were in a forall
+                        for α in αs do do! M.remove_scoped_var α    // remove newly quantified vars from scoped vars because they are going to be generalized
                         let r = T_Foralls (Set.toList αs, t)
                         if is_hint_enabled then Report.Hint.auto_generalization_occurred loc t r
                         return r

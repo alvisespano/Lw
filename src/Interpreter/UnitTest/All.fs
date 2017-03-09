@@ -18,51 +18,20 @@ module private InFSharp =
 
 
 let temp1 : section =
-    "Temp1", [flag.ShowSuccessful; flag.Verbose],
+    "Temp1", [ShowSuccessful; Verbose; ShowHints; ShowWarnings],
     [
-    "forall 'a 'b. 'a -> 'b",                   type_neq_ "forall 'a 'b. 'a -> 'c" [flag.HideWarning 13]
-    "int",                                      type_eq "int"
-
-    "let id x = x",                             typed_ok_as "'a -> 'a"
-    "let ids = [id]",                           typed_ok_as "forall ('a :> forall 'b. 'b -> 'b). list 'a"
-
-    // TODO: move these to real test sections
-    "let ids : list ('a -> 'a) = ids in ids",               typed_ok_as_ "list ('a -> 'a)" [flag.NoAutoGen; flag.ShowHints]
-    "let ids : list ('a -> 'a) = ids",                      typed_ok_as_ "forall 'a. list ('a -> 'a)" [flag.Unbind; flag.ShowHints; flag.ShowWarnings]
-
-    "let ids : forall 'a. list ('a -> 'a) = ids in ids",    typed_ok_as_ "forall 'a. list ('a -> 'a)" [flag.HideHint 6]
-    "let ids : list (forall 'a. 'a -> 'a) = ids in ids",    typed_ok_as_ "list (forall 'a. 'a -> 'a)" [flag.HideHint 6]
-
-    "let poly (f : forall 'a. 'a -> 'a) =
-        f 1, f true",                           typed_ok_as "(forall 'a. 'a -> 'a) -> int * bool"
-
-    "let rec map f = function
-        | [] -> []
-        | x :: xs -> f x :: map f xs",          typed_ok_as "('a -> 'b) -> list 'a -> list 'b"
-            
-    "let ids : list (forall 'a. 'a -> 'a) = ids
-     in
-        map poly ids",                          typed_ok_as "list (int * bool)"
-
-    "let ids : list ('a -> 'a) = ids
-     in
-        map poly ids",                          wrong_type
-
-    "let ids : forall 'a. list ('a -> 'a) = ids
-     in
-        map poly ids",                          wrong_type
-
-    "let ids : forall ('a :> forall 'b. 'b -> 'b) . list 'a = ids
-     in
-        map poly ids",                          typed_ok_as "list (int * bool)"
+    "let id x = x",                                         typed_ok_as "'a -> 'a"
+    "let id : 'a -> 'a = id in id 1, id true",              wrong_type
+    "let id : forall 'a. 'a -> 'a = id in id 1, id true",   typed_ok_as_ "int * bool" [Unbind]
+    "let id : 'a -> 'a = id in id",                         typed_ok_as_ "'a -> 'a" [NoAutoGen]
     ]
 
 let all : section list =
     [
-//    [temp1]
+    [temp1]
 //    Other.all   // misc custom tests for non-language bits
 //    TypeEquivalence.all
 //    Basic.all   // needed as they introduce some basic bindings
-    HML.all
+//    HML.all
     ] |> List.concat
     

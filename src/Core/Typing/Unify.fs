@@ -188,77 +188,77 @@ module internal Mgu =
         and mgu (ctx : uni_context) Q0 t1_ t2_ : prefix * tksubst =
             let loc = ctx.loc
             let rec R (Q0 : prefix) (t1 : ty) (t2 : ty) =
-              #if DEBUG_UNI && DEBUG_UNI_DEEP
-              L.uni Low "[mgu] %O == %O\n      Q = %O" t1 t2 Q0
-              let Q, θ as r =
-              #endif
-                #if ENFORCE_NF_IN_UNI
-                let t1 = t1.nf
-                let t2 = t2.nf
+                #if DEBUG_UNI && DEBUG_UNI_DEEP
+                L.uni Low "[mgu] %O == %O\n      Q = %O" t1 t2 Q0
                 #endif
-                assert t1.is_nf
-                assert t2.is_nf
-                match t1, t2 with
-                | T_Cons (x, k1), T_Cons (y, k2) when x = y -> Q0, kmgu ctx k1 k2
-                | T_Var (α, k1), T_Var (β, k2) when α = β   -> Q0, kmgu ctx k1 k2
+                let Q, θ as r =
+                    #if ENFORCE_NF_IN_UNI
+                    let t1 = t1.nf
+                    let t2 = t2.nf
+                    #endif
+                    assert t1.is_nf
+                    assert t2.is_nf
+                    match t1, t2 with
+                    | T_Cons (x, k1), T_Cons (y, k2) when x = y -> Q0, kmgu ctx k1 k2
+                    | T_Var (α, k1), T_Var (β, k2) when α = β   -> Q0, kmgu ctx k1 k2
                                       
-                | (T_Row _ as s), T_Row_Ext (l, t, (T_Row (_, ρo) as r)) ->
-                    let t', s', tθ1 = rewrite_row loc t1 t2 s l
-                    let θ1 = !> tθ1
-                    Option.iter (fun ρ -> if Set.contains ρ tθ1.dom then Report.Error.row_tail_circularity loc ρ tθ1) ρo
-                    let Q2, θ2 = R Q0 (S θ1 t) (S θ1 t')
-                    let Q3, θ3 = let θ = θ2 ** θ1 in R Q2 (S θ r) (S θ s')
-                    in
-                        Q3, θ3 ** θ2 ** θ1
+                    | (T_Row _ as s), T_Row_Ext (l, t, (T_Row (_, ρo) as r)) ->
+                        let t', s', tθ1 = rewrite_row loc t1 t2 s l
+                        let θ1 = !> tθ1
+                        Option.iter (fun ρ -> if Set.contains ρ tθ1.dom then Report.Error.row_tail_circularity loc ρ tθ1) ρo
+                        let Q2, θ2 = R Q0 (S θ1 t) (S θ1 t')
+                        let Q3, θ3 = let θ = θ2 ** θ1 in R Q2 (S θ r) (S θ s')
+                        in
+                            Q3, θ3 ** θ2 ** θ1
 
-                | T_ForallK ((α, k1), t1), T_ForallK ((β, k2), t2) ->
-                    let θ0 = kmgu ctx k1 k2
-                    let tc, c = ty.fresh_skolem k1
-                    let θ1 = !> (new tsubst (α, tc)) ** θ0
-                    let θ2 = !> (new tsubst (β, tc)) ** θ0
-                    let Q1, θ1 = R Q0 (S θ1 t1) (S θ2 t2)
-                    check_skolems_escape ctx [c] (Q1, θ1)
-                    Q1, θ1
+                    | T_ForallK ((α, k1), t1), T_ForallK ((β, k2), t2) ->
+                        let θ0 = kmgu ctx k1 k2
+                        let tc, c = ty.fresh_skolem k1
+                        let θ1 = !> (new tsubst (α, tc)) ** θ0
+                        let θ2 = !> (new tsubst (β, tc)) ** θ0
+                        let Q1, θ1 = R Q0 (S θ1 t1) (S θ2 t2)
+                        check_skolems_escape ctx [c] (Q1, θ1)
+                        Q1, θ1
 
-                | T_Var (α1, k1), T_NamedVar (α2, k2) // prefer propagating named over anonymous vars in substitutions
-                | T_NamedVar (α2, k2), T_Var (α1, k1)
-                | T_Var (α1, k1), T_Var (α2, k2) ->
-                    let θ0 = kmgu ctx k1 k2
-                    let ϕ1 = Q0.lookup α1
-                    let ϕ2 = Q0.lookup α2
-                    // occurs check between one tyvar into the other's type bound and the other way round
-                    let check_wrt α t = if check_circularity_wrt α Q0 t then let S = S θ0 in Report.Error.type_circularity loc (S t1_) (S t2_) (T_Var (α, t.kind)) (S t2_)
-                    check_wrt α1 ϕ2
-                    check_wrt α2 ϕ1
-                    let Q1, θ1, ϕ = let S = subst_fxty θ0 in mgu_fx ctx Q0 (S ϕ1) (S ϕ2)
-                    let Q2, θ2 = Q1.update_with_subst (α1, T_Var (α2, k2))   // do not use t2 here! it would always refer to right-hand type of the pattern, and in case of reversed named var it would refer to α1!
-                    let Q3, θ3 = Q2.update_with_bound (α2, ϕ)
-                    in
-                        Q3, θ3 ** θ2 ** θ1 ** θ0
+                    | T_Var (α1, k1), T_NamedVar (α2, k2) // prefer propagating named over anonymous vars in substitutions
+                    | T_NamedVar (α2, k2), T_Var (α1, k1)
+                    | T_Var (α1, k1), T_Var (α2, k2) ->
+                        let θ0 = kmgu ctx k1 k2
+                        let ϕ1 = Q0.lookup α1
+                        let ϕ2 = Q0.lookup α2
+                        // occurs check between one tyvar into the other's type bound and the other way round
+                        let check_wrt α t = if check_circularity_wrt α Q0 t then let S = S θ0 in Report.Error.type_circularity loc (S t1_) (S t2_) (T_Var (α, t.kind)) (S t2_)
+                        check_wrt α1 ϕ2
+                        check_wrt α2 ϕ1
+                        let Q1, θ1, ϕ = let S = subst_fxty θ0 in mgu_fx ctx Q0 (S ϕ1) (S ϕ2)
+                        let Q2, θ2 = Q1.update_with_subst (α1, T_Var (α2, k2))   // do not use t2 here! it would always refer to right-hand type of the pattern, and in case of reversed named var it would refer to α1!
+                        let Q3, θ3 = Q2.update_with_bound (α2, ϕ)
+                        in
+                            Q3, θ3 ** θ2 ** θ1 ** θ0
 
-                | T_Var (α, k), t
-                | t, T_Var (α, k) ->
-                    let ϕ = Q0.lookup α
-                    let θ0 = kmgu ctx k t.kind
-                    // occurs check
-                    if check_circularity_wrt α Q0 (Fx_F_Ty t) then let S = S θ0 in Report.Error.type_circularity loc (S t1_) (S t2_) (S (T_Var (α, k))) (S t)
-                    let Q1, θ1 = subsume ctx Q0 (S θ0 t) (subst_fxty θ0 ϕ)
-                    let Q2, θ2 = let S = S (θ1 ** θ0) in Q1.update_with_subst (α, S t)
-                    in
-                        Q2, θ2 ** θ1 ** θ0
+                    | T_Var (α, k), t
+                    | t, T_Var (α, k) ->
+                        let ϕ = Q0.lookup α
+                        let θ0 = kmgu ctx k t.kind
+                        // occurs check
+                        if check_circularity_wrt α Q0 (Fx_F_Ty t) then let S = S θ0 in Report.Error.type_circularity loc (S t1_) (S t2_) (S (T_Var (α, k))) (S t)
+                        let Q1, θ1 = subsume ctx Q0 (S θ0 t) (subst_fxty θ0 ϕ)
+                        let Q2, θ2 = let S = S (θ1 ** θ0) in Q1.update_with_subst (α, S t)
+                        in
+                            Q2, θ2 ** θ1 ** θ0
 
-                | T_App (t1, t2), T_App (t1', t2') ->
-                    let θ0 = kmgu ctx (K_Arrow (t2.kind, kind.fresh_var)) t1.kind ** kmgu ctx (K_Arrow (t2'.kind, kind.fresh_var)) t1'.kind
-                    let Q1, θ1 = let S = S θ0 in R Q0 (S t1) (S t1')
-                    let Q2, θ2 = let S = S (θ1 ** θ0) in R Q1 (S t2) (S t2')
-                    in
-                        Q2, θ2 ** θ1 ** θ0
+                    | T_App (t1, t2), T_App (t1', t2') ->
+                        let θ0 = kmgu ctx (K_Arrow (t2.kind, kind.fresh_var)) t1.kind ** kmgu ctx (K_Arrow (t2'.kind, kind.fresh_var)) t1'.kind
+                        let Q1, θ1 = let S = S θ0 in R Q0 (S t1) (S t1')
+                        let Q2, θ2 = let S = S (θ1 ** θ0) in R Q1 (S t2) (S t2')
+                        in
+                            Q2, θ2 ** θ1 ** θ0
 
-                | t1, t2 -> Report.Error.type_mismatch loc t1_ t2_ t1 t2
-              #if DEBUG_UNI && DEBUG_UNI_DEEP
-              L.uni Low "[mgu=] %O == %O\n       %O\n       Q' = %O" t1 t2 θ Q
-              r
-              #endif
+                    | t1, t2 -> Report.Error.type_mismatch loc t1_ t2_ t1 t2
+                #if DEBUG_UNI && DEBUG_UNI_DEEP
+                L.uni Low "[mgu=] %O == %O\n       %O\n       Q' = %O" t1 t2 θ Q
+                #endif
+                r
             #if DEBUG_UNI && !DEBUG_UNI_DEEP
             L.uni Low "[mgu] %O == %O\n      Q = %O" t1_ t2_ Q0
             #endif
