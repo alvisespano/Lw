@@ -618,7 +618,7 @@ type fxty with
             | Fx_Foralls arg   -> pretty_forall prefix.pretty_item Config.Printing.dynamic.flex_forall arg
             | Fx_Forall _ as ϕ -> unexpected_case __SOURCE_FILE__ __LINE__ ϕ
         and R = function
-            | Fx_F_Ty _ as ϕ -> R' ϕ    // prevent double-wrapping an F-type
+            | Fx_F_Ty _ as ϕ -> R' ϕ    // prevents double wrapping of an F-type
             | ϕ              -> pretty_kinded_wrapper R' ϕ
         in
             R this
@@ -635,12 +635,12 @@ type fxty with
         | Fx_Forall ((α, ϕ1), ϕ2) -> let r2 = ϕ2.fv in if Set.contains α r2 then ϕ1.fv + (Set.remove α r2) else r2
         | Fx_F_Ty t               -> t.fv
 
-// REMOVE
-//    member this.is_monomorphic =
-//        match this with
-//        | Fx_Bottom _
-//        | Fx_Forall _ -> false
-//        | Fx_F_Ty t   -> t.is_monomorphic
+    [< Obsolete >]
+    member this.is_monomorphic =
+        match this with
+        | Fx_Bottom _
+        | Fx_Forall _ -> false
+        | Fx_F_Ty t   -> t.is_monomorphic
 
 
 

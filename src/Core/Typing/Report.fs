@@ -37,6 +37,7 @@ type Globals.logger with
         this.cont <- fun () -> N.Dispose ()
         l
 
+// TODO: redesign this and how the interactive console prompts
 let inline prompt ctx prefixes x (t1 : ^t1) t2o =
     let is_top_level = (^a : (member is_top_level : bool) ctx)
     let log =
@@ -352,12 +353,7 @@ module Hint =
     // TODO: this might become a warning that could be avoided by using a special instantiation operator ":>"
     let fxty_instantiation_via_annotation_in_binding loc x (tann : ty) (ϕinf : fxty) =
         H 6 loc High "annotated type %O is an instance of the inferred type %O, which is more generic. \
-        This means there is a loss of type information that may prevent code using symbol '%s' from benefitting of first-class polymorphism. \
+        This means there is a loss of type information that may prevent code using symbol '%s' from benefitting of polymorphism. \
         Remove this annotation unless you know exactly what you are doing."
             tann ϕinf x
 
-    let instantiation_via_annotation_in_binding loc x (tann : ty) (ϕinf : fxty) =
-        H 7 loc High "annotated type %O is monomorphic, thus the inferred type %O is being instantiated. \
-        Symbol '%s' is losing polymorphism here. \
-        Remove this annotation unless you know exactly what you are doing."
-            tann ϕinf x

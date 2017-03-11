@@ -12,6 +12,7 @@ open System.Diagnostics
 open Lw.Core
 open Lw.Core.Globals
 open Lw.Interpreter.Globals
+open Lw.Core.Typing.Report
 open Lw.Interpreter.Intrinsic
 open Lw.Core.Typing.Defs
 open FSharp.Common.Log
@@ -21,13 +22,13 @@ module A = Lw.Core.Absyn.Ast
 
 let print_env_diffs (Γ1 : jenv) Γ2 (Δ1 : Eval.venv) Δ2 =
     for (_, { jenv_value.scheme = σ }), (x, v) in Seq.zip (Γ2 - Γ1) (Δ2 - Δ1) do
-        L.log_line (Config.Console.pretty_prompt_decl x σ v)
+        L.norm L.log_line (Config.Console.pretty_prompt_decl x σ v)
 
 let print_decl_bindings (Γ : jenv) (Δ : Eval.venv) d =
     for x in Typing.Ops.vars_in_decl d do
         let σ = Γ.lookup (jenv_key.Var x)
         let v = Δ.lookup x
-        L.log_line (Config.Console.pretty_prompt_decl x σ v)
+        L.norm L.log_line (Config.Console.pretty_prompt_decl x σ v)
 
 let read_and_eval_loop (envs : Intrinsic.envs) =
     print_env_diffs Intrinsic.envs.envs0.Γ envs.Γ Intrinsic.envs.envs0.Δ envs.Δ

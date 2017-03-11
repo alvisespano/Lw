@@ -1,4 +1,8 @@
 ﻿
+10/3/2017:
+* FIX: fixes to type annotations etc. that made HML work
+
+
 3/3/2017:
 * UP: several upgrades at UnitTester system for scoring warnings and hints
 * FIX: unit tests fixed and ALL working - including HML - except section "Higher Rank"

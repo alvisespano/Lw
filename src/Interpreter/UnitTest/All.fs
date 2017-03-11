@@ -18,9 +18,9 @@ module private InFSharp =
 
 
 let temp1 : section =
-    "Temp1", [ShowSuccessful; Verbose; ShowHints; ShowWarnings],
+    "Temp1", [ShowSuccessful; Verbose; ShowHints; ShowWarnings; Dependencies (Basic.all @ [HML.defs])],
     [
-    "let id x = x",                                 typed_ok_as "'a -> 'a"
+    "let ids = [id]",                               typed_ok
 
     "let ids : forall 'a. list ('a -> 'a) = ids
      in
@@ -29,10 +29,10 @@ let temp1 : section =
 
 let all : section list =
     [
-    [temp1]
-//    Other.all   // misc custom tests for non-language bits
-//    TypeEquivalence.all
-//    Basic.all   // needed as they introduce some basic bindings
-//    HML.all
+//    [temp1]
+    Other.all   // misc custom tests for non-language bits
+    TypeEquivalence.all
+    Basic.all   // needed as they introduce some basic bindings
+    HML.all
     ] |> List.concat
     

@@ -55,8 +55,9 @@ type flag =
     | ShowHints
     | Dependencies of section list
 with
-    static member try_pick (|Flag|_|) flgs = List.tryPick (function Flag x -> Some x | _ -> None) flgs
-    static member is_enabled (|Flag|_|) flgs = Option.isSome <| flag.try_pick (|Flag|_|) flgs 
+//    static member try_pick (|Flag|_|) flgs = List.tryPick (function Flag x -> Some x | _ -> None) flgs
+    static member choose (|Flag|_|) flgs = List.choose (function Flag x -> Some x | _ -> None) flgs
+    static member is_enabled (|Flag|_|) flgs = Option.isSome <| List.tryPick (|Flag|_|) flgs 
     member flg.is_in flgs = flag.is_enabled (function flg' when flg' = flg -> Some () | _ -> None) flgs
 
 
@@ -517,7 +518,7 @@ let rec test_section (tchk : typechecker) (sec : section) =
     match tested_sections.search sd.name with
     | Some scores -> scores
     | None ->
-        let _ = sd.flags |> flag.try_pick (function 
+        let _ = sd.flags |> flag.choose (function 
             | Dependencies secs -> Some <| test_sections tchk [ for name, flags, entries in secs do yield name, KeepBindingsAtEnd :: flags, entries ]
             | _ -> None)
         let envs0 = tchk.envs

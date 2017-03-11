@@ -13,6 +13,8 @@ open Lw.Core.Absyn.Misc
 open Lw.Core.Absyn.Var
 open Lw.Core.Absyn.Kind
 open Lw.Core.Absyn.Sugar
+open Lw.Core.Typing.Defs
+open Lw.Core.Typing.Ops
 open Lw.Core.Absyn.Ast
 open FSharp.Common
 
@@ -31,8 +33,9 @@ let mutable mode = Mode_Interpreter
 
 module Console =
     let prompt = ">"
-    let pretty_prompt_decl x σ v = sprintf "%s : %O = %O" x σ v
-    let pretty_prompt_expr σ v = pretty_prompt_decl "_" σ v
+
+    let pretty_prompt_decl (x : string) t v = sprintf "%s : %O\n%s = %O" x t (new String (' ', x.Length)) v
+    let pretty_prompt_expr t v = pretty_prompt_decl "_" t v
     let watchdog_interval = 5.0<sec>
     let pretty_closure_max_length = 30
     let pretty_expr (e : expr) = truncate_string_with_ellipsis pretty_closure_max_length e.pretty

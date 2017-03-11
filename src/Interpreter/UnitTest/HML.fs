@@ -4,6 +4,18 @@ module Lw.Interpreter.UnitTest.HML
 open Lw.Interpreter.UnitTester
 open Lw.Interpreter.UnitTester.Aux
 
+let defs =
+    "Defs", [KeepBindingsAtEnd; Dependencies [Basic.lists; Basic.hindley_milner]],
+    [
+    "let ids = single id",                      typed_ok_as "forall ('a :> forall 'b. 'b -> 'b). list 'a"    
+    "let const x y = x",                        typed_ok_as "forall 'a 'b. 'a -> 'b -> 'a"
+    "let const2 x y = y",                       typed_ok_as "forall 'a 'b. 'a -> 'b -> 'b"
+    "let choose x y = if x = y then x else y",  typed_ok_as "forall 'a. 'a -> 'a -> 'a"
+    "let poly (f : forall 'a. 'a -> 'a) =
+        f 1, f true",                           typed_ok_as "(forall 'a. 'a -> 'a) -> int * bool"
+    ]
+
+
 let hml =
     "HML", [KeepBindingsAtEnd; HideHints; Dependencies [Basic.lists; Basic.hindley_milner]],
     [
@@ -12,10 +24,6 @@ let hml =
         (i 1, i true)",                         typed_ok_as "(forall 'a. 'a -> 'a) -> int * bool"
     "single id",                                typed_ok_as "forall ('a :> forall 'b. 'b -> 'b). list 'a"
     "[id]",                                     typed_ok_as "forall ('a :> forall 'b. 'b -> 'b). list 'a"
-    "let ids = single id",                      typed_ok_as "forall ('a :> forall 'b. 'b -> 'b). list 'a"
-    "let const x y = x",                        typed_ok_as "forall 'a 'b. 'a -> 'b -> 'a"
-    "let const2 x y = y",                       typed_ok_as "forall 'a 'b. 'a -> 'b -> 'b"
-    "let choose x y = if x = y then x else y",  typed_ok_as "forall 'a. 'a -> 'a -> 'a"
     "choose (fun x y -> x) (fun x y -> y)",     typed_ok_as "forall 'a. 'a -> 'a -> 'a"
     "choose id",                                typed_ok_as "forall ('a :> forall 'b. 'b -> 'b). 'a -> 'a"
 
@@ -32,8 +40,6 @@ let hml =
     "let ids : forall 'a. list ('a -> 'a) = ids in ids",    typed_ok_as "forall 'a. list ('a -> 'a)"
     "let ids : list (forall 'a. 'a -> 'a) = ids in ids",    typed_ok_as "list (forall 'a. 'a -> 'a)"
 
-    "let poly (f : forall 'a. 'a -> 'a) =
-        f 1, f true",                           typed_ok_as "(forall 'a. 'a -> 'a) -> int * bool"
         
     "app poly",                                 typed_ok_as "(forall 'a. 'a -> 'a) -> int * bool"
     "app poly id",                              typed_ok_as "int * bool"
@@ -129,6 +135,7 @@ let higher_rank =
 
 let all : section list =
     [
+    defs
     hml
     higher_rank
     ]
