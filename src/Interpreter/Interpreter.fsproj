@@ -9,7 +9,7 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>Interpreter</RootNamespace>
     <AssemblyName>Interpreter</AssemblyName>
-    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <TargetFSharpCoreVersion>4.4.0.0</TargetFSharpCoreVersion>
     <Name>Interpreter</Name>
@@ -120,7 +120,6 @@
     <PreBuildEvent />
   </PropertyGroup>
   <ItemGroup>
-    <None Include="App.config" />
     <Content Include="packages.config" />
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Config.fs" />
@@ -147,11 +146,13 @@
       <HintPath>..\packages\FSharp.Core.3.1.2.5\lib\net40\FSharp.Core.dll</HintPath>
       <Private>True</Private>
     </Reference-->
-    <Reference Include="FSharp.Core, Version=4.4.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" />
+    <Reference Include="FSharp.Core">
+      <HintPath>..\packages\FSharp.Core.4.1.0.2\lib\net45\FSharp.Core.dll</HintPath>
+    </Reference>
+    <!--<Reference Include="FSharp.Core, Version=4.4.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" />-->
     <Reference Include="FSharp.Data.TypeProviders" />
     <Reference Include="FsLexYacc.Runtime">
-      <HintPath>..\packages\FsLexYacc.Runtime.6.1.0\lib\net40\FsLexYacc.Runtime.dll</HintPath>
-      <Private>True</Private>
+      <HintPath>..\packages\FsLexYacc.Runtime.7.0.5\lib\portable-net45+netcore45+wpa81+wp8+MonoAndroid10+MonoTouch10\FsLexYacc.Runtime.dll</HintPath>
     </Reference>
     <Reference Include="mscorlib" />
     <Reference Include="PPrint">
@@ -173,6 +174,9 @@
       <Project>{0d6b7ffa-a1f1-4fae-ad8d-0da3888f5953}</Project>
       <Private>True</Private>
     </ProjectReference>
+    <Reference Include="System.ValueTuple">
+      <HintPath>..\packages\System.ValueTuple.4.3.0\lib\netstandard1.0\System.ValueTuple.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

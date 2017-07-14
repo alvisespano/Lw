@@ -287,10 +287,11 @@ module Warn =
     let constraint_escaped_scope_of_overload loc cx ct x t =
         W 4 loc Normal "when generalizing symbol `%O : %O` the constraint `%s : %O` has escaped its overload scope and has been converted into a freevar constraint" x t cx ct
 
+    let f () = ignore <| printf "cazzo %d  figa" 2
+
     let resolution_is_ambiguous loc x t cands =
-        W 5 loc High "resolution of constraint `%s : %O` is ambiguous in this context. Manual resolution might be needed at invocation site in order to evaluate it to a ground value. \
-        Current candidates are:\n%O"
-            x t (mappen_strings (sprintf "   %O") "\n" cands)
+        W 5 loc High "resolution of constraint `%s : %O` is ambiguous in this context. Manual resolution might be needed at invocation site in order to evaluate it to a ground value.\
+        Current candidates are:\n%O" x t (mappen_strings (sprintf "   %O") "\n" cands)
 
     let freevar_shadowing loc x t =
         W 6 loc Low "freevar will shadow an ordinary variable or data constructor with the same name already bound in this scope: %O : %O" x t

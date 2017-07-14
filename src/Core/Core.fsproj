@@ -9,7 +9,7 @@
     <OutputType>Library</OutputType>
     <RootNamespace>Core</RootNamespace>
     <AssemblyName>Core</AssemblyName>
-    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <TargetFSharpCoreVersion>4.4.0.0</TargetFSharpCoreVersion>
     <Name>Core</Name>
@@ -60,7 +60,6 @@
   </Choose>
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
-    <None Include="App.config" />
     <Content Include="packages.config" />
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Config.fs" />
