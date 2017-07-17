@@ -18,21 +18,24 @@ module private InFSharp =
 
 
 let temp1 : section =
-    "Temp1", [ShowSuccessful; Verbose; ShowHints; ShowWarnings; Dependencies (Basic.all @ [HML.defs])],
+    "Temp1", [ ShowSuccessful; Verbose; ShowHints; ShowWarnings; (*Dependencies (Basic.all @ [HML.defs])*) ],
     [
-    "let ids = [id]",                               typed_ok
+    "let id x = x",                                 typed_ok_ [ShowWarning 10]
 
-    "let ids : forall 'a. list ('a -> 'a) = ids
-     in
-        map poly ids",                              wrong_type_ [ShowHint 12]
+//    "let ids = [id]",                               typed_ok
+//
+//    "let ids : forall 'a. list ('a -> 'a) = ids
+//     in
+//        map poly ids",                              wrong_type_ [ShowHint 123]
     ]
 
 let all : section list =
     [
-//    [temp1]
+    [temp1]
     Other.all   // misc custom tests for non-language bits
     TypeEquivalence.all
     Basic.all   // needed as they introduce some basic bindings
     HML.all
+    Records.all
     ] |> List.concat
     

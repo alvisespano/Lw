@@ -288,8 +288,7 @@ module Warn =
         W 4 loc Normal "when generalizing symbol `%O : %O` the constraint `%s : %O` has escaped its overload scope and has been converted into a freevar constraint" x t cx ct
 
     let resolution_is_ambiguous loc x t cands =
-        W 5 loc High "resolution of constraint `%s : %O` is ambiguous in this context. Manual resolution might be needed at invocation site in order to evaluate it to a ground value. \
-        Current candidates are:\n%O"
+        W 5 loc High "resolution of constraint `%s : %O` is ambiguous in this context. Manual resolution might be needed at invocation site in order to evaluate it to a ground value. Current candidates are:\n%O"
             x t (mappen_strings (sprintf "   %O") "\n" cands)
 
     let freevar_shadowing loc x t =
@@ -332,10 +331,7 @@ module Hint =
 
     // TODO: is this hint message really not necessary anymore?
     let manually_resolved_symbol_refers_to_mupliple_constraints loc x t cs =
-        H 2 loc Low "symbol `%O : %O` specified in manual resolution refers to multiple constraints sharing the same name. \
-        Unification with user-specified type %O will apply in unpredictable order, possibly preventing the desired resolution to take place. \
-        In case of undesired results, consider manually reordering resolved symbols or redesigning code in such a way that multiple occurrences are no more an issue.\n\
-        Current constraints are:\n%O"
+        H 2 loc Low "symbol `%O : %O` specified in manual resolution refers to multiple constraints sharing the same name. Unification with user-specified type %O will apply in unpredictable order, possibly preventing the desired resolution to take place. In case of undesired results, consider manually reordering resolved symbols or redesigning code in such a way that multiple occurrences are no more an issue.\nCurrent constraints are:\n%O"
             x t t (mappen_strings (fun (x, t) -> sprintf "   %O : %O" x t) "\n" cs)
 
     let datacons_contains_env_fv loc c x tx =

@@ -421,11 +421,16 @@ type type_inference_builder (loc, ctx) =
             else return t
         }
 
-    member M.extend_fresh_star =
+    member M.extend_fresh_var_and_ty k =
         M {
             let α, tα = ty.fresh_star_var_and_ty
-            do! M.extend (α, Fx_Bottom K_Star)
-            return tα
+            do! M.extend (α, Fx_Bottom k)
+            return α, tα
+        }
+
+    member M.extend_fresh_star_var_and_ty =
+        M {
+            return! M.extend_fresh_var_and_ty K_Star
         }
 
     member M.add_constraint c =

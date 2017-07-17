@@ -324,20 +324,19 @@ let test_entry (tchk : typechecker) (sd : section_data) num ((input, (res, flags
     let expected_hints, expected_warns =
         let U = Alert.cset.universe
         let E = Alert.cset.empty
-        let w = Report.warnings
-        let h = Report.hints
-        List.fold (fun (eh, ew) ->
-                    function
-                    | HideWarnings  -> w.disable_all; eh, U
-                    | HideHints     -> h.disable_all; U, ew
-                    | HideWarning n -> w.disable n; eh, ew.add n
-                    | HideHint n    -> h.disable n; eh.add n, ew
+        let W = Report.warnings
+        let H = Report.hints
+        List.fold (fun (h, w) -> function
+                    | HideWarnings  -> W.disable_all; h, U
+                    | HideHints     -> H.disable_all; U, w
+                    | HideWarning n -> W.disable n; h, w.add n
+                    | HideHint n    -> H.disable n; h.add n, w
 
-                    | ShowWarnings  -> w.enable_all; eh, U
-                    | ShowHints     -> h.enable_all; U, ew
-                    | ShowWarning n -> w.enable n; eh, ew.add n
-                    | ShowHint n    -> h.enable n; eh.add n, ew
-                    | _                   -> eh, ew)
+                    | ShowWarnings  -> W.enable_all; h, U
+                    | ShowHints     -> H.enable_all; U, w
+                    | ShowWarning n -> W.enable n; h, w.add n
+                    | ShowHint n    -> H.enable n; h.add n, w
+                    | _                   -> h, w)
             (E, E) ed.flags
 
     let wh_infs () =
@@ -381,7 +380,7 @@ let test_entry (tchk : typechecker) (sd : section_data) num ((input, (res, flags
     let wh_scores () =
         let l name (tr : Alert.tracer) (expected : Alert.cset) =
             let traced = tr |> Set |> Alert.cset
-//            L.debug Normal "%s: traced = %O  expected = %O" name traced expected
+            //L.debug Normal "%s: traced = %O  expected = %O" name traced expected
             let f (cset : Alert.cset) fmt = if not (cset.is_empty || cset.is_complemented) then [score.Weak, sprintf fmt name cset.pretty] else []
             in
                 [ yield! f (traced - expected) "some unexpected %ss: %s"

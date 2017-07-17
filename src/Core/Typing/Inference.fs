@@ -378,7 +378,7 @@ and W_expr' ctx (e0 : expr) =
 
             | Some e ->
                 let! ϕ = W_expr ctx e
-                let ρ = var.fresh
+                let! ρ, ρt = M.extend_fresh_var_and_ty 
                 do! M.unify e.loc (T_Record ([], Some ρ)) ϕ.ftype
                 yield T_Record (bs, Some ρ)
 
