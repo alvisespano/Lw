@@ -378,7 +378,7 @@ and W_expr' ctx (e0 : expr) =
 
             | Some e ->
                 let! ϕ = W_expr ctx e
-                let! ρ, ρt = M.extend_fresh_var_and_ty 
+                let! ρ, ρt = M.extend_fresh_var_and_ty K_Row
                 do! M.unify e.loc (T_Record ([], Some ρ)) ϕ.ftype
                 yield T_Record (bs, Some ρ)
 
@@ -497,7 +497,7 @@ and W_expr' ctx (e0 : expr) =
         // TODO: why don't we try to use flex types here and unify schemes instead? does it make sense?
         | Match (e1, cases) ->
             let! ϕe1 = W_expr ctx e1
-            let! tr = M.extend_fresh_star
+            let! _, tr = M.extend_fresh_star_var_and_ty
             let! (_, ϕr) =
                 M.List.fold (fun (ϕe1, ϕr) (p, ewo, e) -> M {
                     let! ϕp = W_patt ctx p
@@ -799,7 +799,7 @@ and W_patt' ctx (p0 : patt) : M<fxty> =
             yield T_Open_Variant [x, T_Arrow (α, β)]
 
         | P_Var x ->
-            let! tα = M.extend_fresh_star
+            let! _, tα = M.extend_fresh_star_var_and_ty
             let! _ = M.bind_ungeneralized_var_Γ x tα
             yield tα
 

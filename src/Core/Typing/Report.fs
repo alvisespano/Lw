@@ -290,13 +290,8 @@ module Warn =
     let f () = ignore <| printf "cazzo %d  figa" 2
 
     let resolution_is_ambiguous loc x t cands =
-<<<<<<< HEAD
-        W 5 loc High "resolution of constraint `%s : %O` is ambiguous in this context. Manual resolution might be needed at invocation site in order to evaluate it to a ground value. Current candidates are:\n%O"
-            x t (mappen_strings (sprintf "   %O") "\n" cands)
-=======
         W 5 loc High "resolution of constraint `%s : %O` is ambiguous in this context. Manual resolution might be needed at invocation site in order to evaluate it to a ground value.\
         Current candidates are:\n%O" x t (mappen_strings (sprintf "   %O") "\n" cands)
->>>>>>> origin/development
 
     let freevar_shadowing loc x t =
         W 6 loc Low "freevar will shadow an ordinary variable or data constructor with the same name already bound in this scope: %O : %O" x t
