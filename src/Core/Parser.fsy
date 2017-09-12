@@ -376,8 +376,7 @@ ty_expr_app_atom_:
 
 ty_expr_record:
     id COLON ty_expr                                { [$1, $3] }
-  | id COLON ty_expr
-    SEMICOLON ty_expr_record                        { ($1, $3) :: $5 }
+  | id COLON ty_expr SEMICOLON ty_expr_record       { ($1, $3) :: $5 }
 
 let_ty_decls:
     let_ty_decl                                     { [$1] }

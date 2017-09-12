@@ -31,11 +31,11 @@ let temp1 : section =
 
 let all : section list =
     [
-    [temp1]
-    Other.all   // misc custom tests for non-language bits
+    //[temp1]
+    //Other.all   // misc custom tests for non-language bits
     TypeEquivalence.all
-    Basic.all   // needed as they introduce some basic bindings
+    //Basic.all   // needed as they introduce some basic bindings
     HML.all
-    Records.all
+    //Records.all
     ] |> List.concat
     

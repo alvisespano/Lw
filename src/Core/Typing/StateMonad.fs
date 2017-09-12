@@ -243,6 +243,7 @@ type type_inference_builder (loc, ctx) =
 
     member M.Yield (ϕ : fxty) =
         M {
+            let ϕ = ϕ.nf
             let! ϕ' = M.updated ϕ
             return ϕ'
         }
