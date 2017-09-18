@@ -25,11 +25,19 @@ let temp1 : section =
 
 let all : section list =
     [
+<<<<<<< HEAD
     [temp1]
     //Custom.all   // custom tests for non-in-language stuff
     //TypeEquivalence.all
     //Basic.all   // needed as they introduce some basic bindings
     //HML.all
+=======
+    //[temp1]
+    //Other.all   // misc custom tests for non-language bits
+    TypeEquivalence.all
+    //Basic.all   // needed as they introduce some basic bindings
+    HML.all
+>>>>>>> origin/development
     //Records.all
     ] |> List.concat
     
