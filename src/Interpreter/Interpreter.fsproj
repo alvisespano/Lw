@@ -133,7 +133,7 @@
     <Compile Include="UnitTest\Basic.fs" />
     <Compile Include="UnitTest\HML.fs" />
     <Compile Include="UnitTest\Records.fs" />
-    <Compile Include="UnitTest\Other.fs" />
+    <Compile Include="UnitTest\Custom.fs" />
     <Compile Include="UnitTest\All.fs" />
     <Compile Include="Main.fs" />
     <None Include="test\misc.lw" />

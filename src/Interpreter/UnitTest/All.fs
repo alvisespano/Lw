@@ -9,18 +9,12 @@ module Lw.Interpreter.UnitTest.All
 open Lw.Interpreter.UnitTester
 open Lw.Interpreter.UnitTester.Aux
 
-// just for testing and comparing with F#
-module private InFSharp =
-    let rec foldr f l z =
-        match l with
-        | [] -> z
-        | x :: xs -> f x (foldr f xs z)
-
 
 let temp1 : section =
     "Temp1", [ ShowSuccessful; Verbose; ShowHints; ShowWarnings; (*Dependencies (Basic.all @ [HML.defs])*) ],
     [
     "let id x = x",                                 typed_ok_ [ShowWarning 10]
+    "let id x = x",                                 typed_ok_ [HideWarning 10]
 
 //    "let ids = [id]",                               typed_ok
 //
@@ -32,10 +26,10 @@ let temp1 : section =
 let all : section list =
     [
     [temp1]
-    Other.all   // misc custom tests for non-language bits
-    TypeEquivalence.all
-    Basic.all   // needed as they introduce some basic bindings
-    HML.all
-    Records.all
+    //Custom.all   // custom tests for non-in-language stuff
+    //TypeEquivalence.all
+    //Basic.all   // needed as they introduce some basic bindings
+    //HML.all
+    //Records.all
     ] |> List.concat
     

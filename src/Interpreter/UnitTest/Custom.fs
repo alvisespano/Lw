@@ -1,5 +1,5 @@
 ﻿
-module Lw.Interpreter.UnitTest.Other
+module Lw.Interpreter.UnitTest.Custom
 
 open Lw.Interpreter.UnitTester
 open Lw.Interpreter.UnitTester.Aux

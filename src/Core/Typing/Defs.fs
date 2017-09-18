@@ -456,7 +456,7 @@ type kscheme with
 //
 
 type ty with
-    // TODOH: these should be forbidden and put into the main monad
+    // TODOH: these should be forbidden and turned into methods of the main monad
     [< Obsolete >]
     static member fresh_var k = T_Var (var.fresh, k)
     [< Obsolete >]

@@ -229,7 +229,7 @@ type entry_data (sd : section_data, num, input, res, flags) =
     member val input = input
     member val num = num
     member val res = res
-    override val flags = sd.flags @ flags
+    override val flags = sd.flags @ flags   // order is right: section flags before entry flags
 
 let entry_info sec n = "entry", txt (sprintf "#%d in section \"%s\"" (n + 1) sec)
 let ok_or_no_info b doc = (txt (sprintf "(%s)" (if b then "OK" else "NO"))) <+> doc
@@ -326,18 +326,19 @@ let test_entry (tchk : typechecker) (sd : section_data) num ((input, (res, flags
         let E = Alert.cset.empty
         let W = Report.warnings
         let H = Report.hints
-        List.fold (fun (h, w) -> function
-                    | HideWarnings  -> W.disable_all; h, U
-                    | HideHints     -> H.disable_all; U, w
-                    | HideWarning n -> W.disable n; h, w.add n
-                    | HideHint n    -> H.disable n; h.add n, w
+        in
+            List.fold (fun (h, w) -> function
+                        | HideWarnings  -> W.disable_all; h, U
+                        | HideHints     -> H.disable_all; U, w
+                        | HideWarning n -> W.disable n; h, w.add n
+                        | HideHint n    -> H.disable n; h.add n, w
 
-                    | ShowWarnings  -> W.enable_all; h, U
-                    | ShowHints     -> H.enable_all; U, w
-                    | ShowWarning n -> W.enable n; h, w.add n
-                    | ShowHint n    -> H.enable n; h.add n, w
-                    | _                   -> h, w)
-            (E, E) ed.flags
+                        | ShowWarnings  -> W.enable_all; h, U
+                        | ShowHints     -> H.enable_all; U, w
+                        | ShowWarning n -> W.enable n; h, w.add n
+                        | ShowHint n    -> H.enable n; h.add n, w
+                        | _             -> h, w)
+                (E, E) ed.flags
 
     let wh_infs () =
         let flatten (tr : Alert.tracer) (expected : Alert.cset) =

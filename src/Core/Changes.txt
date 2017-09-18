@@ -1,4 +1,8 @@
 ﻿
+7/7/2017:
+* Submitted a paper on LW for POPL 2018: "Ejecting Records and Injecting Constraints"
+
+
 10/3/2017:
 * FIX: fixes to type annotations etc. that made HML work
 

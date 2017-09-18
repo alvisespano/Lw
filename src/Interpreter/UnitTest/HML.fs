@@ -55,11 +55,11 @@ let hml =
 
     "let ids : forall 'a. list ('a -> 'a) = ids
      in
-        map poly ids",                          wrong_type_ [ShowHint 12]
+        map poly ids",                          wrong_type_ [HideHint 13]
    
     "let ids : list ('a -> 'a) = ids
      in
-        map poly ids",                          wrong_type_ [ShowHint 6]
+        map poly ids",                          wrong_type_ [HideHint 6]
 
     "let ids : forall ('a :> forall 'b. 'b -> 'b) . list 'a = ids
      in
@@ -67,7 +67,7 @@ let hml =
 
     "let ids : forall 'a. list ('a -> 'a) = ids
      in
-        map poly ids, append (single inc) ids",  wrong_type_ [ShowHint 6]
+        map poly ids, append (single inc) ids",  wrong_type_ [HideHint 6]
 
     ]
 
