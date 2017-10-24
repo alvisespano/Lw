@@ -16,6 +16,10 @@ let temp1 : section =
     "let id x = x",                                 typed_ok_ [ShowWarning 10]
     "let id x = x",                                 typed_ok_ [HideWarning 10]
 
+    "forall ('b :> forall 'b. 'b -> 'b). forall 'a. 'a -> 'b",                              type_eq "forall ('b :> forall 'b. 'b -> 'b). forall 'a. ('a -> 'b)"
+    "forall ('b :> forall 'b. 'b -> 'b). forall 'a. 'a -> 'b",                              type_neq "forall ('b :> forall 'b. 'b -> 'b). (forall 'a. 'a) -> 'b"
+
+
 //    "let ids = [id]",                               typed_ok
 //
 //    "let ids : forall 'a. list ('a -> 'a) = ids
@@ -26,10 +30,10 @@ let temp1 : section =
 let all : section list =
     [
     [temp1]
-    //Custom.all   // custom tests for non-in-language stuff
-    //TypeEquivalence.all
-    //Basic.all   // needed as they introduce some basic bindings
-    //HML.all
-    //Records.all
+    Custom.all      
+    TypeEquivalence.all
+    Basic.all  
+    Records.all
+    HML.all
     ] |> List.concat
     

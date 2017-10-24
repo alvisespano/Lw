@@ -5,7 +5,7 @@ open Lw.Interpreter.UnitTester
 open Lw.Interpreter.UnitTester.Aux
 
 let type_equivalence : section =
-    "Type Equivalence", [],
+    "Type Equivalence", [NoAutoGen],
     [
     "'a",                                       type_eq "'a"
     "'a",                                       type_eq "'b"
@@ -47,12 +47,14 @@ let type_equivalence : section =
     "forall ('b :> forall 'b. 'b -> 'x). list 'b",                      type_eq "forall ('f :> forall 'f. 'f -> 'y). list 'f"
 
     // arrow and forall associativity
-    "forall ('b :> forall 'b. 'b -> 'b). (forall 'a. 'a -> 'a) -> 'b",                      type_eq "forall ('b :> forall 'b. 'b -> 'b). 'b -> 'b"
     "forall ('b :> forall 'b. 'b -> 'b). (forall 'a. 'a -> 'a) -> 'b",                      type_eq "forall ('b :> forall 'c. 'c -> 'c). (forall 'a. 'a -> 'a) -> 'b"
-    "forall ('b :> forall 'b. 'b -> 'b). (forall 'a. 'a -> 'a) -> 'b",                      type_neq "(forall 'a. 'a -> 'a) -> (forall 'a. 'a -> 'a)"
-    "forall ('b :> forall 'b. 'b -> 'b). (forall 'a. 'a -> 'a) -> 'b",                      type_eq "forall 'b. (forall 'a. 'a -> 'a) -> ('b -> 'b)"
-    "forall ('b :> forall 'b. 'b -> 'b). (forall 'a. 'a -> 'a) -> 'b",                      type_eq "forall 'b. (forall 'a. 'a -> 'a) -> 'b -> 'b"
+    "forall ('b :> forall 'b. 'b -> 'b). (forall 'a. 'a -> 'a) -> 'b",                      type_neq "forall ('b :> forall 'b. 'b -> 'b). forall 'a. 'a -> 'a -> 'b"
+
+    "forall ('b :> forall 'b. 'b -> 'b). (forall 'a. 'a -> 'a) -> 'b",                      type_neq "(forall 'a. 'a -> 'a) -> (forall 'b. 'b -> 'b)"
+
     "(forall 'a. 'a -> 'a) -> (forall 'a. 'a -> 'a)",                                       type_eq "(forall 'a. 'a -> 'a) -> (forall 'a. 'a -> 'a)"
+    "(forall 'a. 'a -> 'a) -> (forall 'a. 'a -> 'a)",                                       type_eq "(forall 'b. 'b -> 'b) -> (forall 'c. 'c -> 'c)"
+    "(forall 'a. 'a -> 'a) -> (forall 'a. 'a -> 'a)",                                       type_neq "(forall 'b. 'b -> 'b) -> (forall 'c. 'c) -> 'a"
 
     "forall 'a. 'a -> 'a",                                                                  type_eq "forall 'a. ('a -> 'a)"
     "forall 'a. 'a -> 'a",                                                                  type_neq "(forall 'a. 'a) -> 'a"
@@ -62,7 +64,7 @@ let type_equivalence : section =
 
     ]
 
-let all =
+let all : section list =
     [
     type_equivalence
     ]

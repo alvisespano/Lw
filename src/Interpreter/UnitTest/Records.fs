@@ -4,7 +4,7 @@ module Lw.Interpreter.UnitTest.Records
 open Lw.Interpreter.UnitTester
 open Lw.Interpreter.UnitTester.Aux
 
-let records =
+let records : section =
     "Records", [],
     [
     "{}",                                       wrong_syntax

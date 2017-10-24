@@ -4,7 +4,7 @@ module Lw.Interpreter.UnitTest.Basic
 open Lw.Interpreter.UnitTester
 open Lw.Interpreter.UnitTester.Aux
 
-let intrinsics =
+let intrinsics : section =
     "Intrinsics", [],
     [
     "[]",                                       typed_ok_as "list 'a"
@@ -20,7 +20,7 @@ let intrinsics =
     "if 1 then () else ()",                     wrong_type
     ]
 
-let scoping =
+let scoping : section =
     "Scoping", [],
     [
     "let id x = x in id true",                  typed_ok_as "bool"
@@ -29,7 +29,7 @@ let scoping =
     "let g x = f x",                            typed_ok_as "'a -> 'a"
     ]
 
-let type_annotations =
+let type_annotations : section =
     "Type Annotations", [],
     [
     "fun f x y -> ((f : 'a -> 'a) x, y) : _ * int",         typed_ok_as "('a -> 'a) -> 'a -> int -> 'a * int"
@@ -37,7 +37,7 @@ let type_annotations =
     "fun f (x : 'b) y -> ((f : _ -> 'a) x, y) : 'a * _",    typed_ok_as "('b -> 'a) -> 'b -> 'c -> 'a * 'c"
     ]
 
-let scoped_type_variables =
+let scoped_type_variables : section =
     "Scoped Type Variables", [HideHints],
     [ 
     "let i (x : 'bar) = x in i 1, i true, i",   wrong_type     // this is considered non-top-level also in OCaml, so no generalization
@@ -47,7 +47,7 @@ let scoped_type_variables =
             i 1, i true",                       wrong_type
     ]
 
-let lists =
+let lists : section =
     "Lists", [KeepBindingsAtEnd],
     [
     "let rec map f = function
@@ -68,7 +68,7 @@ let lists =
     "let single x = [x]",                       typed_ok_as "'a -> list 'a"
     ]
 
-let hindley_milner =
+let hindley_milner : section =
     "Hindley-Milner", [KeepBindingsAtEnd],
     [
     "fun x -> x",                               typed_ok_as "forall 'a. 'a -> 'a"

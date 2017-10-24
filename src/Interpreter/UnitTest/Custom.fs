@@ -5,8 +5,8 @@ open Lw.Interpreter.UnitTester
 open Lw.Interpreter.UnitTester.Aux
 open FSharp.Common.Collections
 
-let cset : section =
-    "cset", [],
+let cset1 : section =
+    "cset1", [],
     let a = cset [1..5]
     let b = cset [2..5]
     let c = cset [6..9]
@@ -25,6 +25,6 @@ let cset : section =
 
 let all : section list =
     [
-    cset
+    cset1
     ]
 

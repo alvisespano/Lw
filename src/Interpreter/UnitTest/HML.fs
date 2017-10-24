@@ -4,7 +4,7 @@ module Lw.Interpreter.UnitTest.HML
 open Lw.Interpreter.UnitTester
 open Lw.Interpreter.UnitTester.Aux
 
-let defs =
+let defs : section =
     "Defs", [KeepBindingsAtEnd; Dependencies [Basic.lists; Basic.hindley_milner]],
     [
     "let ids = single id",                      typed_ok_as "forall ('a :> forall 'b. 'b -> 'b). list 'a"    
@@ -16,7 +16,7 @@ let defs =
     ]
 
 
-let hml =
+let hml : section =
     "HML", [KeepBindingsAtEnd; HideHints; Dependencies [Basic.lists; Basic.hindley_milner]],
     [
     "let i x = x in i 1, i true, i",            typed_ok_as "int * bool * (forall 'a. 'a -> 'a)"
@@ -71,7 +71,7 @@ let hml =
 
     ]
 
-let higher_rank = 
+let higher_rank : section = 
     "Impredicative Application and Higher Rank Arguments", [],
     [
     "let auto (id : forall 'a. 'a -> 'a) = id",         typed_ok_as "(forall 'a. 'a -> 'a) -> (forall 'a. 'a -> 'a)"

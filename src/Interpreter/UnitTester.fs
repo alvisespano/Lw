@@ -216,22 +216,24 @@ let expected_static_error_infos T ecodeo =
 // entries and sections
 //
 
-type section_data (name, flags, entries) =
+type section_data (sec : section) =
+    let _name, _flags, _entries = sec
     member this.is_flag_enabled (|Flag|_|) = flag.is_enabled (|Flag|_|) this.flags
     member this.contains_flag (flg : flag) = flg.is_in this.flags
-    member val name = name
-    member val entries = entries
+    member val name = _name
+    member val entries = _entries
     abstract flags : flag list
-    default val flags = flags
+    default val flags = _flags
 
 type entry_data (sd : section_data, num, input, res, flags) =
-    inherit section_data (sd.name, sd.flags, sd.entries)
+    inherit section_data (sd.name, sd.flags,  sd.entries)
     member val input = input
     member val num = num
     member val res = res
-    override val flags = sd.flags @ flags   // order is right: section flags before entry flags
+    override val flags = sd.flags @ flags   // concat order is right: section flags before entry flags
+    
 
-let entry_info sec n = "entry", txt (sprintf "#%d in section \"%s\"" (n + 1) sec)
+let entry_info name n = "entry", txt (sprintf "#%d in section \"%s\"" (n + 1) name)
 let ok_or_no_info b doc = (txt (sprintf "(%s)" (if b then "OK" else "NO"))) <+> doc
 
 
