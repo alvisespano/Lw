@@ -9,7 +9,6 @@ module Lw.Core.Absyn.Ast
 #nowarn "60"
 
 open System
-open System.Collections.Generic
 open FSharp.Common
 open FSharp.Common.Log
 open FSharp.Common.Parsing
@@ -604,7 +603,9 @@ with
 
 module Aux =
     
-    let loc_of (parseState : Microsoft.FSharp.Text.Parsing.IParseState) n =
+    open FSharp.Text.Parsing
+
+    let loc_of (parseState : IParseState) n =
         let p1 = parseState.InputStartPosition n
         let p2 = parseState.InputEndPosition n
         in
@@ -614,7 +615,7 @@ module Aux =
 
 //    let pos parseState n x = loc_at parseState n x
 
-    let sugar_with_reserved_id (parseState : Microsoft.FSharp.Text.Parsing.IParseState) f =
+    let sugar_with_reserved_id (parseState : IParseState) f =
         let x = fresh_reserved_id ()
         let p1, p2 = parseState.ResultRange
         let loc = new location (p1, p2, Config.Parsing.line_bias, Config.Parsing.col_bias)

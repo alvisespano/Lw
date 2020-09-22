@@ -10,8 +10,7 @@ module Lw.Core.Globals
 open System
 open FSharp.Common
 open FSharp.Common.Log
-
-open Microsoft.FSharp.Text
+open FSharp.Text
 
 
 // error exception hierarchy
