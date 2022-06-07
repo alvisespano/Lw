@@ -10,7 +10,7 @@ open System
 open FSharp.Common.Log
 open FSharp.Common.Parsing
 open Lw.Core.Globals
-open Microsoft.FSharp.Text
+open FSharp.Text
 
 let private __syntax_error (msg, lexbuf : Lexing.LexBuffer<char>) = new syntax_error (msg, lexbuf)
 let parse_from_TextReader args = parse_from_TextReader __syntax_error args

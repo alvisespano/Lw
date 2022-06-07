@@ -120,7 +120,6 @@
     <PreBuildEvent />
   </PropertyGroup>
   <ItemGroup>
-    <None Include="App.config" />
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Config.fs" />
     <Compile Include="Globals.fs" />
@@ -141,6 +140,7 @@
     <None Include="test\overloading.lw" />
     <None Include="test\tyvars.lw" />
     <None Include="test\firstclass_poly.lw" />
+    <None Include="app.config" />
     <Content Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
@@ -150,10 +150,10 @@
       <Private>True</Private>
     </ProjectReference>
     <Reference Include="FSharp.Core">
-      <HintPath>..\packages\FSharp.Core.4.7.2\lib\net45\FSharp.Core.dll</HintPath>
+      <HintPath>..\packages\FSharp.Core.6.0.4\lib\netstandard2.0\FSharp.Core.dll</HintPath>
     </Reference>
     <Reference Include="FsLexYacc.Runtime">
-      <HintPath>..\packages\FsLexYacc.Runtime.10.0.0\lib\net46\FsLexYacc.Runtime.dll</HintPath>
+      <HintPath>..\packages\FsLexYacc.Runtime.10.2.0\lib\netstandard2.0\FsLexYacc.Runtime.dll</HintPath>
     </Reference>
     <Reference Include="mscorlib" />
     <Reference Include="PPrint">
