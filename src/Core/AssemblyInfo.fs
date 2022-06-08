@@ -9,11 +9,11 @@ open System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [<assembly: AssemblyTitle("Lw Core Library")>]
-[<assembly: AssemblyDescription("Designed and written by Alvise Spano'.")>]
+[<assembly: AssemblyDescription("Core module for the language Lw")>]
 [<assembly: AssemblyConfiguration("")>]
 [<assembly: AssemblyCompany("Universita' Ca' Foscari di Venezia")>]
 [<assembly: AssemblyProduct("Lw")>]
-[<assembly: AssemblyCopyright("© 2014-2016 Alvise Spano'")>]
+[<assembly: AssemblyCopyright("© 2014-2022 Alvise Spano'")>]
 [<assembly: AssemblyTrademark("")>]
 [<assembly: AssemblyCulture("")>]
  
@@ -35,7 +35,7 @@ open System.Runtime.InteropServices;
 // You can specify all the values or you can default the Build and Revision Numbers
 // by using the ‘*’ as shown below:
 // [assembly: AssemblyVersion("1.0.*")]
-[<assembly: AssemblyVersion("0.9.1.*")>]
+[<assembly: AssemblyVersion("0.10.0.*")>]
 //[<assembly: AssemblyFileVersion("0.5.0.*")>]
 ()
 

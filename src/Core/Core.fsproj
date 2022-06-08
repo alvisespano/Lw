@@ -1,64 +1,29 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-	<Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
 	<PropertyGroup>
-		<Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-		<Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-		<SchemaVersion>2.0</SchemaVersion>
-		<ProjectGuid>0d6b7ffa-a1f1-4fae-ad8d-0da3888f5953</ProjectGuid>
-		<OutputType>Library</OutputType>
-		<RootNamespace>Core</RootNamespace>
-		<AssemblyName>Core</AssemblyName>
-		<TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
-		<AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
-		<Name>Core</Name>
-		<SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\</SolutionDir>
-		<RestorePackages>true</RestorePackages>
-		<NuGetPackageImportStamp>
-		</NuGetPackageImportStamp>
-		<TargetFrameworkProfile />
+		<TargetFramework>netcoreapp3.1</TargetFramework>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 	</PropertyGroup>
-	<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-		<DebugSymbols>true</DebugSymbols>
-		<DebugType>full</DebugType>
-		<Optimize>false</Optimize>
-		<Tailcalls>false</Tailcalls>
-		<OutputPath>bin\Debug\</OutputPath>
-		<DefineConstants>DEBUG;DEBUG_INFERENCE;DEBUG_BEFORE_INFERENCE;DEBUG_UNI;ENFORCE_NF_IN_UNI</DefineConstants>
-		<WarningLevel>5</WarningLevel>
-		<PlatformTarget>AnyCPU</PlatformTarget>
-		<DocumentationFile>
-		</DocumentationFile>
-		<Prefer32Bit>false</Prefer32Bit>
-	</PropertyGroup>
-	<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-		<DebugType>pdbonly</DebugType>
-		<Optimize>true</Optimize>
-		<Tailcalls>true</Tailcalls>
-		<OutputPath>bin\Release\</OutputPath>
-		<DefineConstants>RELEASE</DefineConstants>
-		<WarningLevel>5</WarningLevel>
-		<PlatformTarget>AnyCPU</PlatformTarget>
-		<DocumentationFile>
-		</DocumentationFile>
-		<Prefer32Bit>true</Prefer32Bit>
-	</PropertyGroup>
+
+	<!-- added manually by me, taken from https://github.com/fsprojects/FsLexYacc/issues/140 -->
 	<PropertyGroup>
-		<MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
+		<FsLexToolPath>$(NuGetPackageRoot)\fslexyacc\10.1.0\build\fslex\netcoreapp3.1</FsLexToolPath>
+		<FsYaccToolPath>$(NuGetPackageRoot)\fslexyacc\10.1.0\build\fsyacc\netcoreapp3.1</FsYaccToolPath>
+		<FsLexToolExe>fslex.dll</FsLexToolExe>
+		<FsYaccToolExe>fsyacc.dll</FsYaccToolExe>
+		<FsLexYaccToolRunner>dotnet </FsLexYaccToolRunner>
 	</PropertyGroup>
-	<Choose>
-		<When Condition="'$(VisualStudioVersion)' == '11.0'">
-			<PropertyGroup Condition="Exists('$(MSBuildExtensionsPath32)\..\Microsoft SDKs\F#\3.0\Framework\v4.0\Microsoft.FSharp.Targets')">
-				<FSharpTargetsPath>$(MSBuildExtensionsPath32)\..\Microsoft SDKs\F#\3.0\Framework\v4.0\Microsoft.FSharp.Targets</FSharpTargetsPath>
-			</PropertyGroup>
-		</When>
-		<Otherwise>
-			<PropertyGroup Condition="Exists('$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\FSharp\Microsoft.FSharp.Targets')">
-				<FSharpTargetsPath>$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\FSharp\Microsoft.FSharp.Targets</FSharpTargetsPath>
-			</PropertyGroup>
-		</Otherwise>
-	</Choose>
-	<Import Project="$(FSharpTargetsPath)" />
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+	  <WarningLevel>4</WarningLevel>
+	  <Optimize>False</Optimize>
+	  <DefineConstants>DEBUG_INFERENCE;DEBUG_BEFORE_INFERENCE;DEBUG_UNI;ENFORCE_NF_IN_UNI</DefineConstants>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+	  <WarningLevel>4</WarningLevel>
+	  <DefineConstants></DefineConstants>
+	</PropertyGroup>
+
+
 	<ItemGroup>
 		<Compile Include="AssemblyInfo.fs" />
 		<Compile Include="Config.fs" />
@@ -67,19 +32,23 @@
 		<Compile Include="Absyn\Var.fs" />
 		<Compile Include="Absyn\Sugar.fs" />
 		<Compile Include="Absyn\Kind.fs" />
-		<Compile Include="Absyn\AST.fs" />
+		<Compile Include="Absyn\Ast.fs" />
 		<FsYacc Include="Parser.fsy">
 			<OtherFlags>--module Lw.Core.Parser -v</OtherFlags>
 		</FsYacc>
 		<FsLex Include="Lexer.fsl">
 			<OtherFlags>--unicode --module Lw.Core.Lexer</OtherFlags>
 		</FsLex>
+		<Compile Include="Parser.fsi">
+			<Visible>true</Visible>
+			<Link>Parser.fsi</Link>
+		</Compile>
 		<Compile Include="Parser.fs">
-			<Visible>false</Visible>
+			<Visible>true</Visible>
 			<Link>Parser.fs</Link>
 		</Compile>
 		<Compile Include="Lexer.fs">
-			<Visible>false</Visible>
+			<Visible>true</Visible>
 			<Link>Lexer.fs</Link>
 		</Compile>
 		<Compile Include="Parsing.fs" />
@@ -93,53 +62,21 @@
 		<Compile Include="Typing\Unify.fs" />
 		<Compile Include="Typing\Resolve.fs" />
 		<Compile Include="Typing\Inference.fs" />
-		<Content Include="Changes.txt" />
-		<Content Include="TODO.txt" />
-		<None Include="app.config" />
-		<Content Include="packages.config" />
 	</ItemGroup>
+
 	<ItemGroup>
-		<Reference Include="FSharp.Core">
-			<HintPath>..\packages\FSharp.Core.6.0.4\lib\net46\FSharp.Core.dll</HintPath>
-		</Reference>
-		<Reference Include="FsLexYacc.Runtime">
-			<HintPath>..\packages\FsLexYacc.Runtime.10.2.0\lib\net46\FsLexYacc.Runtime.dll</HintPath>
-		</Reference>
-		<Reference Include="mscorlib" />
-		<Reference Include="PPrint">
-			<HintPath>..\packages\PPrint.2.0.0\lib\portable-net45+netcore45+wpa81+wp8\PPrint.dll</HintPath>
-		</Reference>
-		<Reference Include="System" />
-		<Reference Include="System.Core" />
-		<Reference Include="System.Numerics" />
-		<Reference Include="System.ValueTuple">
-			<Private>True</Private>
-		</Reference>
+		<PackageReference Include="FsLexYacc" Version="10.1.0" />
+		<PackageReference Include="FsLexYacc.Runtime" Version="10.1.0" />
 	</ItemGroup>
+
 	<ItemGroup>
-		<ProjectReference Include="..\..\..\FSharp.Common\FSharp.Common.fsproj">
-			<Name>FSharp.Common</Name>
-			<Project>{3e721011-6cce-4187-a49a-dac093de8e0f}</Project>
-			<Private>True</Private>
-		</ProjectReference>
+		<ProjectReference Include="..\..\..\FSharp.Common\FSharp.Common.fsproj" />
 	</ItemGroup>
-	<Import Project="$(SolutionDir)\.nuget\NuGet.targets" Condition="Exists('$(SolutionDir)\.nuget\NuGet.targets')" />
-	<Import Project="..\packages\FsLexYacc.10.2.0\build\FsLexYacc.targets" Condition="Exists('..\packages\FsLexYacc.10.2.0\build\FsLexYacc.targets')" />
-	<Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
-		<PropertyGroup>
-			<ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
-		</PropertyGroup>
-		<Error Condition="!Exists('..\packages\FsLexYacc.10.2.0\build\FsLexYacc.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\FsLexYacc.10.2.0\build\FsLexYacc.targets'))" />
-		<Error Condition="!Exists('..\packages\FsLexYacc.10.2.0\build\fsyacc\net46\FsLexYacc.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\FsLexYacc.10.2.0\build\fsyacc\net46\FsLexYacc.targets'))" />
-		<Error Condition="!Exists('..\packages\FsLexYacc.10.2.0\build\fsyacc\netcoreapp3.1\FsLexYacc.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\FsLexYacc.10.2.0\build\fsyacc\netcoreapp3.1\FsLexYacc.targets'))" />
-	</Target>
-	<Import Project="packages\FsLexYacc.10.2.0\build\fsyacc\net46\FsLexYacc.targets" Condition="Exists('packages\FsLexYacc.10.2.0\build\fsyacc\net46\FsLexYacc.targets')" />
-	<Import Project="..\packages\FsLexYacc.10.2.0\build\fsyacc\netcoreapp3.1\FsLexYacc.targets" Condition="Exists('..\packages\FsLexYacc.10.2.0\build\fsyacc\netcoreapp3.1\FsLexYacc.targets')" />
-	<!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
+
+	<ItemGroup>
+		<PackageReference Update="FSharp.Core" Version="6.0.4" />
+	</ItemGroup>
+
+
+
 </Project>

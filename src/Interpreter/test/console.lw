@@ -7,4 +7,8 @@ let rec fib n =
         
  let fib2 = fib 2
  
+ let id x = x
+
+ let pmap (f : forall 'pippo. 'pippo -> 'pippo) (a, b) = f a, f b
+
  

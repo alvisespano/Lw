@@ -16,13 +16,6 @@ open FSharp.Common.Prelude
 // global exception handler
 //
 
-let exit n =
-    #if WAIT_FOR_KEY_AT_EXIT
-    printfn "\n\npress any key to exit...\n"
-    ignore <| System.Console.ReadKey ()
-    #endif
-    exit n
-
 let handle_exn exit (e : exn) =
     match e with
     | :? numeric_error as e         -> L.nerror e.code "%s" e.Message; exit Config.Exit.error

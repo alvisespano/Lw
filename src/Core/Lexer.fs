@@ -1,7 +1,8 @@
+module Lw.Core.Lexer
 # 1 "Lexer.fsl"
  
 
-module Lw.Core.Lexer
+//module Lw.Core.Lexer
 
 open System
 open FSharp.Text.Lexing
@@ -18,7 +19,7 @@ open Lw.Core.Parser
 let trim c lexbuf = let s = lexeme lexbuf in s.TrimStart [|c|]
 
 
-# 21 "Lexer.fs"
+# 22 "Lexer.fs"
 let trans : uint16[] array = 
     [| 
     (* State 0 *)
@@ -453,22 +454,22 @@ and comment level lexbuf =
   | 0 -> ( 
 # 39 "Lexer.fsl"
                                    comment (level + 1) lexbuf 
-# 456 "Lexer.fs"
+# 457 "Lexer.fs"
           )
   | 1 -> ( 
 # 40 "Lexer.fsl"
                                      if level = 0 then tokenize lexbuf else comment (level - 1) lexbuf 
-# 461 "Lexer.fs"
+# 462 "Lexer.fs"
           )
   | 2 -> ( 
 # 41 "Lexer.fsl"
                               newline lexbuf; comment level lexbuf 
-# 466 "Lexer.fs"
+# 467 "Lexer.fs"
           )
   | 3 -> ( 
 # 42 "Lexer.fsl"
                           comment level lexbuf 
-# 471 "Lexer.fs"
+# 472 "Lexer.fs"
           )
   | _ -> failwith "comment"
 // Rule linecomment
@@ -477,12 +478,12 @@ and linecomment  lexbuf =
   | 0 -> ( 
 # 45 "Lexer.fsl"
                                          newline lexbuf; tokenize lexbuf 
-# 480 "Lexer.fs"
+# 481 "Lexer.fs"
           )
   | 1 -> ( 
 # 46 "Lexer.fsl"
                                          linecomment lexbuf 
-# 485 "Lexer.fs"
+# 486 "Lexer.fs"
           )
   | _ -> failwith "linecomment"
 // Rule tokenize
@@ -491,417 +492,417 @@ and tokenize  lexbuf =
   | 0 -> ( 
 # 49 "Lexer.fsl"
                            EOF 
-# 494 "Lexer.fs"
+# 495 "Lexer.fs"
           )
   | 1 -> ( 
 # 50 "Lexer.fsl"
                                 tokenize lexbuf 
-# 499 "Lexer.fs"
+# 500 "Lexer.fs"
           )
   | 2 -> ( 
 # 51 "Lexer.fsl"
                               newline lexbuf; tokenize lexbuf 
-# 504 "Lexer.fs"
+# 505 "Lexer.fs"
           )
   | 3 -> ( 
 # 53 "Lexer.fsl"
                             linecomment lexbuf 
-# 509 "Lexer.fs"
+# 510 "Lexer.fs"
           )
   | 4 -> ( 
 # 54 "Lexer.fsl"
                                    comment 0 lexbuf 
-# 514 "Lexer.fs"
+# 515 "Lexer.fs"
           )
   | 5 -> ( 
 # 56 "Lexer.fsl"
                            ARROW 
-# 519 "Lexer.fs"
+# 520 "Lexer.fs"
           )
   | 6 -> ( 
 # 57 "Lexer.fsl"
                           PLUS 
-# 524 "Lexer.fs"
+# 525 "Lexer.fs"
           )
   | 7 -> ( 
 # 58 "Lexer.fsl"
                           MINUS 
-# 529 "Lexer.fs"
+# 530 "Lexer.fs"
           )
   | 8 -> ( 
 # 59 "Lexer.fsl"
                           STAR 
-# 534 "Lexer.fs"
+# 535 "Lexer.fs"
           )
   | 9 -> ( 
 # 60 "Lexer.fsl"
                           SLASH 
-# 539 "Lexer.fs"
+# 540 "Lexer.fs"
           )
   | 10 -> ( 
 # 61 "Lexer.fsl"
                           MOD 
-# 544 "Lexer.fs"
+# 545 "Lexer.fs"
           )
   | 11 -> ( 
 # 62 "Lexer.fsl"
                            BACKSLASH 
-# 549 "Lexer.fs"
+# 550 "Lexer.fs"
           )
   | 12 -> ( 
 # 63 "Lexer.fsl"
                                INJECT 
-# 554 "Lexer.fs"
+# 555 "Lexer.fs"
           )
   | 13 -> ( 
 # 64 "Lexer.fsl"
                               EJECT 
-# 559 "Lexer.fs"
+# 560 "Lexer.fs"
           )
   | 14 -> ( 
 # 65 "Lexer.fsl"
                           BANG 
-# 564 "Lexer.fs"
+# 565 "Lexer.fs"
           )
   | 15 -> ( 
 # 66 "Lexer.fsl"
                           QUESTION 
-# 569 "Lexer.fs"
+# 570 "Lexer.fs"
           )
   | 16 -> ( 
 # 67 "Lexer.fsl"
                           HASH 
-# 574 "Lexer.fs"
+# 575 "Lexer.fs"
           )
   | 17 -> ( 
 # 68 "Lexer.fsl"
                           PIPE 
-# 579 "Lexer.fs"
+# 580 "Lexer.fs"
           )
   | 18 -> ( 
 # 69 "Lexer.fsl"
                           AMP 
-# 584 "Lexer.fs"
+# 585 "Lexer.fs"
           )
   | 19 -> ( 
 # 70 "Lexer.fsl"
                           EQ 
-# 589 "Lexer.fs"
+# 590 "Lexer.fs"
           )
   | 20 -> ( 
 # 71 "Lexer.fsl"
                            NEQ 
-# 594 "Lexer.fs"
+# 595 "Lexer.fs"
           )
   | 21 -> ( 
 # 72 "Lexer.fsl"
                            DOUBLEPIPE 
-# 599 "Lexer.fs"
+# 600 "Lexer.fs"
           )
   | 22 -> ( 
 # 73 "Lexer.fsl"
                            DOUBLEAMP 
-# 604 "Lexer.fs"
+# 605 "Lexer.fs"
           )
   | 23 -> ( 
 # 74 "Lexer.fsl"
                             NOT 
-# 609 "Lexer.fs"
+# 610 "Lexer.fs"
           )
   | 24 -> ( 
 # 75 "Lexer.fsl"
                           LT 
-# 614 "Lexer.fs"
+# 615 "Lexer.fs"
           )
   | 25 -> ( 
 # 76 "Lexer.fsl"
                           GT 
-# 619 "Lexer.fs"
+# 620 "Lexer.fs"
           )
   | 26 -> ( 
 # 77 "Lexer.fsl"
                            LEQ 
-# 624 "Lexer.fs"
+# 625 "Lexer.fs"
           )
   | 27 -> ( 
 # 78 "Lexer.fsl"
                            GEQ 
-# 629 "Lexer.fs"
+# 630 "Lexer.fs"
           )
   | 28 -> ( 
 # 79 "Lexer.fsl"
                                      IMPLIES 
-# 634 "Lexer.fs"
+# 635 "Lexer.fs"
           )
   | 29 -> ( 
 # 80 "Lexer.fsl"
                            ASSIGN 
-# 639 "Lexer.fs"
+# 640 "Lexer.fs"
           )
   | 30 -> ( 
 # 81 "Lexer.fsl"
                                      COLONGT 
-# 644 "Lexer.fs"
+# 645 "Lexer.fs"
           )
   | 31 -> ( 
 # 82 "Lexer.fsl"
                                      BOTTOM 
-# 649 "Lexer.fs"
+# 650 "Lexer.fs"
           )
   | 32 -> ( 
 # 84 "Lexer.fsl"
                                      INFIX (lexeme lexbuf) 
-# 654 "Lexer.fs"
+# 655 "Lexer.fs"
           )
   | 33 -> ( 
 # 87 "Lexer.fsl"
                                      DATATYPE 
-# 659 "Lexer.fs"
+# 660 "Lexer.fs"
           )
   | 34 -> ( 
 # 88 "Lexer.fsl"
                                      DATA 
-# 664 "Lexer.fs"
+# 665 "Lexer.fs"
           )
   | 35 -> ( 
 # 89 "Lexer.fsl"
                                      VAL 
-# 669 "Lexer.fs"
+# 670 "Lexer.fs"
           )
   | 36 -> ( 
 # 90 "Lexer.fsl"
                             TYPE 
-# 674 "Lexer.fs"
+# 675 "Lexer.fs"
           )
   | 37 -> ( 
 # 91 "Lexer.fsl"
                                      FORALL 
-# 679 "Lexer.fs"
+# 680 "Lexer.fs"
           )
   | 38 -> ( 
 # 92 "Lexer.fsl"
                            IF 
-# 684 "Lexer.fs"
+# 685 "Lexer.fs"
           )
   | 39 -> ( 
 # 93 "Lexer.fsl"
                                   THEN 
-# 689 "Lexer.fs"
+# 690 "Lexer.fs"
           )
   | 40 -> ( 
 # 94 "Lexer.fsl"
                             ELSE 
-# 694 "Lexer.fs"
+# 695 "Lexer.fs"
           )
   | 41 -> ( 
 # 95 "Lexer.fsl"
                             TRUE 
-# 699 "Lexer.fs"
+# 700 "Lexer.fs"
           )
   | 42 -> ( 
 # 96 "Lexer.fsl"
                              FALSE 
-# 704 "Lexer.fs"
+# 705 "Lexer.fs"
           )
   | 43 -> ( 
 # 97 "Lexer.fsl"
                              MATCH 
-# 709 "Lexer.fs"
+# 710 "Lexer.fs"
           )
   | 44 -> ( 
 # 98 "Lexer.fsl"
                             WITH 
-# 714 "Lexer.fs"
+# 715 "Lexer.fs"
           )
   | 45 -> ( 
 # 99 "Lexer.fsl"
                             WHEN 
-# 719 "Lexer.fs"
+# 720 "Lexer.fs"
           )
   | 46 -> ( 
 # 100 "Lexer.fsl"
                             LET 
-# 724 "Lexer.fs"
+# 725 "Lexer.fs"
           )
   | 47 -> ( 
 # 101 "Lexer.fsl"
                             REC 
-# 729 "Lexer.fs"
+# 730 "Lexer.fs"
           )
   | 48 -> ( 
 # 102 "Lexer.fsl"
                            IN 
-# 734 "Lexer.fs"
+# 735 "Lexer.fs"
           )
   | 49 -> ( 
 # 103 "Lexer.fsl"
                             FUN 
-# 739 "Lexer.fs"
+# 740 "Lexer.fs"
           )
   | 50 -> ( 
 # 104 "Lexer.fsl"
                                FUNCTION 
-# 744 "Lexer.fs"
+# 745 "Lexer.fs"
           )
   | 51 -> ( 
 # 105 "Lexer.fsl"
                            AS 
-# 749 "Lexer.fs"
+# 750 "Lexer.fs"
           )
   | 52 -> ( 
 # 106 "Lexer.fsl"
                            OF 
-# 754 "Lexer.fs"
+# 755 "Lexer.fs"
           )
   | 53 -> ( 
 # 107 "Lexer.fsl"
                             AND 
-# 759 "Lexer.fs"
+# 760 "Lexer.fs"
           )
   | 54 -> ( 
 # 108 "Lexer.fsl"
                                 NAMESPACE 
-# 764 "Lexer.fs"
+# 765 "Lexer.fs"
           )
   | 55 -> ( 
 # 109 "Lexer.fsl"
                                      OPEN 
-# 769 "Lexer.fs"
+# 770 "Lexer.fs"
           )
   | 56 -> ( 
 # 110 "Lexer.fsl"
                                      WHERE 
-# 774 "Lexer.fs"
+# 775 "Lexer.fs"
           )
   | 57 -> ( 
 # 111 "Lexer.fsl"
                                      OVER 
-# 779 "Lexer.fs"
+# 780 "Lexer.fs"
           )
   | 58 -> ( 
 # 112 "Lexer.fsl"
                                      OVERLOAD 
-# 784 "Lexer.fs"
+# 785 "Lexer.fs"
           )
   | 59 -> ( 
 # 113 "Lexer.fsl"
                                      DO 
-# 789 "Lexer.fs"
+# 790 "Lexer.fs"
           )
   | 60 -> ( 
 # 114 "Lexer.fsl"
                                      UNDERSCORE 
-# 794 "Lexer.fs"
+# 795 "Lexer.fs"
           )
   | 61 -> ( 
 # 117 "Lexer.fsl"
                           BRA 
-# 799 "Lexer.fs"
+# 800 "Lexer.fs"
           )
   | 62 -> ( 
 # 118 "Lexer.fsl"
                           KET 
-# 804 "Lexer.fs"
+# 805 "Lexer.fs"
           )
   | 63 -> ( 
 # 119 "Lexer.fsl"
                           SQBRA 
-# 809 "Lexer.fs"
+# 810 "Lexer.fs"
           )
   | 64 -> ( 
 # 120 "Lexer.fsl"
                           SQKET 
-# 814 "Lexer.fs"
+# 815 "Lexer.fs"
           )
   | 65 -> ( 
 # 121 "Lexer.fsl"
                           CURBRA 
-# 819 "Lexer.fs"
+# 820 "Lexer.fs"
           )
   | 66 -> ( 
 # 122 "Lexer.fsl"
                           CURKET 
-# 824 "Lexer.fs"
+# 825 "Lexer.fs"
           )
   | 67 -> ( 
 # 125 "Lexer.fsl"
                           SEMICOLON 
-# 829 "Lexer.fs"
+# 830 "Lexer.fs"
           )
   | 68 -> ( 
 # 126 "Lexer.fsl"
                            SEMICOLON2 
-# 834 "Lexer.fs"
+# 835 "Lexer.fs"
           )
   | 69 -> ( 
 # 127 "Lexer.fsl"
                           COLON 
-# 839 "Lexer.fs"
+# 840 "Lexer.fs"
           )
   | 70 -> ( 
 # 128 "Lexer.fsl"
                            COLON2 
-# 844 "Lexer.fs"
+# 845 "Lexer.fs"
           )
   | 71 -> ( 
 # 129 "Lexer.fsl"
                           COMMA 
-# 849 "Lexer.fs"
+# 850 "Lexer.fs"
           )
   | 72 -> ( 
 # 130 "Lexer.fsl"
                           DOT 
-# 854 "Lexer.fs"
+# 855 "Lexer.fs"
           )
   | 73 -> ( 
 # 133 "Lexer.fsl"
                                        let s = lexeme lexbuf in STRING (s.Trim [|'\"'|]) 
-# 859 "Lexer.fs"
+# 860 "Lexer.fs"
           )
   | 74 -> ( 
 # 134 "Lexer.fsl"
                                        let s = lexeme lexbuf in CHAR ((s.Trim [|'\''|]).Chars 0) 
-# 864 "Lexer.fs"
+# 865 "Lexer.fs"
           )
   | 75 -> ( 
 # 135 "Lexer.fsl"
                                              FLOAT (parse_float (lexeme lexbuf)) 
-# 869 "Lexer.fs"
+# 870 "Lexer.fs"
           )
   | 76 -> ( 
 # 136 "Lexer.fsl"
                                  INT32 (Int32.Parse (lexeme lexbuf)) 
-# 874 "Lexer.fs"
+# 875 "Lexer.fs"
           )
   | 77 -> ( 
 # 137 "Lexer.fsl"
                                     AT_INT32 (trim '@' lexbuf |> Int32.Parse) 
-# 879 "Lexer.fs"
+# 880 "Lexer.fs"
           )
   | 78 -> ( 
 # 140 "Lexer.fsl"
                                       UID (lexeme lexbuf) 
-# 884 "Lexer.fs"
+# 885 "Lexer.fs"
           )
   | 79 -> ( 
 # 141 "Lexer.fsl"
                                  LID (lexeme lexbuf) 
-# 889 "Lexer.fs"
+# 890 "Lexer.fs"
           )
   | 80 -> ( 
 # 144 "Lexer.fsl"
                                     BACKTICK_ID <| trim '#' lexbuf 
-# 894 "Lexer.fs"
+# 895 "Lexer.fs"
           )
   | 81 -> ( 
 # 145 "Lexer.fsl"
                                     AT_ID <| trim '@' lexbuf 
-# 899 "Lexer.fs"
+# 900 "Lexer.fs"
           )
   | 82 -> ( 
 # 146 "Lexer.fsl"
                                      TICK_ID <| trim '\'' lexbuf 
-# 904 "Lexer.fs"
+# 905 "Lexer.fs"
           )
   | _ -> failwith "tokenize"
 

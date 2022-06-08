@@ -1,0 +1,17 @@
+{
+  "profiles": {
+    "Interpreter": {
+      "commandName": "Project",
+      "commandLineArgs": "test\\firstclass_poly.lw"
+    },
+    "Console": {
+      "commandName": "Project",
+      "commandLineArgs": "--console test/console.lw",
+      "workingDirectory": "$(ProjectDir)"
+    },
+    "UnitTest": {
+      "commandName": "Project",
+      "commandLineArgs": "--unit-test"
+    }
+  }
+}

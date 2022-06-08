@@ -68,8 +68,8 @@ module Typing =
         module Kind =  
             let star = "*" 
             let arrow = "->"
-            let row = "Row"
-            let htuple = "HTuple"
+            let row = "Row"         // TODO: ugly, find a better name
+            let htuple = "HTuple"   // TODO: even uglier
 
 
 module Printing =
@@ -98,7 +98,7 @@ module Printing =
                            greek_tyvars_ <- true
                 | false -> greek_tyvars_ <- false
                 
-        member this.forall = if this.unicode then "\u2200\b" else "forall"
+        member this.forall = if this.unicode then "\u2200\b" else "forall"  // TODO: create string constant bindings
         member this.flex_forall =
             #if DEBUG
             "Forall"

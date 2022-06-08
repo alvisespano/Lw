@@ -21,17 +21,18 @@ module CC = Core.Config
 let mutable filename = ""
 
 let credits () =
-    let now = DateTime.Now
+    let buildtime = DateTime (Lw.Interpreter.Gen.build_time, DateTimeKind.Utc);
     let core_asm = Assembly.GetAssembly (typeof<Lw.Core.Globals.logger>) // get Lw.Core assembly by getting any of the type defined in it
-    let asm = Assembly.GetExecutingAssembly ()
-    let name = asm.GetName ()
-    let ver = name.Version
-    let title = get_assembly_attribute<AssemblyTitleAttribute> asm
+    let interpreter_asm = Assembly.GetExecutingAssembly ()
+    let ver = interpreter_asm.GetName().Version
+    let fileinfo = System.Diagnostics.FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location)
+    let interpreter_title = get_assembly_attribute<AssemblyTitleAttribute> interpreter_asm
     let core_title = get_assembly_attribute<AssemblyTitleAttribute> core_asm
-    let description = get_assembly_attribute<AssemblyDescriptionAttribute> asm
-    let product = get_assembly_attribute<AssemblyProductAttribute> asm
-    let copyright = get_assembly_attribute<AssemblyCopyrightAttribute> asm
-    let company = get_assembly_attribute<AssemblyCompanyAttribute> asm
+    let description = get_assembly_attribute<AssemblyDescriptionAttribute> interpreter_asm
+    let product = get_assembly_attribute<AssemblyProductAttribute> interpreter_asm
+    let copyright = get_assembly_attribute<AssemblyCopyrightAttribute> interpreter_asm
+    let company = get_assembly_attribute<AssemblyCompanyAttribute> interpreter_asm
+    let version = get_assembly_attribute<AssemblyVersionAttribute> interpreter_asm  
     let productize = function
         | []  -> ""
         | [s] -> sprintf "%s is" s
@@ -41,14 +42,17 @@ let credits () =
             in
                 sprintf "%s and %s are" (flatten_strings ", " firsts) last
     in
-        sprintf "%s v%d.%d.%d build %d [%04d-%02d-%02d]\n\
+        sprintf "%s v%d.%d.%d build %d [%04d-%02d-%02d %O]\n\
                 \n\
                 %s\n\
                 \n\
                 %s %s, %s.\n"
-            title ver.Major ver.Minor ver.Build ver.Revision now.Year now.Month now.Day
+            interpreter_title
+            ver.Major ver.Minor ver.Build ver.Revision
+            //fileinfo.FileMajorPart fileinfo.FileMinorPart fileinfo.FileBuildPart fileinfo.FileVersion
+            buildtime.Year buildtime.Month buildtime.Day buildtime.TimeOfDay
             description
-            (productize [product; core_title; title ]) copyright company
+            (productize [product; core_title; interpreter_title]) copyright company
 
 let usage () =
     sprintf "\n\nusage: %s <SOURCE FILENAME>\n\n%s"

@@ -1,6 +1,6 @@
 ﻿(*
  * Lw
- * Absyn/Defs.fs: definitions for AST
+ * Absyn/Misc.fs: misc definitions for AST
  * (C) Alvise Spano' @ Universita' Ca' Foscari di Venezia
  *)
  
@@ -18,7 +18,7 @@ open Lw.Core
 // misc stuff
 //
 
-let parse_float s = Double.Parse (s, Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture)
+let parse_float (s : string) = Double.Parse (s, Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture)
 let fresh_reserved_id () = Config.reserved_id <| sprintf Config.Printing.fresh_reserved_id (fresh_int ())
 let tuple_index_label = sprintf Config.Printing.row_based_tuple_label_fmt
 

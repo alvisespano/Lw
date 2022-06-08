@@ -1,183 +1,58 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
-  <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>6890ce86-3856-467a-b3b5-ef307b7695f8</ProjectGuid>
-    <OutputType>Exe</OutputType>
-    <RootNamespace>Interpreter</RootNamespace>
-    <AssemblyName>Interpreter</AssemblyName>
-    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
-    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
-    <TargetFSharpCoreVersion>4.4.0.0</TargetFSharpCoreVersion>
-    <Name>Interpreter</Name>
-    <TargetFrameworkProfile />
-  </PropertyGroup>
-  <PropertyGroup>
-    <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <Tailcalls>false</Tailcalls>
-    <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT</DefineConstants>
-    <WarningLevel>5</WarningLevel>
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DocumentationFile>
-    </DocumentationFile>
-    <Prefer32Bit>false</Prefer32Bit>
-    <StartArguments>test\firstclass_poly.lw</StartArguments>
-    <StartWorkingDirectory>..\..</StartWorkingDirectory>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Console Debug|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <Tailcalls>false</Tailcalls>
-    <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT</DefineConstants>
-    <WarningLevel>5</WarningLevel>
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DocumentationFile />
-    <Prefer32Bit>false</Prefer32Bit>
-    <StartArguments>--console test/console.lw</StartArguments>
-    <StartWorkingDirectory>..\..</StartWorkingDirectory>
-    <OutputPath>bin\Console Debug\</OutputPath>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'UnitTest Debug|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <Tailcalls>false</Tailcalls>
-    <DefineConstants>DEBUG;WAIT_FOR_KEY_AT_EXIT</DefineConstants>
-    <WarningLevel>5</WarningLevel>
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DocumentationFile />
-    <Prefer32Bit>false</Prefer32Bit>
-    <StartArguments>--unit-test -v</StartArguments>
-    <OutputPath>bin\UnitTest Debug\</OutputPath>
-    <StartWorkingDirectory>..\..</StartWorkingDirectory>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>true</Optimize>
-    <Tailcalls>false</Tailcalls>
-    <DefineConstants>RELEASE</DefineConstants>
-    <WarningLevel>5</WarningLevel>
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DocumentationFile />
-    <Prefer32Bit>false</Prefer32Bit>
-    <StartArguments>test\firstclass_poly.lw</StartArguments>
-    <StartWorkingDirectory>..\..</StartWorkingDirectory>
-    <OutputPath>bin\Release\</OutputPath>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Console Release|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>true</Optimize>
-    <Tailcalls>false</Tailcalls>
-    <DefineConstants>RELEASE</DefineConstants>
-    <WarningLevel>5</WarningLevel>
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DocumentationFile />
-    <Prefer32Bit>false</Prefer32Bit>
-    <StartArguments>--console test/console.lw</StartArguments>
-    <OutputPath>bin\Console Release\</OutputPath>
-    <StartWorkingDirectory>..\..</StartWorkingDirectory>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'UnitTest Release|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>true</Optimize>
-    <Tailcalls>false</Tailcalls>
-    <DefineConstants>RELEASE</DefineConstants>
-    <WarningLevel>5</WarningLevel>
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DocumentationFile />
-    <Prefer32Bit>false</Prefer32Bit>
-    <StartArguments>--unit-test</StartArguments>
-    <StartWorkingDirectory>..\..</StartWorkingDirectory>
-    <OutputPath>bin\UnitTest Release\</OutputPath>
-  </PropertyGroup>
-  <Choose>
-    <When Condition="'$(VisualStudioVersion)' == '11.0'">
-      <PropertyGroup Condition="Exists('$(MSBuildExtensionsPath32)\..\Microsoft SDKs\F#\3.0\Framework\v4.0\Microsoft.FSharp.Targets')">
-        <FSharpTargetsPath>$(MSBuildExtensionsPath32)\..\Microsoft SDKs\F#\3.0\Framework\v4.0\Microsoft.FSharp.Targets</FSharpTargetsPath>
-      </PropertyGroup>
-    </When>
-    <Otherwise>
-      <PropertyGroup Condition="Exists('$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\FSharp\Microsoft.FSharp.Targets')">
-        <FSharpTargetsPath>$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\FSharp\Microsoft.FSharp.Targets</FSharpTargetsPath>
-      </PropertyGroup>
-    </Otherwise>
-  </Choose>
-  <Import Project="$(FSharpTargetsPath)" />
-  <PropertyGroup>
-    <PreBuildEvent />
-  </PropertyGroup>
-  <ItemGroup>
-    <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="Config.fs" />
-    <Compile Include="Globals.fs" />
-    <Compile Include="Args.fs" />
-    <Compile Include="Eval.fs" />
-    <Compile Include="Intrinsic.fs" />
-    <Compile Include="Console.fs" />
-    <Compile Include="UnitTester.fs" />
-    <Compile Include="UnitTest\TypeEquivalence.fs" />
-    <Compile Include="UnitTest\Basic.fs" />
-    <Compile Include="UnitTest\HML.fs" />
-    <Compile Include="UnitTest\Records.fs" />
-    <Compile Include="UnitTest\Custom.fs" />
-    <Compile Include="UnitTest\All.fs" />
-    <Compile Include="Main.fs" />
-    <None Include="test\misc.lw" />
-    <None Include="test\console.lw" />
-    <None Include="test\overloading.lw" />
-    <None Include="test\tyvars.lw" />
-    <None Include="test\firstclass_poly.lw" />
-    <None Include="app.config" />
-    <Content Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Core\Core.fsproj">
-      <Name>Core</Name>
-      <Project>{0d6b7ffa-a1f1-4fae-ad8d-0da3888f5953}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <Reference Include="FSharp.Core">
-      <HintPath>..\packages\FSharp.Core.6.0.4\lib\netstandard2.0\FSharp.Core.dll</HintPath>
-    </Reference>
-    <Reference Include="FsLexYacc.Runtime">
-      <HintPath>..\packages\FsLexYacc.Runtime.10.2.0\lib\netstandard2.0\FsLexYacc.Runtime.dll</HintPath>
-    </Reference>
-    <Reference Include="mscorlib" />
-    <Reference Include="PPrint">
-      <HintPath>..\packages\PPrint.2.0.0\lib\portable-net45+netcore45+wpa81+wp8\PPrint.dll</HintPath>
-    </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Data" />
-    <Reference Include="System.Data.Linq" />
-    <Reference Include="System.Numerics" />
-    <ProjectReference Include="..\..\..\FSharp.Common\FSharp.Common.fsproj">
-      <Name>FSharp.Common</Name>
-      <Project>{3e721011-6cce-4187-a49a-dac093de8e0f}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <Reference Include="System.ValueTuple">
-      <Private>True</Private>
-    </Reference>
-  </ItemGroup>
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>netcoreapp3.1</TargetFramework>
+		<Configurations>Debug;Release</Configurations>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+		<WarningLevel>4</WarningLevel>
+		<DefineConstants></DefineConstants>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+		<WarningLevel>4</WarningLevel>
+		<DefineConstants />
+	</PropertyGroup>
+
+	<Target Name="Date" BeforeTargets="BeforeBuild">
+		<WriteLinesToFile File="$(IntermediateOutputPath)gen.fs" Lines="module Lw.Interpreter.Gen%0D%0Alet build_time = $([System.DateTime]::UtcNow.Ticks)L" Overwrite="true" />
+	</Target>
+
+	<ItemGroup>
+		<Compile Include="$(IntermediateOutputPath)gen.fs" />
+		<Compile Include="AssemblyInfo.fs" />
+		<Compile Include="Config.fs" />
+		<Compile Include="Globals.fs" />
+		<Compile Include="Args.fs" />
+		<Compile Include="Eval.fs" />
+		<Compile Include="Intrinsic.fs" />
+		<Compile Include="Console.fs" />
+		<Compile Include="UnitTester.fs" />
+		<Compile Include="UnitTest\All.fs" />
+		<Compile Include="UnitTest\Basic.fs" />
+		<Compile Include="UnitTest\Custom.fs" />
+		<Compile Include="UnitTest\HML.fs" />
+		<Compile Include="UnitTest\Records.fs" />
+		<Compile Include="UnitTest\TypeEquivalence.fs" />
+		<Compile Include="Main.fs" />
+		<None Include="test\console.lw" />
+		<None Include="test\firstclass_poly.lw" />
+		<None Include="test\misc.lw" />
+		<None Include="test\overloading.lw" />
+		<None Include="test\tyvars.lw" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="PPrint" Version="2.0.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\..\FSharp.Common\FSharp.Common.fsproj" />
+		<ProjectReference Include="..\Core\Core.fsproj" />
+	</ItemGroup>
+
+
+
 </Project>

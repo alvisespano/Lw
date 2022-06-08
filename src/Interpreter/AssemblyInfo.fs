@@ -9,13 +9,13 @@ open System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [<assembly: AssemblyTitle("Lw Interpreter")>]
-[<assembly: AssemblyDescription("Designed and written by Alvise Spano'.")>]
-[<assembly: AssemblyConfiguration("")>]
+[<assembly: AssemblyDescription("Interpreter, Interactive Console and Unit Tester for the language Lw")>]
+//[<assembly: AssemblyConfiguration("")>]
 [<assembly: AssemblyCompany("Universita' Ca' Foscari di Venezia")>]
 [<assembly: AssemblyProduct("Lw")>]
-[<assembly: AssemblyCopyright("© 2014-2016 Alvise Spano'")>]
-[<assembly: AssemblyTrademark("")>]
-[<assembly: AssemblyCulture("")>]
+[<assembly: AssemblyCopyright("© 2014-2022 Alvise Spano'")>]
+//[<assembly: AssemblyTrademark("")>]
+//[<assembly: AssemblyCulture("")>]
  
 // Setting ComVisible to false makes the types in this assembly not visible
 // to COM components.  If you need to access a type in this assembly from
@@ -35,7 +35,7 @@ open System.Runtime.InteropServices;
 // You can specify all the values or you can default the Build and Revision Numbers
 // by using the ‘*’ as shown below:
 // [assembly: AssemblyVersion("1.0.*")]
-[<assembly: AssemblyVersion("0.9.1.*")>]
-//[<assembly: AssemblyFileVersion("0.5.0.*")>]
+[<assembly: AssemblyVersion("0.10.0.*")>]
+[<assembly: AssemblyFileVersion("3.2.1.*")>]
 ()
 

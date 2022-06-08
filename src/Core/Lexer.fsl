@@ -1,6 +1,6 @@
 ﻿{
 
-module Lw.Core.Lexer
+//module Lw.Core.Lexer
 
 open System
 open FSharp.Text.Lexing
@@ -26,7 +26,7 @@ let ureal = digit* '.' digit+ | digit+ '.' digit*
 let sreal = ['-']? ureal
 let real = sreal | sreal 'e' int | int 'e' int | sreal 'f'
 let int = ['-']? nat
-let long = int 'l'
+let long = int 'l'  
 let quoted = "\"" [^'"']* "\""
 let op = ['+' '-' '/' '*' '$' '%' '>' '=' '<' '?' '@']+
 
