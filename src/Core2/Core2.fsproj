@@ -1,0 +1,73 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>netcoreapp3.1</TargetFramework>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+	</PropertyGroup>
+
+	<!-- added manually by me, taken from https://github.com/fsprojects/FsLexYacc/issues/140 -->
+	<PropertyGroup>
+		<FsLexToolPath>$(NuGetPackageRoot)\fslexyacc\10.1.0\build\fslex\netcoreapp3.1</FsLexToolPath>
+		<FsYaccToolPath>$(NuGetPackageRoot)\fslexyacc\10.1.0\build\fsyacc\netcoreapp3.1</FsYaccToolPath>
+		<FsLexToolExe>fslex.dll</FsLexToolExe>
+		<FsYaccToolExe>fsyacc.dll</FsYaccToolExe>
+		<FsLexYaccToolRunner>dotnet </FsLexYaccToolRunner>
+	</PropertyGroup>
+
+
+	<ItemGroup>
+		<Compile Include="AssemblyInfo.fs" />
+		<Compile Include="Config.fs" />
+		<Compile Include="Globals.fs" />
+		<Compile Include="Absyn\Misc.fs" />
+		<Compile Include="Absyn\Var.fs" />
+		<Compile Include="Absyn\Sugar.fs" />
+		<Compile Include="Absyn\Kind.fs" />
+		<Compile Include="Absyn\Ast.fs" />
+		<FsYacc Include="Parser.fsy">
+			<OtherFlags>--module Lw.Core.Parser -v</OtherFlags>
+		</FsYacc>
+		<FsLex Include="Lexer.fsl">
+			<OtherFlags>--unicode --module Lw.Core.Lexer</OtherFlags>
+		</FsLex>
+		<Compile Include="Parser.fsi">
+			<Visible>true</Visible>
+			<Link>Parser.fsi</Link>
+		</Compile>
+		<Compile Include="Parser.fs">
+			<Visible>true</Visible>
+			<Link>Parser.fs</Link>
+		</Compile>
+		<Compile Include="Lexer.fs">
+			<Visible>true</Visible>
+			<Link>Lexer.fs</Link>
+		</Compile>
+		<Compile Include="Parsing.fs" />
+		<Compile Include="Typing\Defs.fs" />
+		<Compile Include="Typing\Equivalence.fs" />
+		<Compile Include="Typing\Report.fs" />
+		<Compile Include="Typing\Subst.fs" />
+		<Compile Include="Typing\Ops.fs" />
+		<Compile Include="Typing\StateMonad.fs" />
+		<Compile Include="Typing\Meta.fs" />
+		<Compile Include="Typing\Unify.fs" />
+		<Compile Include="Typing\Resolve.fs" />
+		<Compile Include="Typing\Inference.fs" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="FsLexYacc" Version="10.1.0" />
+		<PackageReference Include="FsLexYacc.Runtime" Version="10.1.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\..\FSharp.Common\FSharp.Common.fsproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Update="FSharp.Core" Version="6.0.4" />
+	</ItemGroup>
+
+
+
+</Project>

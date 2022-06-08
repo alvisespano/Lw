@@ -1,0 +1,149 @@
+﻿{
+
+//module Lw.Core.Lexer
+
+open System
+open FSharp.Text.Lexing
+open FSharp.Common.Parsing.LexYacc
+open Lw.Core.Absyn
+open Lw.Core.Absyn.Misc
+open Lw.Core.Absyn.Var
+open Lw.Core.Absyn.Kind
+open Lw.Core.Absyn.Sugar
+open Lw.Core.Absyn.Ast
+open Lw.Core.Absyn.Ast.Aux
+open Lw.Core.Parser
+
+let trim c lexbuf = let s = lexeme lexbuf in s.TrimStart [|c|]
+
+}
+
+let whitespace = [' ' '\t' ]
+let newline = ('\n' | "\r\n")
+let digit = ['0'-'9']
+let nat = digit+
+let ureal = digit* '.' digit+ | digit+ '.' digit*
+let sreal = ['-']? ureal
+let real = sreal | sreal 'e' int | int 'e' int | sreal 'f'
+let int = ['-']? nat
+let long = int 'l'  
+let quoted = "\"" [^'"']* "\""
+let op = ['+' '-' '/' '*' '$' '%' '>' '=' '<' '?' '@']+
+
+let idbody = ['a'-'z' 'A'-'Z' '0'-'9' '_']*['\'']*	
+let Uid = ['A'-'Z'] idbody
+let Lid = ['a'-'z' '_'] idbody
+let id = Uid | Lid
+
+rule comment level = parse
+	| "(*"          	{ comment (level + 1) lexbuf }
+	| "*)"	            { if level = 0 then tokenize lexbuf else comment (level - 1) lexbuf }
+	| newline			{ newline lexbuf; comment level lexbuf } 
+	| _					{ comment level lexbuf }
+
+and linecomment = parse
+    | newline           { newline lexbuf; tokenize lexbuf }
+    | _                 { linecomment lexbuf }
+
+and tokenize = parse
+	| eof				{ EOF }
+	| whitespace		{ tokenize lexbuf }
+	| newline			{ newline lexbuf; tokenize lexbuf }
+
+	| "//"				{ linecomment lexbuf }
+	| "(*"          	{ comment 0 lexbuf }
+     
+	| "->"			{ ARROW }
+	| '+'			{ PLUS }
+	| '-'			{ MINUS }
+	| '*'			{ STAR }
+	| '/'			{ SLASH }
+	| '%'			{ MOD }
+	| "\\"			{ BACKSLASH }
+	| "\\_"		    { INJECT } 
+	| "_/"		    { EJECT } 
+	| '!'			{ BANG }
+	| '?'			{ QUESTION }
+	| '#'			{ HASH }
+	| '|'			{ PIPE }
+	| '&'			{ AMP }
+	| '='			{ EQ }
+	| "<>"			{ NEQ }
+	| "||"			{ DOUBLEPIPE }
+	| "&&"			{ DOUBLEAMP }
+	| "not"			{ NOT }
+	| '<'			{ LT }
+	| '>'			{ GT }
+	| "<="			{ LEQ }
+	| ">="			{ GEQ }
+    | "=>"          { IMPLIES }
+	| ":="			{ ASSIGN }
+    | ":>"          { COLONGT }
+    | "_|_"         { BOTTOM }
+    | op            
+    | '`' id '`'    { INFIX (lexeme lexbuf) }
+
+	// keywords
+    | "datatype"    { DATATYPE }
+    | "data"        { DATA }
+    | "val"         { VAL } 
+	| "type"		{ TYPE } 
+    | "forall"      { FORALL }
+	| "if"			{ IF }
+	| "then"        { THEN }
+	| "else"		{ ELSE }
+	| "true"		{ TRUE }
+	| "false"		{ FALSE }
+	| "match"		{ MATCH }
+	| "with"		{ WITH }
+	| "when"		{ WHEN }
+	| "let"			{ LET }
+	| "rec"			{ REC }
+	| "in"			{ IN }
+	| "fun"			{ FUN }
+	| "function"	{ FUNCTION }
+	| "as"			{ AS }
+	| "of"			{ OF }
+	| "and"			{ AND }
+	| "namespace"	{ NAMESPACE }
+    | "open"        { OPEN }
+    | "where"       { WHERE }
+    | "over"        { OVER }
+    | "overload"    { OVERLOAD }
+    | "do"          { DO }
+    | '_'           { UNDERSCORE }
+    
+	// brakets
+	| '('			{ BRA }
+	| ')'			{ KET }
+	| '['			{ SQBRA }
+	| ']'			{ SQKET }
+	| '{'			{ CURBRA }
+	| '}'			{ CURKET }
+
+	// punctuation
+	| ';'			{ SEMICOLON }
+	| ";;"			{ SEMICOLON2 }
+	| ':'			{ COLON }
+	| "::"			{ COLON2 }
+	| ','			{ COMMA }
+	| '.'			{ DOT }
+
+	// literals
+	| "\"" [^'"']* "\""		{ let s = lexeme lexbuf in STRING (s.Trim [|'\"'|]) }
+	| '\'' [^'\''] '\''		{ let s = lexeme lexbuf in CHAR ((s.Trim [|'\''|]).Chars 0) }
+    | real                  { FLOAT (parse_float (lexeme lexbuf)) }
+	| int   	    		{ INT32 (Int32.Parse (lexeme lexbuf)) }
+	| '@' int   	    	{ AT_INT32 (trim '@' lexbuf |> Int32.Parse) }
+
+	// identifiers
+	| Uid 		            { UID (lexeme lexbuf) }
+	| Lid       			{ LID (lexeme lexbuf) }
+
+	// prefixed identifiers
+	| '`' (Uid | Lid)	{ BACKTICK_ID <| trim '#' lexbuf }
+	| '@' (Uid | Lid)	{ AT_ID <| trim '@' lexbuf }
+	| '\'' (Uid | Lid)	{ TICK_ID <| trim '\'' lexbuf }
+
+
+
