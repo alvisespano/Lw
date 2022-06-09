@@ -94,8 +94,9 @@ module Error =
     
     // put here only those error codes that need to be caught, detected or reused by other parts of the program for some reason (e.g., UnitTest)
     module Code =
-        let type_mismatch = 200
         let unbound_symbol = 10
+        let unification_mismatch = 200
+        let type_circularity = 203
 
 
     // unbound symbol errors
@@ -118,8 +119,8 @@ module Error =
 
     // type errors
     
-    let type_mismatch loc expected1 got1 expected2 got2 =
-        mismatch Et Code.type_mismatch loc (fun (x : ty) -> x.is_equivalent) "expression" "type" expected1 got1 expected2 got2
+    let unification_mismatch loc expected1 got1 expected2 got2 =
+        mismatch Et Code.unification_mismatch loc (fun (x : ty) -> x.is_equivalent) "expression" "type" expected1 got1 expected2 got2
 
     let row_tail_circularity loc ρ tθ =
         Et 201 loc "unification fails because row type variable type variable %O occurs in the domain of substituion %O" ρ tθ
@@ -128,7 +129,7 @@ module Error =
         Et 202 loc "row type %O cannot be rewritten with label %s in order to match row type %O" r1 l r2
 
     let type_circularity loc (t1 : ty) (t2 : ty) tα (t : ty) =
-        circularity Et 203 loc "type" t1 t2 tα t
+        circularity Et Code.type_circularity loc "type" t1 t2 tα t
         
     let value_not_resolved loc cs =
         Et 204 loc "expression will not evaluate to a ground value because some constraints are unresolved: %O" cs

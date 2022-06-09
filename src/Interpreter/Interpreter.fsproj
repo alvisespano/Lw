@@ -30,12 +30,14 @@
     <Compile Include="Intrinsic.fs" />
     <Compile Include="Console.fs" />
     <Compile Include="UnitTester.fs" />
-    <Compile Include="UnitTest\All.fs" />
     <Compile Include="UnitTest\Basic.fs" />
+    <Compile Include="UnitTest\HindleyMilner.fs" />
     <Compile Include="UnitTest\Custom.fs" />
     <Compile Include="UnitTest\HML.fs" />
     <Compile Include="UnitTest\Records.fs" />
     <Compile Include="UnitTest\TypeEquivalence.fs" />
+    <Compile Include="UnitTest\Temp.fs" />
+    <Compile Include="UnitTest\All.fs" />
     <Compile Include="Main.fs" />
     <None Include="test\console.lw" />
     <None Include="test\firstclass_poly.lw" />

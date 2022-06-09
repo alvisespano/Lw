@@ -254,7 +254,7 @@ module internal Mgu =
                         in
                             Q2, θ2 ** θ1 ** θ0
 
-                    | t1, t2 -> Report.Error.type_mismatch loc t1_ t2_ t1 t2
+                    | t1, t2 -> Report.Error.unification_mismatch loc t1_ t2_ t1 t2
                 #if DEBUG_UNI && DEBUG_UNI_DEEP
                 L.uni Low "[mgu=] %O == %O\n       %O\n       Q' = %O" t1 t2 θ Q
                 #endif

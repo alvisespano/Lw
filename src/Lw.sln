@@ -12,6 +12,12 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "FSharp.Common", "..\..\FSha
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Interpreter", "Interpreter\Interpreter.fsproj", "{111876E4-B9F0-4B77-89E4-2194EC7BAF88}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8D64CCE8-F639-438F-AE92-D9DC799D79AF}"
+	ProjectSection(SolutionItems) = preProject
+		Changes.txt = Changes.txt
+		TODO.txt = TODO.txt
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

@@ -41,7 +41,7 @@ type logger with
 type flag =
     | Verbatim
     | Unbind
-    | KeepBindingsAtEnd
+    | KeepAllBindings
     | ShowSuccessful
     | Verbose
     | NoAutoGen
@@ -84,7 +84,7 @@ and [< NoComparison; CustomEquality; RequireQualifiedAccess  >] result =
             x yobj
 
 and entry = string * (result * flag list)
-and section = string * flag list * entry list
+and section = { name : string; flags : flag list; entries : entry list }
 
 
 
@@ -216,16 +216,16 @@ let expected_static_error_infos T ecodeo =
 // entries and sections
 //
 
-type section_data (name, flags, entries) =
+type section_data (sec : section) =
     member this.is_flag_enabled (|Flag|_|) = flag.is_enabled (|Flag|_|) this.flags
     member this.contains_flag (flg : flag) = flg.is_in this.flags
-    member val name = name
-    member val entries = entries
+    member val name = sec.name
+    member val entries = sec.entries
     abstract flags : flag list
-    default val flags = flags
+    default val flags = sec.flags
 
 type entry_data (sd : section_data, num, input, res, flags) =
-    inherit section_data (sd.name, sd.flags, sd.entries)
+    inherit section_data { name = sd.name; flags = sd.flags; entries = sd.entries }
     member val input = input
     member val num = num
     member val res = res
@@ -519,20 +519,20 @@ let rec test_section (tchk : typechecker) (sec : section) =
     | Some scores -> scores
     | None ->
         let _ = sd.flags |> flag.choose (function 
-            | Dependencies secs -> Some <| test_sections tchk [ for name, flags, entries in secs do yield name, KeepBindingsAtEnd :: flags, entries ]
+            | Dependencies secs -> Some <| test_sections tchk [ for sec in secs do yield { sec with flags = KeepAllBindings :: sec.flags } ]
             | _ -> None)
         let envs0 = tchk.envs
         let scores, span = cputime (List.mapi (fun i e -> let r = test_entry tchk sd i e in r)) sd.entries
         let infs = section_infos sd.name span scores
         L.pp (L.msg High) (pp_infos infs)
-        if not <| KeepBindingsAtEnd.is_in sd.flags then
+        if not <| KeepAllBindings.is_in sd.flags then
             tchk.envs <- envs0
         tested_sections.add sd.name scores
         scores
 
 and test_sections (tchk : typechecker) (secs : section list) =
     let scores, span = cputime (fun () -> List.map (test_section tchk) secs |> List.concat) () 
-    let infs = section_infos (mappen_strings (fun (name, _, _) -> name) ", " secs) span scores
+    let infs = section_infos (mappen_strings (fun sec -> sec.name) ", " secs) span scores
     L.pp (L.msg Unmaskerable) (pp_infos infs)
     List.sumBy (function score.Ok | score.Weak -> 1 | _ -> 0) scores
 
@@ -543,8 +543,6 @@ let test_sections_from_scratch = test_sections (new typechecker ())
 //
 
 module Aux =
-    open Lw.Core.Typing.Report
-
     let typed_ok_as_ s l : result * flag list = result.TypedOk (Some s), l
     let typed_ok_ l : result * flag list = result.TypedOk None, l
     let type_is_ s l : result * flag list = result.TypedOk (Some s), [Verbatim] @ l
@@ -565,11 +563,11 @@ module Aux =
     let wrong_syntax_ = wrong_<syntax_error> None
     let static_errn_ code = wrong_<static_error> (Some code)
     let type_errn_ code = wrong_<type_error> (Some code)
-    let unbound_error_ = static_errn_ Error.Code.unbound_symbol
+    let unbound_symbol_error_ = static_errn_ Error.Code.unbound_symbol
 
     let wrong codeo = wrong_ codeo []
     let wrong_type = wrong_type_ []
     let wrong_syntax = wrong_syntax_ []
     let static_errn code = static_errn_ code []
     let type_errn code = type_errn_ code []
-    let unbound_error = unbound_error_ []
+    let unbound_symbol_error = unbound_symbol_error_ []

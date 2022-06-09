@@ -5,103 +5,108 @@ open Lw.Interpreter.UnitTester
 open Lw.Interpreter.UnitTester.Aux
 
 let defs =
-    "Defs", [KeepBindingsAtEnd; Dependencies [Basic.lists; Basic.hindley_milner]],
-    [
-    "let ids = single id",                      typed_ok_as "forall ('a :> forall 'b. 'b -> 'b). list 'a"    
-    "let const x y = x",                        typed_ok_as "forall 'a 'b. 'a -> 'b -> 'a"
-    "let const2 x y = y",                       typed_ok_as "forall 'a 'b. 'a -> 'b -> 'b"
-    "let choose x y = if x = y then x else y",  typed_ok_as "forall 'a. 'a -> 'a -> 'a"
-    "let poly (f : forall 'a. 'a -> 'a) =
-        f 1, f true",                           typed_ok_as "(forall 'a. 'a -> 'a) -> int * bool"
-    ]
-
+     { name = "Defs"
+       flags = [KeepAllBindings; Dependencies [Basic.lists; HindleyMilner.misc]]
+       entries = [
+        "let ids = single id",                      typed_ok_as "forall ('a :> forall 'b. 'b -> 'b). list 'a"    
+        "let const x y = x",                        typed_ok_as "forall 'a 'b. 'a -> 'b -> 'a"
+        "let const2 x y = y",                       typed_ok_as "forall 'a 'b. 'a -> 'b -> 'b"
+        "let choose x y = if x = y then x else y",  typed_ok_as "forall 'a. 'a -> 'a -> 'a"
+        "let poly (f : forall 'a. 'a -> 'a) =
+            f 1, f true",                           typed_ok_as "(forall 'a. 'a -> 'a) -> int * bool"
+        ]
+    }
 
 let hml =
-    "HML", [KeepBindingsAtEnd; HideHints; Dependencies [Basic.lists; Basic.hindley_milner]],
-    [
-    "let i x = x in i 1, i true, i",            typed_ok_as "int * bool * (forall 'a. 'a -> 'a)"
-    "fun (i : forall 'a. 'a -> 'a) ->
-        (i 1, i true)",                         typed_ok_as "(forall 'a. 'a -> 'a) -> int * bool"
-    "single id",                                typed_ok_as "forall ('a :> forall 'b. 'b -> 'b). list 'a"
-    "[id]",                                     typed_ok_as "forall ('a :> forall 'b. 'b -> 'b). list 'a"
-    "choose (fun x y -> x) (fun x y -> y)",     typed_ok_as "forall 'a. 'a -> 'a -> 'a"
-    "choose id",                                typed_ok_as "forall ('a :> forall 'b. 'b -> 'b). 'a -> 'a"
+     { name = "HML"
+       flags = [KeepAllBindings; HideHints; Dependencies [Basic.lists; HindleyMilner.misc]]
+       entries = [
+        "let i x = x in i 1, i true, i",            typed_ok_as "int * bool * (forall 'a. 'a -> 'a)"
+        "fun (i : forall 'a. 'a -> 'a) ->
+            (i 1, i true)",                         typed_ok_as "(forall 'a. 'a -> 'a) -> int * bool"
+        "single id",                                typed_ok_as "forall ('a :> forall 'b. 'b -> 'b). list 'a"
+        "[id]",                                     typed_ok_as "forall ('a :> forall 'b. 'b -> 'b). list 'a"
+        "choose (fun x y -> x) (fun x y -> y)",     typed_ok_as "forall 'a. 'a -> 'a -> 'a"
+        "choose id",                                typed_ok_as "forall ('a :> forall 'b. 'b -> 'b). 'a -> 'a"
 
-    "let ids : list ('a -> 'a) = ids",                      typed_ok_as_ "forall 'a. list ('a -> 'a)" [Unbind]     // autogen takes place for top-level lets
-    "let ids : forall 'a. list ('a -> 'a) = ids",           typed_ok_as_ "list ('a -> 'a)" [Unbind]                // this must be equivalent to the one above
+        "let ids : list ('a -> 'a) = ids",                      typed_ok_as_ "forall 'a. list ('a -> 'a)" [Unbind]     // autogen takes place for top-level lets
+        "let ids : forall 'a. list ('a -> 'a) = ids",           typed_ok_as_ "list ('a -> 'a)" [Unbind]                // this must be equivalent to the one above
 
-    "let id : 'a -> 'a = id in id 1, id true",              wrong_type
-    "let id : forall 'a. 'a -> 'a = id in id 1, id true",   typed_ok_as_ "int * bool" [Unbind]
-    "let id : 'a -> 'a = id in id",                         typed_ok_as_ "'a -> 'a" [NoAutoGen]
+        "let id : 'a -> 'a = id in id 1, id true",              wrong_type
+        "let id : forall 'a. 'a -> 'a = id in id 1, id true",   typed_ok_as_ "int * bool" [Unbind]
+        "let id : 'a -> 'a = id in id",                         typed_ok_as_ "'a -> 'a" [NoAutoGen]
 
-    "let ids : list ('a -> 'a) = ids in ids",               typed_ok_as_ "list ('a -> 'a)" [NoAutoGen]
-    "let ids : forall 'a. list ('a -> 'a) = ids in ids",    typed_ok_as "forall 'a. list ('a -> 'a)"
-    "let ids : list (forall 'a. 'a -> 'a) = ids in ids",    typed_ok_as "list (forall 'a. 'a -> 'a)"
-    "let ids : forall 'a. list ('a -> 'a) = ids in ids",    typed_ok_as "forall 'a. list ('a -> 'a)"
-    "let ids : list (forall 'a. 'a -> 'a) = ids in ids",    typed_ok_as "list (forall 'a. 'a -> 'a)"
+        "let ids : list ('a -> 'a) = ids in ids",               typed_ok_as_ "list ('a -> 'a)" [NoAutoGen]
+        "let ids : forall 'a. list ('a -> 'a) = ids in ids",    typed_ok_as "forall 'a. list ('a -> 'a)"
+        "let ids : list (forall 'a. 'a -> 'a) = ids in ids",    typed_ok_as "list (forall 'a. 'a -> 'a)"
+        "let ids : forall 'a. list ('a -> 'a) = ids in ids",    typed_ok_as "forall 'a. list ('a -> 'a)"
+        "let ids : list (forall 'a. 'a -> 'a) = ids in ids",    typed_ok_as "list (forall 'a. 'a -> 'a)"
 
         
-    "app poly",                                 typed_ok_as "(forall 'a. 'a -> 'a) -> int * bool"
-    "app poly id",                              typed_ok_as "int * bool"
-    "map id [id]",                              typed_ok_as "forall ('a :> forall 'b. 'b -> 'b). list 'a"
+        "app poly",                                 typed_ok_as "(forall 'a. 'a -> 'a) -> int * bool"
+        "app poly id",                              typed_ok_as "int * bool"
+        "map id [id]",                              typed_ok_as "forall ('a :> forall 'b. 'b -> 'b). list 'a"
 
-    "map poly ids",                             typed_ok_as "list (int * bool)"
-    "append (single inc) ids",                  typed_ok_as "list (int -> int)"
-    "map poly ids, append (single inc) ids",    typed_ok_as "list (int * bool) * list (int -> int)"
+        "map poly ids",                             typed_ok_as "list (int * bool)"
+        "append (single inc) ids",                  typed_ok_as "list (int -> int)"
+        "map poly ids, append (single inc) ids",    typed_ok_as "list (int * bool) * list (int -> int)"
 
-    "let ids : list (forall 'a. 'a -> 'a) = ids
-     in
-        map poly ids",                          typed_ok_as "list (int * bool)"
+        "let ids : list (forall 'a. 'a -> 'a) = ids
+         in
+            map poly ids",                          typed_ok_as "list (int * bool)"
 
-    "let ids : forall 'a. list ('a -> 'a) = ids
-     in
-        map poly ids",                          wrong_type_ [HideHint 13]
+        "let ids : forall 'a. list ('a -> 'a) = ids
+         in
+            map poly ids",                          wrong_type_ [HideHint 13]
    
-    "let ids : list ('a -> 'a) = ids
-     in
-        map poly ids",                          wrong_type_ [HideHint 6]
+        "let ids : list ('a -> 'a) = ids
+         in
+            map poly ids",                          wrong_type_ [HideHint 6]
 
-    "let ids : forall ('a :> forall 'b. 'b -> 'b) . list 'a = ids
-     in
-        map poly ids",                          typed_ok_as "list (int * bool)"
+        "let ids : forall ('a :> forall 'b. 'b -> 'b) . list 'a = ids
+         in
+            map poly ids",                          typed_ok_as "list (int * bool)"
 
-    "let ids : forall 'a. list ('a -> 'a) = ids
-     in
-        map poly ids, append (single inc) ids",  wrong_type_ [HideHint 6]
+        "let ids : forall 'a. list ('a -> 'a) = ids
+         in
+            map poly ids, append (single inc) ids",  wrong_type_ [HideHint 6]
 
-    ]
+        ]
+    }
 
 let higher_rank = 
-    "Impredicative Application and Higher Rank Arguments", [],
-    [
-    "let auto (id : forall 'a. 'a -> 'a) = id",         typed_ok_as "(forall 'a. 'a -> 'a) -> (forall 'a. 'a -> 'a)"
-    "let xauto (id : forall 'a. 'a -> 'a) x = id x",    typed_ok_as "forall 'a. (forall 'b. 'b -> 'b) -> 'a -> 'a"
-    "let takeAuto (auto : (forall 'a. 'a -> 'a) ->
-        (forall 'a. 'a -> 'a)) = auto auto",            typed_ok_as "((forall 'a. 'a -> 'a) -> (forall 'a. 'a -> 'a)) -> (forall 'a. 'a -> 'a)"
+    { name = "Impredicative Application and Higher Rank Arguments"
+      flags = []
+      entries = [
+        "let auto (id : forall 'a. 'a -> 'a) = id",         typed_ok_as "(forall 'a. 'a -> 'a) -> (forall 'a. 'a -> 'a)"
+        "let xauto (id : forall 'a. 'a -> 'a) x = id x",    typed_ok_as "forall 'a. (forall 'b. 'b -> 'b) -> 'a -> 'a"
+        "let takeAuto (auto : (forall 'a. 'a -> 'a) ->
+            (forall 'a. 'a -> 'a)) = auto auto",            typed_ok_as "((forall 'a. 'a -> 'a) -> (forall 'a. 'a -> 'a)) -> (forall 'a. 'a -> 'a)"
 
-    "xauto",                                    typed_ok_as "forall 'a. (forall 'a. 'a -> 'a) -> 'a -> 'a"
-    "takeAuto",                                 typed_ok_as "((forall 'a. 'a -> 'a) -> (forall 'a. 'a -> 'a)) -> (forall 'a. 'a -> 'a)"
-    "auto",                                     typed_ok_as "(forall 'a. 'a -> 'a) -> (forall 'a. 'a -> 'a)"
-    "fun (i : forall 'a. 'a -> 'a) -> i i",     typed_ok_as "forall ('a :> forall 'b. 'b -> 'b). (forall 'b. 'b -> 'b) -> 'a"
-                                                // type_ok "forall 'a. (forall 'a. 'a -> 'a) -> 'a -> 'a"
-    "auto id",                                  typed_ok_as "forall 'a. 'a -> 'a"
-    "apply auto id",                            typed_ok_as "forall 'a. 'a -> 'a"
+        "xauto",                                    typed_ok_as "forall 'a. (forall 'a. 'a -> 'a) -> 'a -> 'a"
+        "takeAuto",                                 typed_ok_as "((forall 'a. 'a -> 'a) -> (forall 'a. 'a -> 'a)) -> (forall 'a. 'a -> 'a)"
+        "auto",                                     typed_ok_as "(forall 'a. 'a -> 'a) -> (forall 'a. 'a -> 'a)"
+        "fun (i : forall 'a. 'a -> 'a) -> i i",     typed_ok_as "forall ('a :> forall 'b. 'b -> 'b). (forall 'b. 'b -> 'b) -> 'a"
+                                                    // type_ok "forall 'a. (forall 'a. 'a -> 'a) -> 'a -> 'a"
+        "auto id",                                  typed_ok_as "forall 'a. 'a -> 'a"
+        "apply auto id",                            typed_ok_as "forall 'a. 'a -> 'a"
 
-    "(single : (forall 'a. 'a -> 'a -> list (forall 'a. 'a -> 'a)) id", typed_ok_as "list (forall 'a. 'a -> 'a)"
+        "(single : (forall 'a. 'a -> 'a -> list (forall 'a. 'a -> 'a)) id", typed_ok_as "list (forall 'a. 'a -> 'a)"
         
-    "runST (returnST 1)",                       typed_ok_as "int"
-    "runST (newRef 1)",                         wrong_type
-    "apply runST (returnST 1)",                 typed_ok_as "int"
-    "map xauto ids",                            typed_ok_as "forall 'a. list ('a -> 'a)"
-    "map xauto (map xauto ids)",                wrong_type
-    "map auto ids",                             typed_ok_as "list (forall 'a. 'a -> 'a)"
-    "map auto (map auto ids)",                  typed_ok_as "list (forall 'a. 'a -> 'a)"
-    "head ids",                                 typed_ok_as "forall 'a. 'a -> 'a"
-    "tail ids",                                 typed_ok_as "list (forall 'a. 'a -> 'a)"
-    "apply tail ids",                           typed_ok_as "list (forall 'a. 'a -> 'a)"
-    "map head (single ids)",                    typed_ok_as "list (forall 'a. 'a -> 'a)"
-    "apply (map head) (single ids)",            typed_ok_as "list (forall 'a. 'a -> 'a)"
-
+        "runST (returnST 1)",                       typed_ok_as "int"
+        "runST (newRef 1)",                         wrong_type
+        "apply runST (returnST 1)",                 typed_ok_as "int"
+        "map xauto ids",                            typed_ok_as "forall 'a. list ('a -> 'a)"
+        "map xauto (map xauto ids)",                wrong_type
+        "map auto ids",                             typed_ok_as "list (forall 'a. 'a -> 'a)"
+        "map auto (map auto ids)",                  typed_ok_as "list (forall 'a. 'a -> 'a)"
+        "head ids",                                 typed_ok_as "forall 'a. 'a -> 'a"
+        "tail ids",                                 typed_ok_as "list (forall 'a. 'a -> 'a)"
+        "apply tail ids",                           typed_ok_as "list (forall 'a. 'a -> 'a)"
+        "map head (single ids)",                    typed_ok_as "list (forall 'a. 'a -> 'a)"
+        "apply (map head) (single ids)",            typed_ok_as "list (forall 'a. 'a -> 'a)"
+        ]
+    }
     (*-- check infinite poly types
     "(undefined :: some a. [a -> a] -> Int) (undefined :: some c. [(forall d. d -> c) -> c])", Wrong)
     "(undefined :: some a. [a -> a] -> Int) (undefined :: [(forall d. d -> d) -> (Int -> Int)])", Wrong)
@@ -131,7 +136,7 @@ let higher_rank =
 
     -- shared polymorphism
     "let f (x :: [forall a.a -> a]) = x in let g (x :: [Int -> Int]) = x in let ids = [id] in (f ids, g ids)", ok "([forall a. a -> a],[Int -> Int])")*)
-    ]
+
 
 let all : section list =
     [
