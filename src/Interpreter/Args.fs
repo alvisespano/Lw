@@ -21,7 +21,7 @@ module CC = Core.Config
 let mutable filename = ""
 
 let credits () =
-    let buildtime = DateTime (Lw.Interpreter.Gen.build_time, DateTimeKind.Utc);
+    let buildtime = DateTime (Lw.Interpreter.__GeneratedOnBuild.build_time, DateTimeKind.Utc);
     let core_asm = Assembly.GetAssembly (typeof<Lw.Core.Globals.logger>) // get Lw.Core assembly by getting any of the type defined in it
     let interpreter_asm = Assembly.GetExecutingAssembly ()
     let ver = interpreter_asm.GetName().Version

@@ -9,6 +9,6 @@ let rec fib n =
  
  let id x = x
 
- let pmap (f : forall 'pippo. 'pippo -> 'pippo) (a, b) = f a, f b
+ let pmap (f : forall 'p. 'p -> 'p) (a, b) = f a, f b
 
  
