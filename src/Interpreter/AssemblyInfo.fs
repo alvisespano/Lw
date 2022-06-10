@@ -13,7 +13,7 @@ open System.Runtime.InteropServices;
 //[<assembly: AssemblyConfiguration("")>]
 [<assembly: AssemblyCompany("Universita' Ca' Foscari di Venezia")>]
 [<assembly: AssemblyProduct("Lw")>]
-[<assembly: AssemblyCopyright("© 2014-2022 Alvise Spano'")>]
+[<assembly: AssemblyCopyright("Copyright © 2014-2022 Alvise Spano'")>]
 //[<assembly: AssemblyTrademark("")>]
 //[<assembly: AssemblyCulture("")>]
  
@@ -36,6 +36,6 @@ open System.Runtime.InteropServices;
 // by using the ‘*’ as shown below:
 // [assembly: AssemblyVersion("1.0.*")]
 [<assembly: AssemblyVersion("0.10.0.*")>]
-[<assembly: AssemblyFileVersion("3.2.1.*")>]
+//[<assembly: AssemblyFileVersion("3.2.1.*")>]
 ()
 

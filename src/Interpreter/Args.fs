@@ -20,37 +20,36 @@ module CC = Core.Config
 
 let mutable filename = ""
 
-let credits () =
+let productize = function
+    | []  -> ""
+    | [s] -> sprintf "%s is" s
+    | ss ->
+        let last = List.last ss
+        let firsts = List.take (List.length ss - 1) ss
+        in
+            sprintf "%s and %s are" (flatten_strings ", " firsts) last
+
+let credits () : string =
     let buildtime = DateTime (Lw.Interpreter.__GeneratedOnBuild.build_time, DateTimeKind.Utc);
     let core_asm = Assembly.GetAssembly (typeof<Lw.Core.Globals.logger>) // get Lw.Core assembly by getting any of the type defined in it
-    let interpreter_asm = Assembly.GetExecutingAssembly ()
-    let ver = interpreter_asm.GetName().Version
-    let fileinfo = System.Diagnostics.FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location)
-    let interpreter_title = get_assembly_attribute<AssemblyTitleAttribute> interpreter_asm
-    let core_title = get_assembly_attribute<AssemblyTitleAttribute> core_asm
-    let description = get_assembly_attribute<AssemblyDescriptionAttribute> interpreter_asm
-    let product = get_assembly_attribute<AssemblyProductAttribute> interpreter_asm
-    let copyright = get_assembly_attribute<AssemblyCopyrightAttribute> interpreter_asm
-    let company = get_assembly_attribute<AssemblyCompanyAttribute> interpreter_asm
-    let version = get_assembly_attribute<AssemblyVersionAttribute> interpreter_asm  
-    let productize = function
-        | []  -> ""
-        | [s] -> sprintf "%s is" s
-        | ss ->
-            let last = List.last ss
-            let firsts = List.take (List.length ss - 1) ss
-            in
-                sprintf "%s and %s are" (flatten_strings ", " firsts) last
+    let interpreter_asm = Assembly.GetEntryAssembly ()
+    let interpreter_ver = interpreter_asm.GetName().Version
+    let interpreter_title = interpreter_asm.GetCustomAttribute<AssemblyTitleAttribute>().Title
+    let core_title = core_asm.GetCustomAttribute<AssemblyTitleAttribute>().Title
+    let configuration = interpreter_asm.GetCustomAttribute<AssemblyConfigurationAttribute>().Configuration
+    let description = interpreter_asm.GetCustomAttribute<AssemblyDescriptionAttribute>().Description
+    let product = interpreter_asm.GetCustomAttribute<AssemblyProductAttribute>().Product
+    let copyright = interpreter_asm.GetCustomAttribute<AssemblyCopyrightAttribute>().Copyright
+    let company = interpreter_asm.GetCustomAttribute<AssemblyCompanyAttribute>().Company
     in
-        sprintf "%s v%d.%d.%d build %d [%04d-%02d-%02d %O]\n\
+        sprintf "%s v%d.%d.%d build %d [%s] [%04d-%02d-%02d]\n\
                 \n\
-                %s\n\
+                  -- %s\n\
                 \n\
                 %s %s, %s.\n"
             interpreter_title
-            ver.Major ver.Minor ver.Build ver.Revision
-            //fileinfo.FileMajorPart fileinfo.FileMinorPart fileinfo.FileBuildPart fileinfo.FileVersion
-            buildtime.Year buildtime.Month buildtime.Day buildtime.TimeOfDay
+            interpreter_ver.Major interpreter_ver.Minor interpreter_ver.Build interpreter_ver.Revision configuration
+            buildtime.Year buildtime.Month buildtime.Day
             description
             (productize [product; core_title; interpreter_title]) copyright company
 

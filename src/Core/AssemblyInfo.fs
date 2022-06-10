@@ -10,12 +10,12 @@ open System.Runtime.InteropServices;
 // associated with an assembly.
 [<assembly: AssemblyTitle("Lw Core Library")>]
 [<assembly: AssemblyDescription("Core module for the language Lw")>]
-[<assembly: AssemblyConfiguration("")>]
+//[<assembly: AssemblyConfiguration("")>]
 [<assembly: AssemblyCompany("Universita' Ca' Foscari di Venezia")>]
 [<assembly: AssemblyProduct("Lw")>]
 [<assembly: AssemblyCopyright("© 2014-2022 Alvise Spano'")>]
-[<assembly: AssemblyTrademark("")>]
-[<assembly: AssemblyCulture("")>]
+//[<assembly: AssemblyTrademark("")>]
+//[<assembly: AssemblyCulture("")>]
  
 // Setting ComVisible to false makes the types in this assembly not visible
 // to COM components.  If you need to access a type in this assembly from

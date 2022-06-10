@@ -457,13 +457,9 @@ type kscheme with
 
 type ty with
     // TODO: these should be forbidden and turned into methods of the main monad
-    [< Obsolete >]
     static member fresh_var k = T_Var (var.fresh, k)
-    [< Obsolete >]
     static member fresh_var_and_ty k = let α = var.fresh in α, T_Var (α, k)
-    [< Obsolete >]
     static member fresh_star_var = ty.fresh_var K_Star
-    [< Obsolete >]
     static member fresh_star_var_and_ty = ty.fresh_var_and_ty K_Star
 
     member this.ftv =

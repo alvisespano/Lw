@@ -64,7 +64,7 @@ with
     override this.ToString () = this.pretty //not_implemented "signature_binding.ToString: use pretty instead" __SOURCE_FILE__ __LINE__
     member this.pretty = sprintf "%O %s %O" this.id this.signature.value.annotation_sep this.signature
 
-type [< NoComparison; NoEquality >] case<'p, 'e> = node<'p> * node<'e> option * node<'e>
+type case<'p, 'e> = node<'p> * node<'e> option * node<'e>
 
 let pretty_case = function
     | p, None, e    -> sprintf "%O -> %O" p e

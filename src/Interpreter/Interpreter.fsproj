@@ -1,59 +1,67 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
-    <Configurations>Debug;Release</Configurations>
-  </PropertyGroup>
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>netcoreapp3.1</TargetFramework>
+		<Configurations>Debug;Release</Configurations>
+		<GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+		<Deterministic>False</Deterministic>
+		<AssemblyTitle>Lw Interpreter</AssemblyTitle>
+		<Authors>Alvise Spano'</Authors>
+		<Company>Ca' Foscari University of Venice</Company>
+		<Description>Interpreter, Interactive Console and Unit Tester for the language Lw</Description>
+		<Product>Lw</Product>
+		<Copyright>Copyright © 2014-2022 Alvise Spano'</Copyright>
+		<AssemblyVersion>0.10.0.*</AssemblyVersion>
+	</PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <WarningLevel>4</WarningLevel>
-    <DefineConstants></DefineConstants>
-  </PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+		<WarningLevel>4</WarningLevel>
+		<DefineConstants></DefineConstants>
+	</PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <WarningLevel>4</WarningLevel>
-    <DefineConstants />
-  </PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+		<WarningLevel>4</WarningLevel>
+		<DefineConstants />
+	</PropertyGroup>
 
-  <Target Name="Date" BeforeTargets="BeforeBuild">
-    <WriteLinesToFile File="$(IntermediateOutputPath)__generatedOnBuild.fs" Lines="module Lw.Interpreter.__GeneratedOnBuild%0D%0Alet build_time = $([System.DateTime]::UtcNow.Ticks)L" Overwrite="true" />
-  </Target>
+	<Target Name="Date" BeforeTargets="BeforeBuild">
+		<WriteLinesToFile File="$(IntermediateOutputPath)__generatedOnBuild.fs" Lines="module Lw.Interpreter.__GeneratedOnBuild%0D%0Alet build_time = $([System.DateTime]::UtcNow.Ticks)L" Overwrite="true" />
+	</Target>
 
-  <ItemGroup>
-    <Compile Include="$(IntermediateOutputPath)__generatedOnBuild.fs" />
-    <Compile Include="AssemblyInfo.fs" /> 
-    <Compile Include="Config.fs" />
-    <Compile Include="Globals.fs" />
-    <Compile Include="Args.fs" />
-    <Compile Include="Eval.fs" />
-    <Compile Include="Intrinsic.fs" />
-    <Compile Include="Console.fs" />
-    <Compile Include="UnitTester.fs" />
-    <Compile Include="UnitTest\Basic.fs" />
-    <Compile Include="UnitTest\HindleyMilner.fs" />
-    <Compile Include="UnitTest\Custom.fs" />
-    <Compile Include="UnitTest\HML.fs" />
-    <Compile Include="UnitTest\Records.fs" />
-    <Compile Include="UnitTest\TypeEquivalence.fs" />
-    <Compile Include="UnitTest\Temp.fs" />
-    <Compile Include="UnitTest\All.fs" />
-    <Compile Include="Main.fs" />
-    <None Include="test\console.lw" />
-    <None Include="test\firstclass_poly.lw" />
-    <None Include="test\misc.lw" />
-    <None Include="test\overloading.lw" />
-    <None Include="test\tyvars.lw" />
-  </ItemGroup>
+	<ItemGroup>
+		<Compile Include="$(IntermediateOutputPath)__generatedOnBuild.fs" />
+		<Compile Include="Config.fs" />
+		<Compile Include="Globals.fs" />
+		<Compile Include="Args.fs" />
+		<Compile Include="Eval.fs" />
+		<Compile Include="Intrinsic.fs" />
+		<Compile Include="Console.fs" />
+		<Compile Include="UnitTester.fs" />
+		<Compile Include="UnitTest\Basic.fs" />
+		<Compile Include="UnitTest\HindleyMilner.fs" />
+		<Compile Include="UnitTest\Custom.fs" />
+		<Compile Include="UnitTest\HML.fs" />
+		<Compile Include="UnitTest\Records.fs" />
+		<Compile Include="UnitTest\TypeEquivalence.fs" />
+		<Compile Include="UnitTest\Temp.fs" />
+		<Compile Include="UnitTest\All.fs" />
+		<Compile Include="Main.fs" />
+		<None Include="test\console.lw" />
+		<None Include="test\firstclass_poly.lw" />
+		<None Include="test\misc.lw" />
+		<None Include="test\overloading.lw" />
+		<None Include="test\tyvars.lw" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="PPrint" Version="2.0.0" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="PPrint" Version="2.0.0" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\..\FSharp.Common\FSharp.Common.fsproj" />
-    <ProjectReference Include="..\Core\Core.fsproj" />
-  </ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\..\..\FSharp.Common\FSharp.Common.fsproj" />
+		<ProjectReference Include="..\Core\Core.fsproj" />
+	</ItemGroup>
 
 
 

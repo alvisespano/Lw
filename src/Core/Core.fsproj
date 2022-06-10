@@ -2,7 +2,9 @@
 
 	<PropertyGroup>
 		<TargetFramework>netcoreapp3.1</TargetFramework>
-		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<Configurations>Debug;Release</Configurations>
+		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+		<Deterministic>False</Deterministic>
 	</PropertyGroup>
 
 	<!-- added manually by me, taken from https://github.com/fsprojects/FsLexYacc/issues/140 -->
@@ -14,13 +16,13 @@
 		<FsLexYaccToolRunner>dotnet </FsLexYaccToolRunner>
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-	  <WarningLevel>4</WarningLevel>
-	  <Optimize>False</Optimize>
-	  <DefineConstants>DEBUG_INFERENCE;DEBUG_BEFORE_INFERENCE;DEBUG_UNI;ENFORCE_NF_IN_UNI</DefineConstants>
+		<WarningLevel>4</WarningLevel>
+		<Optimize>False</Optimize>
+		<DefineConstants>DEBUG_INFERENCE;DEBUG_BEFORE_INFERENCE;DEBUG_UNI;ENFORCE_NF_IN_UNI</DefineConstants>
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-	  <WarningLevel>4</WarningLevel>
-	  <DefineConstants></DefineConstants>
+		<WarningLevel>4</WarningLevel>
+		<DefineConstants></DefineConstants>
 	</PropertyGroup>
 
 

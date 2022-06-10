@@ -50,6 +50,7 @@ let vars_in_patt p =
     let (|Var|Leaf|Nodes|) (p : patt) =
         match p.value with
         | P_Var x        -> Var x
+        | P_Tuple ps     -> Nodes ps
         | P_PolyCons _
         | P_Cons _
         | P_Lit _
@@ -60,7 +61,6 @@ let vars_in_patt p =
         | P_Or (p1, p2) 
         | P_And (p1, p2) -> Nodes [p1; p2]
         | P_Record bs    -> Nodes [for _, p in bs -> p]
-        | P_Tuple ps     -> Nodes ps
     in
         vars_in_any_patt (|Var|Leaf|Nodes|) p
 
