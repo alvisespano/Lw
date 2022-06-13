@@ -11,10 +11,19 @@ open Lw.Interpreter.UnitTester
 
 let all : section list =
     [
-    Custom.all   // custom tests for stuff that is not the language, e.g. internal algorithms etc.
-    TypeEquivalence.all
-    Basic.all   // needed as they introduce some basic bindings
+    // custom tests for stuff that is not the language, e.g. internal algorithms etc.
+    //Custom.all 
+
+    //TypeEquivalence.all
+
+    // needed as they introduce some basic bindings
+
+    //Basic.all 
+
+    //HindleyMilner.all 
+
+    //Records.all
+
     HML.all
-    Records.all
     ] |> List.concat
     

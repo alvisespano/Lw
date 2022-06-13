@@ -24,7 +24,8 @@ open FSharp.Common
  * DEBUG_HML                // turn on log for functions involved into HML type inference
  * DEBUG_UNI                // turn on log in unification functions
  * DEBUG_UNI_DEEP           // log even recursive calls of unification functions
- * DEBUG_TYPE_EQUIVALENCE      // turn on log in type equalivalence algorithm
+ * DEBUG_TYPE_EQUIVALENCE   // turn on log in type equalivalence algorithm
+ * DEBUG_NF                 // print additional debug information when normalizing flex types and flex-type-to-f-type conversion
  *
  * DISABLE_VAR_NORM         // turn off variable normalization
  * DISABLE_HML_FIXES        // disable little fixes done by me
