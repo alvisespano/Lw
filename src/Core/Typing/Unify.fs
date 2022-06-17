@@ -185,7 +185,7 @@ module internal Mgu =
             
 
         // TODOL: rewrite the whole unification with monads?
-        and mgu (ctx : uni_context) Q0 t1_ t2_ : prefix * tksubst =
+        and mgu (ctx : uni_context) Q0_ t1_ t2_ : prefix * tksubst =
             let loc = ctx.loc
             let rec R (Q0 : prefix) (t1 : ty) (t2 : ty) =
                 #if DEBUG_UNI && DEBUG_UNI_DEEP
@@ -256,13 +256,13 @@ module internal Mgu =
 
                     | t1, t2 -> Report.Error.unification_mismatch loc t1_ t2_ t1 t2
                 #if DEBUG_UNI && DEBUG_UNI_DEEP
-                L.uni Low "[mgu=] %O == %O\n       %O\n       Q' = %O" t1 t2 θ Q
+                L.uni Low "[mgu=] %O == %O\n       %O\n       Q = %O" t1 t2 θ Q
                 #endif
                 r
             #if DEBUG_UNI && !DEBUG_UNI_DEEP
-            L.uni Low "[mgu] %O == %O\n      Q = %O" t1_ t2_ Q0
+            L.uni Low "[mgu] %O == %O\n      Q0 = %O" t1_ t2_ Q0_
             #endif
-            let Q, θ as r = R Q0 t1_ t2_
+            let Q, θ as r = R Q0_ t1_ t2_
             assert (Set.intersect Q.dom θ.dom).IsEmpty;
             #if DEBUG_UNI && !DEBUG_UNI_DEEP
             L.uni Low "[mgu=] %O == %O\n       %O\n       Q' = %O" t1_ t2_ θ Q

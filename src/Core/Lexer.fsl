@@ -60,8 +60,6 @@ and tokenize = parse
 	| '/'			{ SLASH }
 	| '%'			{ MOD }
 	| "\\"			{ BACKSLASH }
-	| "\\_"		    { INJECT } 
-	| "_/"		    { EJECT } 
 	| '!'			{ BANG }
 	| '?'			{ QUESTION }
 	| '#'			{ HASH }
@@ -84,6 +82,8 @@ and tokenize = parse
     | '`' id '`'    { INFIX (lexeme lexbuf) }
 
 	// keywords
+	| "inject"	    { INJECT } 
+	| "eject"	    { EJECT } 
     | "datatype"    { DATATYPE }
     | "data"        { DATA }
     | "val"         { VAL } 

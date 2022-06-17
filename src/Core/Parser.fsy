@@ -518,7 +518,7 @@ expr_tuple_atom_:
   | expr_tuple_atom COLON fxty_expr                         { Annot ($1, $3) }
   | expr_tuple_atom BACKSLASH id                            { Restrict ($1, $3) }  
   | INJECT expr_tuple_atom                                  { Inject $2 }
-  | expr_tuple_atom EJECT                                   { Eject $1 }
+  | EJECT expr_tuple_atom                                   { Eject $2 }
   | MINUS expr_tuple_atom %prec UMINUS				        { UnApp (Config.Typing.Names.int_negate, $2) }
   | expr_tuple_atom INFIX expr_tuple_atom					{ BinApp ($1, $2, $3) }
   | expr_tuple_atom PLUS expr_tuple_atom					{ BinApp ($1, "+", $3) }

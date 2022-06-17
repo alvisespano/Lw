@@ -517,8 +517,8 @@ type uexpr with
             | Solve (e, τ)          -> sprintf "%O where %O" e τ
             | Record (bs, None)     -> sprintf "{ %s }" (mappen_strings (fun (x, e) -> sprintf "%s = %O" x e) "; " bs)
             | Record (bs, Some e)   -> sprintf "{ %s | %O }" (mappen_strings (fun (x, e) -> sprintf "%s = %O" x e) "; " bs) e
-            | Inject e              -> sprintf "\\_ %O" e
-            | Eject e               -> sprintf "%O _/" e
+            | Inject e              -> sprintf "inject %O" e
+            | Eject e               -> sprintf "eject %O" e
             | Loosen e              -> sprintf "(%O)#" e
 
 type udecl with       

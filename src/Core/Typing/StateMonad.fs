@@ -397,7 +397,10 @@ type type_inference_builder (loc, ctx) =
             | FxU0_ForallsQ (Q, _) -> assert (Set.intersect Q.dom ungeneralizables).IsEmpty     // no quantified vars must be among the ungeneralizables
             | FxU0_Bottom _        -> ()                                                        // TODOL: is there something to check with kind vars?
             assert ϕ.fv.IsSubsetOf ungeneralizables                                             // free vars must be among the ungeneralizable ones
-            do let βs = Set.intersect ϕ.fv ungeneralizables in if Set.count βs > 0 then Report.Hint.scoped_vars_wont_be_generalized loc "type" βs
+            do
+                let βs = Set.intersect ϕ.fv ungeneralizables
+                if Set.count βs > 0 then
+                    Report.Hint.scoped_vars_wont_be_generalized loc "type" βs
             let! cs = M.get_constraints
             return! M.bind_Γ jk { mode = jm; scheme = { constraints = cs; fxty = ϕ } }
         }
