@@ -68,15 +68,6 @@ module internal Mgu =
             member α.skolemized = sprintf Config.Printing.skolemized_tyvar_fmt α.pretty
 
         type ty with
-            static member fresh_skolem k = let x = var.fresh.skolemized in T_Cons (x, k), x
-
-            member t.skolemize_unquantified αks =
-                assert t.is_unquantified
-                let sks = [ for α : var, k in αks do yield α, α.skolemized, k ]
-                let θ = !> (new tsubst (Env.t.ofSeq <| List.map (fun (α, x, k) -> α, T_Cons (x, k)) sks))
-                in
-                    Computation.B.set { for _, x, _ in sks do yield x }, S θ t
-
             member this.cons =
                 let rec R t =
                   Computation.B.set {
@@ -89,118 +80,24 @@ module internal Mgu =
                     | T_Forall (_, t)           -> yield! R t }
                 in
                     R this
-        
-        type fxty with
-            member this.cons =
-                let rec R ϕ =
-                    Computation.B.set {
-                        match ϕ with
-                        | Fx_Bottom _       -> ()
-                        | Fx_F_Ty t         -> yield! t.cons
-                        | Fx_Forall (_, ϕ)  -> yield! R ϕ
-                    }
-                in
-                    R this
-
+       
         type prefix with
             member this.cons = Computation.B.set { for _, t in this do yield! t.cons }
 
         let cons_in_tsubst (tθ : tsubst) = Computation.B.set { for _, t : ty in tθ do yield! t.cons }
         let cons_in_tksubst θ = cons_in_tsubst θ.t
-
-        let check_skolem_escape ctx c (Q : prefix, θ) =
-            let cons = cons_in_tksubst θ + Q.cons
-            in
-                if Set.contains c cons then
-                    Report.Error.skolemized_type_variable_escaped ctx.loc c
-
-        let check_skolems_escape ctx cs (Q, θ) =
-            for c in cs do
-                check_skolem_escape ctx c (Q, θ)
-
-        let check_circularity_wrt α Q ϕ =
-            match Q with
-            | Q_Slice α (_, _, Q2) -> Set.contains α (Fx_ForallsQ (Q2, ϕ)).fv
-            | _                    -> false
- 
-        let rec subsume ctx (Q0 : prefix) (t : ty) (ϕ : fxty) =
-            #if ENFORCE_NF_IN_UNI
-            let t = t.nf
-            let ϕ = ϕ.nf
-            #endif
-            #if DEBUG_UNI && DEBUG_HML
-            L.uni High "[sub] %O :> %O\n      Q = %O\n" t ϕ Q0
-            #endif
-            let Q, θ as r =
-                assert t.is_nf
-                assert ϕ.is_nf
-                match t, ϕ with            
-                | _, FxU0_Bottom k ->          // this case is not in the HML paper but it is necessary or it will recur infinitely
-                    Q0, kmgu ctx t.kind k                    
-
-                | T_ForallsK0 (αks, t1), FxU0_ForallsQ (Mapped fxty.instantiate_unquantified (Q', t2)) ->
-                    assert Q0.is_disjoint Q'
-                    let skcs, t1' = t1.skolemize_unquantified αks
-                    let Q1, θ1 = mgu ctx (Q0 + Q') t1' t2
-                    let Q2, Q3 = Q1.split Q0.dom
-                    #if DISABLE_HML_FIXES
-                    let θ2 = { θ1 with t = θ1.t.remove Q3.dom }
-                    let r = Q2, θ2
-                    #else
-                    let r = Q1, { θ1 with t = θ1.t.remove (Q3.dom + Q'.dom) }   // HACK: Q'.dom contains variables created by the intantiation, and therefore must be removed
-                    #endif
-                    check_skolems_escape ctx skcs r
-                    r
-            #if DEBUG_UNI && DEBUG_HML
-            L.uni High "[sub=] %O :> %O\n       %O\n       Q' = %O" t ϕ θ Q
-            #endif
-            r
-
-
-        and mgu_fx ctx (Q : prefix) (ϕ1 : fxty) (ϕ2 : fxty) =
-            #if ENFORCE_NF_IN_UNI
-            let ϕ1 = ϕ1.nf
-            let ϕ2 = ϕ2.nf
-            #endif
-            #if DEBUG_UNI && DEBUG_HML
-            L.uni Normal "[mgu-scheme] %O == %O\n             Q = %O" ϕ1 ϕ2 Q
-            #endif
-            let Q', θ, ϕ as r =
-                assert ϕ1.is_nf
-                assert ϕ2.is_nf
-                match ϕ1, ϕ2 with
-                | (FxU0_Bottom k, (_ as ϕ))
-                | (_ as ϕ, FxU0_Bottom k) -> Q, kmgu ctx k ϕ.kind, ϕ
-
-                | FxU0_ForallsQ  (Mapped fxty.instantiate_unquantified (Q1, t1)), FxU0_ForallsQ (Mapped fxty.instantiate_unquantified (Q2, t2)) ->
-                    assert (let p (a : prefix) b = a.is_disjoint b in p Q Q1 && p Q1 Q2 && p Q Q2)  // instantiating ϕ1 and ϕ2 makes this assert always false
-                    let Q3, θ3 = mgu ctx (Q + Q1 + Q2) t1 t2
-                    let Q4, Q5 = Q3.split (Q.dom + (fv_Γ (subst_jenv θ3 ctx.Γ)))    // TODOH: abstract this code by using get_ungeneralizable_vars
-                    in
-                        Q4, θ3, FxU_ForallsQ (Q5, S θ3 t1)
-            #if DEBUG_UNI && DEBUG_HML
-            L.uni Normal "[mgu-scheme=] %O == %O\n              %O\n              Q' = %O\n              res = %O" ϕ1 ϕ2 θ Q' ϕ
-            #endif
-            r
             
 
-        // TODOL: rewrite the whole unification with monads?
-        and mgu (ctx : uni_context) Q0_ t1_ t2_ : prefix * tksubst =
+        and mgu (ctx : uni_context) t1_ t2_ : tksubst =
             let loc = ctx.loc
-            let rec R (Q0 : prefix) (t1 : ty) (t2 : ty) =
+            let rec R (t1 : ty) (t2 : ty) =
                 #if DEBUG_UNI && DEBUG_UNI_DEEP
-                L.uni Low "[mgu] %O == %O\n      Q = %O" t1 t2 Q0
+                L.uni Low "[mgu] %O == %O" t1 t2
                 #endif
                 let Q, θ as r =
-                    #if ENFORCE_NF_IN_UNI
-                    let t1 = t1.nf
-                    let t2 = t2.nf
-                    #endif
-                    assert t1.is_nf
-                    assert t2.is_nf
                     match t1, t2 with
-                    | T_Cons (x, k1), T_Cons (y, k2) when x = y -> Q0, kmgu ctx k1 k2
-                    | T_Var (α, k1), T_Var (β, k2) when α = β   -> Q0, kmgu ctx k1 k2
+                    | T_Cons (x, k1), T_Cons (y, k2) when x = y -> kmgu ctx k1 k2
+                    | T_Var (α, k1), T_Var (β, k2) when α = β   -> kmgu ctx k1 k2
                                       
                     | (T_Row _ as s), T_Row_Ext (l, t, (T_Row (_, ρo) as r)) ->
                         let t', s', tθ1 = rewrite_row loc t1 t2 s l
@@ -210,15 +107,6 @@ module internal Mgu =
                         let Q3, θ3 = let θ = θ2 ** θ1 in R Q2 (S θ r) (S θ s')
                         in
                             Q3, θ3 ** θ2 ** θ1
-
-                    | T_ForallK ((α, k1), t1), T_ForallK ((β, k2), t2) ->
-                        let θ0 = kmgu ctx k1 k2
-                        let tc, c = ty.fresh_skolem k1
-                        let θ1 = !> (new tsubst (α, tc)) ** θ0
-                        let θ2 = !> (new tsubst (β, tc)) ** θ0
-                        let Q1, θ1 = R Q0 (S θ1 t1) (S θ2 t2)
-                        check_skolems_escape ctx [c] (Q1, θ1)
-                        Q1, θ1
 
                     | T_Var (α1, k1), T_NamedVar (α2, k2) // prefer propagating named over anonymous vars in substitutions
                     | T_NamedVar (α2, k2), T_Var (α1, k1)
@@ -238,7 +126,6 @@ module internal Mgu =
 
                     | T_Var (α, k), t
                     | t, T_Var (α, k) ->
-                        let ϕ = Q0.lookup α
                         let θ0 = kmgu ctx k t.kind
                         // occurs check
                         if check_circularity_wrt α Q0 (Fx_F_Ty t) then let S = S θ0 in Report.Error.type_circularity loc (S t1_) (S t2_) (S (T_Var (α, k))) (S t)
@@ -269,10 +156,10 @@ module internal Mgu =
             #endif                    
             r
 
-open Mgu.Pure
+module U = Mgu.Pure
 
 let try_mgu ctx Q t1 t2 =
-    try Some (mgu ctx Q t1 t2)
+    try Some (U.mgu ctx Q t1 t2)
     with :? Report.type_error -> None
     
 type type_inference_builder with

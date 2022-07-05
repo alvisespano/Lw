@@ -150,89 +150,15 @@ type ty with
 
 //    member t.instantiated = t.instantiate_wrt t.fv
 
-    member t.nf =
-        let r =
-            match t with
-            | T_Closure _
-            | T_Var _
-            | T_Cons _ -> t
-
-            | T_App (t1, t2) -> T_App (t1.nf, t2.nf)
-            | T_HTuple ts    -> T_HTuple (List.map (fun (t : ty) -> t.nf) ts)
-
-            | T_Forall (α, t2) ->
-                if not <| t2.ftv.contains_key α then t2.nf
-                else T_Forall (α, t2.nf)
-        #if DEBUG_NF
-        L.debug High "[F-nf] nf(%O) = %O" t r
-        #endif
-        r
-
-    member t.is_nf = t.is_equivalent t.nf
-        
+    
 
 // flex type augmentations
 //
 
-type fxty with
-    static member instantiate_unquantified (Q : prefix, t : ty) =
-            assert t.is_unquantified
-            let θ = !> (new tsubst (Env.t.B { for α, ϕ in Q do yield α, T_Var (var.fresh, ϕ.kind) }))
-            in
-                subst_prefix θ Q, subst_ty θ t
 
-    member this.nf =
-        let r =
-            match this with
-            | Fx_F_Ty t        -> Fx_F_Ty t.nf
-            | Fx_Bottom _ as ϕ -> ϕ 
-            | Fx_Forall ((α, ϕ1), ϕ2) ->
-                if not <| ϕ2.ftv.contains_key α then ϕ2.nf
-                else
-                    match ϕ2.nf with
-                    | Fx_F_Ty (T_Var (β, _)) when α = β -> ϕ1.nf
-                    | _ -> 
-                        match ϕ1.nf with
-                        | FxU_Unquantified t -> (subst_fxty (!> (new tsubst (α, t))) ϕ2).nf                        
-                        | ϕ1'                -> Fx_Forall ((α, ϕ1'), ϕ2.nf)
-        #if DEBUG_NF
-        L.debug High "[nf] nf(%O) = %O" this r
-        #endif
-        r
-
-    member this.is_nf = this.nf.is_equivalent this
-
-    member this.ftype =
-        let rec R = function
-            | Fx_F_Ty t -> t
-
-            | Fx_Bottom k -> T_Bottom k
-
-            | Fx_Forall ((α, FxU0_Bottom _), ϕ) ->
-                T_Forall (α, R ϕ)
-
-            | Fx_Forall ((α, FxU0_ForallsQ (Q, t1)), ϕ2) ->
-                let θ = !> (new tsubst (α, t1))
-                in
-                    R (Fx_ForallsQ (Q, subst_fxty θ ϕ2))
-        let r = R this.nf
-        #if DEBUG_NF
-        L.debug High "[ftype] ftype(%O) = %O" this r
-        #endif
-        r
-
-    member this.maybe_ftype =
-        match this with
-        | FxU_ForallsQ (Q, _) when Seq.forall (function (_, Fx_Bottom _) -> true | _ -> false) Q -> Some this.ftype
-        | FxU_Unquantified t -> Some t
-        | _ -> None
-
-    member this.is_really_flex = this.maybe_ftype.IsNone
-
-
-let Ungeneralized t = { constraints = constraints.empty; fxty = Fx_F_Ty t }
+let Ungeneralized t = { constraints = constraints.empty; ty = t }
 let (|Ungeneralized|) = function
-    | { constraints = cs; fxty = Fx_F_Ty t } when cs.is_empty -> t
+    | { constraints = cs; ty = t } when cs.is_empty -> t
     | σ -> unexpected "expected an ungeneralized type scheme but got: %O" __SOURCE_FILE__ __LINE__ σ
 
 

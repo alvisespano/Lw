@@ -47,7 +47,6 @@ type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] ty =
     | T_Var of var * kind    
     | T_HTuple of ty list   // TODOL: try to design a more general Rowed type which does not expect star on fields, and encode htuples with it
     | T_App of (ty * ty)
-    | T_Forall of var * ty
     | T_Closure of ident * tenv ref * ty_expr * kind
 with
     static member binding_separator = Config.Printing.type_annotation_sep
@@ -61,7 +60,6 @@ with
             | T_Var (_, k)
             | T_Closure (_, _, _, k) -> k
             | T_HTuple ts            -> K_HTuple [for t in ts do yield t.kind]
-            | T_Forall (_, t)        -> t.kind
             | T_App (t1, _)          -> match t1.kind with
                                         | K_Arrow (_, k) -> k
                                         | k              -> unexpected "non-arrow kind %O in left hand of type application: %O" __SOURCE_FILE__ __LINE__ k this
@@ -69,26 +67,6 @@ with
 
 // evaluated types environment (namely δ, analogous to the value environment Δ)
 and tenv = Env.t<ident, ty>
-
-
-// flexible types
-
-type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] fxty =
-    | Fx_Forall of (var * fxty) * fxty
-    | Fx_Bottom of kind
-    | Fx_F_Ty of ty
-with
-    static member binding_separator = Config.Printing.type_annotation_sep
-    static member reduction_separator = Config.Printing.ftype_instance_of_fxty_sep
-
-    member this.kind = (this :> kinded).kind
-
-    interface kinded with
-        member this.kind =
-            match this with
-            | Fx_Bottom k             -> k
-            | Fx_Forall (_, ϕ)        -> ϕ.kind
-            | Fx_F_Ty t               -> t.kind
 
 
 // constraints for overloading
@@ -184,9 +162,8 @@ module constraints =
     
 type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] tscheme =
     {
-//        type_constraints : type_constraints
-        constraints      : constraints
-        fxty             : fxty
+        constraints : constraints
+        ty          : ty
     }
 
 [< RequireQualifiedAccess >]
@@ -229,66 +206,8 @@ with
 
 type jenv = Env.t<jenv_key, jenv_value>
 
-type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] prefix =
-    | Q_Nil
-    | Q_Cons of prefix * (var * fxty)
 
-    interface IEnumerable<var * fxty> with
-        member this.GetEnumerator () = this.toSeq.GetEnumerator ()
-
-    interface Collections.IEnumerable with
-        member this.GetEnumerator () = (this :> IEnumerable<_>).GetEnumerator () :> Collections.IEnumerator   
-
-    member this.toSeq =
-        let rec R Q =
-          seq {
-            match Q with
-            | Q_Nil         -> ()
-            | Q_Cons (Q, i) -> yield! R Q; yield i }
-        in
-            R this
-
-    member Q.is_empty = match Q with Q_Nil -> true | _ -> false
-
-    member Q.dom = Computation.B.set { for α, _ in Q do yield α }
-
-    member Q.is_disjoint (Q' : prefix) = (Set.intersect Q.dom Q'.dom).IsEmpty
-
-    static member pretty_item = function
-        | α, Fx_Bottom K_Star        -> sprintf "%O" α
-        | α, Fx_Bottom k             -> sprintf "(%O :: %O)" α k
-        | α, t when t.kind.is_star   -> sprintf "(%O %s %O)" α Config.Printing.var_bound_sep t
-        | α, t                       -> sprintf "((%O :: %O) %s %O)" α t.kind Config.Printing.var_bound_sep t
-
-    static member pretty_as_prefix Q = mappen_strings_or_nothing prefix.pretty_item Config.Printing.empty_prefix Config.Printing.forall_prefix_sep Q
-    member Q.pretty = prefix.pretty_as_prefix Q
-    override this.ToString () = this.pretty
-
-    member this.fold f z =
-        match this with
-        | Q_Nil         -> z
-        | Q_Cons (Q, i) -> f (Q.fold f z) i
-    
-    member Q.insert i =
-        let rec R = function
-            | Q_Nil          -> Q_Cons (Q_Nil, i)
-            | Q_Cons (Q, i') -> Q_Cons (R Q, i')
-        in
-            R Q
-
-    static member (+) (Q : prefix, (α, t : fxty)) = Q_Cons (Q, (α, t))
-    static member (+) (Q1 : prefix, Q2 : prefix) = Q2.fold (fun (Q : prefix) (α, t) -> Q + (α, t)) Q1
-
-
-[< CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix) >]
-module prefix =
-    let B = new Computation.Builder.itemized_collection<_, _> (empty = Q_Nil, plus1 = (fun i Q -> Q + i), plus = fun Q1 Q2 -> Q1 + Q2)
-    let ofSeq sq = B { for α, t in sq do yield α, t }
-    let of_bottoms αks = B { for α, k in αks do yield α, Fx_Bottom k }
-
-
-
-// contexts for off-monad data
+// contexts 
 //
 
 type resolution = Res_Strict | Res_Loose | Res_No
@@ -370,8 +289,6 @@ let (|T_NamedVar|_|) = function
 let T_Apps, (|T_Apps1|), (|T_Apps|_|) = make_apps (fun (τ1, τ2) -> T_App (τ1, τ2)) (function T_App (τ1, τ2) -> Some (τ1, τ2) | _ -> None)
 let T_Arrow, (|T_Arrow|_|) = make_arrow_by_apps (T_Cons (N.Type.arrow, K_Arrows [K_Star; K_Star; K_Star])) T_Apps (function T_Cons (x, _) when x = N.Type.arrow -> Some () | _ -> None) (|T_Apps|_|)
 let T_Arrows, (|T_Arrows1|), (|T_Arrows|_|) = make_arrows T_Arrow (|T_Arrow|_|)
-let T_Foralls, (|T_Foralls0|), (|T_Foralls|_|) = make_foralls T_Forall (function T_Forall (α, t) -> Some (α, t) | _ -> None)
-let Fx_Foralls, (|Fx_Foralls0|), (|Fx_Foralls|_|) = make_foralls Fx_Forall (function Fx_Forall (αt, t) -> Some (αt, t) | _ -> None)
 
 let T_ConsApps ((x, k), ts) = T_Apps (T_Cons (x, k) :: ts)
 let (|T_ConsApps1|_|) t =
@@ -470,31 +387,9 @@ type ty with
             | T_Cons (_, k)             -> ()
             | T_HTuple ts               -> for t in ts do yield! t.ftv
             | T_App (t1, t2)            -> yield! t1.ftv; yield! t2.ftv
-            | T_Forall (α, t)           -> yield! t.ftv.remove α
         }
 
     member this.fv = Computation.B.set { for α, k in this.ftv do yield α; yield! k.fv }    
-
-
-let T_Bottom k =
-    let α, tα = ty.fresh_var_and_ty k
-    in
-        T_Forall (α, tα)
-
-let T_ForallK ((α, _), t) = T_Forall (α, t)
-let (|T_ForallK|_|) t =
-    match t with
-    | T_Forall (α, t) ->
-        let k =
-            match Seq.tryFind (fst >> (=) α) t.ftv with
-            | Some (_, k) -> k
-            | None        -> kind.fresh_var
-        in
-            Some ((α, k), t)
-
-    | _ -> None
-
-let T_ForallsK, (|T_ForallsK0|), (|T_ForallsK|_|) = make_foralls T_ForallK (|T_ForallK|_|)
    
 let pretty_kinded_wrapper R' t =
     let R t =
@@ -506,18 +401,6 @@ let pretty_kinded_wrapper R' t =
     in
         R t
 
-let pretty_forall pretty_item forall (qs, t) =
-    use A = var.add_quantifieds (Seq.map fst qs)
-    let t = sprintf "%O" t  // pretty the body first, so var names will appear normalized in order from left to right; then prefix is sorted
-    let ts =
-        qs
-        #if !DEBUG_VAR_NAMES
-        |> Seq.sortBy (fst >> sprintf "%O")
-        #endif
-        |> mappen_strings pretty_item Config.Printing.forall_prefix_sep
-    in
-        sprintf "%s %s. %s" forall ts t
-
 type ty with
     override this.ToString () = this.pretty    
     member this.pretty =
@@ -528,7 +411,6 @@ type ty with
             | _ -> None
         let (|App|) = (|Application|) (function T_App (t1, t2) -> Some (t1, t2) | _ -> None) (|A|_|)
         let rec (|LArrow|_|) = function
-            | T_Forall (_, LArrow _)
             | T_Arrow _ as e -> Some e
             | _ -> None
         let rec R' = function
@@ -551,8 +433,6 @@ type ty with
             | T_App (App s)           -> s
             | T_Closure (x, _, τ, _)  -> sprintf "<[%O]>" (Te_Lambda ((x, None), τ))
 
-            | T_ForallsK arg          -> pretty_forall (sprintf "%O" << T_Var) Config.Printing.dynamic.forall arg
-            | T_Forall _ as t         -> unexpected_case __SOURCE_FILE__ __LINE__ t
         and R = pretty_kinded_wrapper R'
         in
             R this
@@ -560,7 +440,6 @@ type ty with
     // an F-type is monomorphic when no quantification occurs at any level
     member this.is_monomorphic =
         match this with
-        | T_Forall _        -> false
         | T_Var _
         | T_Cons _             
         | T_Closure _       -> true
@@ -572,14 +451,12 @@ type ty with
         match t with
         | (T_Cons _
         | T_Var _ as t)
-        | T_Forall (_, t)   -> l [t]
         | T_App (t1, t2)    -> l [t1; t2]
         | T_HTuple ts       -> l ts
         | T_Closure _       -> None
 
     member t.return_ty =
         match t with
-        | T_Forall (_, t) -> t.return_ty
         | T_Arrows ts     -> List.last ts
         | _               -> t
 
