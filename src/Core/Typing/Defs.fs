@@ -372,8 +372,18 @@ type kscheme with
 // augmentations for types and schemes
 //
 
+let pretty_kinded_wrapper R' t =
+    let R t =
+        let k = (t :> kinded).kind
+        in
+            match k with
+            | K_Arrows1 ks when List.forall (fun (k : kind) -> k.is_star) ks -> R' t
+            | _                                                              -> sprintf "(%s :: %O)" (R' t) k
+    in
+        R t
+
+
 type ty with
-    // TODO: these should be forbidden and turned into methods of the main monad
     static member fresh_var k = T_Var (var.fresh, k)
     static member fresh_var_and_ty k = let α = var.fresh in α, T_Var (α, k)
     static member fresh_star_var = ty.fresh_var K_Star
@@ -391,17 +401,6 @@ type ty with
 
     member this.fv = Computation.B.set { for α, k in this.ftv do yield α; yield! k.fv }    
    
-let pretty_kinded_wrapper R' t =
-    let R t =
-        let k = (t :> kinded).kind
-        in
-            match k with
-            | K_Arrows1 ks when List.forall (fun (k : kind) -> k.is_star) ks -> R' t
-            | _                                                              -> sprintf "(%s :: %O)" (R' t) k
-    in
-        R t
-
-type ty with
     override this.ToString () = this.pretty    
     member this.pretty =
         let (|T_Sym_Cons|_|) = (|Sym|_|) (function T_Cons (x, k) -> Some (x, (x, k)) | _ -> None)
@@ -437,15 +436,6 @@ type ty with
         in
             R this
 
-    // an F-type is monomorphic when no quantification occurs at any level
-    member this.is_monomorphic =
-        match this with
-        | T_Var _
-        | T_Cons _             
-        | T_Closure _       -> true
-        | T_App (t1, t2)    -> t1.is_monomorphic && t2.is_monomorphic
-        | T_HTuple ts       -> List.fold (fun r (t : ty) -> r && t.is_monomorphic) true ts
-
     member private t.search p =
         let l ts = List.tryPick (fun (t : ty) -> t.search p) ts
         match t with
@@ -460,65 +450,7 @@ type ty with
         | T_Arrows ts     -> List.last ts
         | _               -> t
 
-    // an F-type is unquantified when no forall occurs at top-level
-    member t.is_unquantified =
-        match t with
-        | T_Forall _ -> false
-        | _          -> true
 
-
-// active patterns for dealing with quantification, instantiation etc. 
-
-let Fx_ForallsQ (Q : prefix, ϕ : fxty) = Fx_Foralls (Seq.toList Q, ϕ)
-let FxU_ForallsQ (Q, t : ty) = Fx_ForallsQ (Q, Fx_F_Ty t)
-
-// all outer quantified vars are taken, both from the flex type and from possible F-type quantifiers, hence right hand is granted unquantified
-let (|FxU_ForallsQ|FxU_Unquantified|FxU_Bottom|) = function
-    | Fx_Foralls (qs, Fx_F_Ty (T_ForallsK (αks, t))) -> assert t.is_unquantified; FxU_ForallsQ (prefix.ofSeq qs + prefix.of_bottoms αks, t)
-    | Fx_Foralls (qs, Fx_F_Ty t)                     -> assert t.is_unquantified; FxU_ForallsQ (prefix.ofSeq qs, t)
-    | Fx_F_Ty (T_ForallsK (αks, t))                  -> assert t.is_unquantified; FxU_ForallsQ (prefix.of_bottoms αks, t)
-    | Fx_F_Ty t                                      -> assert t.is_unquantified; FxU_Unquantified t
-    | Fx_Bottom k                                    -> FxU_Bottom k
-    | Fx_Forall _ as ϕ                               -> unexpected_case __SOURCE_FILE__ __LINE__ ϕ
-
-// reduced form of the active pattern above where the ForallsQ case supports also empty prefixes
-let (|FxU0_ForallsQ|FxU0_Bottom|) = function
-    | FxU_ForallsQ (Q, t) -> FxU0_ForallsQ (Q, t)
-    | FxU_Unquantified t  -> FxU0_ForallsQ (Q_Nil, t)
-    | FxU_Bottom k        -> FxU0_Bottom k
-
-type fxty with
-    override this.ToString () = this.pretty    
-    member this.pretty =
-        let rec R' = function
-            | Fx_Bottom _      -> Config.Printing.dynamic.bottom
-            | Fx_F_Ty t        -> t.pretty
-            | Fx_Foralls arg   -> pretty_forall prefix.pretty_item Config.Printing.dynamic.flex_forall arg
-            | Fx_Forall _ as ϕ -> unexpected_case __SOURCE_FILE__ __LINE__ ϕ
-        and R = function
-            | Fx_F_Ty _ as ϕ -> R' ϕ    // prevents double wrapping of an F-type
-            | ϕ              -> pretty_kinded_wrapper R' ϕ
-        in
-            R this
-
-    member this.ftv =
-        match this with
-        | Fx_F_Ty t               -> t.ftv
-        | Fx_Bottom _             -> Env.empty
-        | Fx_Forall ((α, ϕ1), ϕ2) -> let r2 = ϕ2.ftv in if r2.contains_key α then ϕ1.ftv + r2.remove α else r2
-
-    member this.fv =
-        match this with
-        | Fx_Bottom k             -> k.fv
-        | Fx_Forall ((α, ϕ1), ϕ2) -> let r2 = ϕ2.fv in if Set.contains α r2 then ϕ1.fv + (Set.remove α r2) else r2
-        | Fx_F_Ty t               -> t.fv
-
-    [< Obsolete >]
-    member this.is_monomorphic =
-        match this with
-        | Fx_Bottom _
-        | Fx_Forall _ -> false
-        | Fx_F_Ty t   -> t.is_monomorphic
 
 
 
@@ -526,9 +458,8 @@ type tscheme with
     override this.ToString () = this.pretty
 
     member σ.pretty =
-        let { constraints = cs; fxty = Fx_Foralls0 (qs, ϕ1) } = σ
+        let { forall = αs; constraints = cs; ty = t } = σ
         // TODO: deal with variables in the constraints and choose how to show them, either detecting the outer-most foralls or something like that
-        let αs = Computation.B.set { for α, _ in qs do yield α }
         let αspart = if αs.IsEmpty then "" else sprintf "%s %s. " Config.Printing.dynamic.forall (flatten_stringables Config.Printing.forall_prefix_sep αs)
         let cspart = if cs.is_empty then "" else sprintf "{ %O } => " cs
         in
