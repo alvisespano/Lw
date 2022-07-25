@@ -162,6 +162,7 @@ module constraints =
     
 type [< NoComparison; NoEquality; DebuggerDisplay("{ToString()}") >] tscheme =
     {
+        forall      : var
         constraints : constraints
         ty          : ty
     }

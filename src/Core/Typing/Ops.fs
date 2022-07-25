@@ -124,8 +124,15 @@ let possibly_tuple L0 e tuple cs =
 
 
 
-// F-type augmentations
+// type augmentations
 //
+
+let Ungeneralized t = { constraints = constraints.empty; ty = t }
+let (|Ungeneralized|) = function
+    | { constraints = cs; ty = t } when cs.is_empty -> t
+    | σ -> unexpected "expected an ungeneralized type scheme but got: %O" __SOURCE_FILE__ __LINE__ σ
+
+
 
 type ty with
     member t.instantiate_wrt αs =
@@ -143,41 +150,22 @@ type ty with
             | T_Cons (x, k)             -> T_Cons (x, Sk k)
             | T_App (t1, t2)            -> T_App (S t1, S t2)
             | T_HTuple ts               -> T_HTuple (List.map S ts)
-            | T_Forall (α, t)           -> T_Forall (α, S t)
             | T_Closure (x, Δ, τ, k)    -> T_Closure (x, Δ, τ, Sk k)
         in
             S t
 
 //    member t.instantiated = t.instantiate_wrt t.fv
 
-    
-
-// flex type augmentations
-//
-
-
-let Ungeneralized t = { constraints = constraints.empty; ty = t }
-let (|Ungeneralized|) = function
-    | { constraints = cs; ty = t } when cs.is_empty -> t
-    | σ -> unexpected "expected an ungeneralized type scheme but got: %O" __SOURCE_FILE__ __LINE__ σ
-
-
-// operations involving constraints, schemes and environments
-//
-
 type constraintt with
-    member c.instantiate αs = { c with num = fresh_int (); ty = c.ty.instantiate_wrt αs }
+    member c.instantiate_wrt αs = { c with num = fresh_int (); ty = c.ty.instantiate_wrt αs }
 
 type constraints with
     member this.fv = Computation.B.set { for c in this do yield! c.ty.fv }
 
-    member cs.instantiate αs = constraints.B { for c in cs do yield c.instantiate αs }
+    member cs.instantiate_wrt αs = constraints.B { for c in cs do yield c.instantiate_wrt αs }
 
 type tscheme with
-    member σ.fv =
-        let { constraints = cs; fxty = t } = σ
-        in
-            cs.fv + t.fv
+    member σ.fv = (σ.constraints.fv + σ.ty.fv) - σ.forall
 
     member σ.instantiated = σ    // TODOH: there must be something to do with constraints and quantified variables
 
